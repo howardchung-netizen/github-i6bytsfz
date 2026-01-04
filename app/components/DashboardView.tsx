@@ -9,9 +9,20 @@ import {
 } from 'lucide-react';
 
 export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, handleLogout }) {
-  // 👇 修改這行：只要是這個 Email，就算它是 Admin
-const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
+  // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
+  const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
+
+  // 👇 新增：切換年級的邏輯
+  const toggleGrade = () => { 
+      if (!isAdmin) return;
+      const grades = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'S1', 'S2', 'S3'];
+      const currentIndex = grades.indexOf(user.level);
+      // 找不到就從頭開始，否則往後跳一級
+      const nextIndex = (currentIndex === -1) ? 0 : (currentIndex + 1) % grades.length;
+      // 更新使用者狀態
+      setUser(u => ({...u, level: grades[nextIndex]})); 
+  };
 
   const getActiveData = () => { 
       switch(activeTab) { 
@@ -59,6 +70,12 @@ const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
                     <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-white/10">
                         Level: {user.level} {isAdmin ? '(Admin)' : ''}
                     </span>
+                    {/* 👇 新增：切換年級按鈕 (只顯示給 Admin) */}
+                    {isAdmin && (
+                        <button onClick={toggleGrade} className="bg-white text-indigo-600 text-xs font-bold px-2 py-1 rounded hover:bg-indigo-50 transition flex items-center gap-1 shadow-sm">
+                            <RefreshCw size={12} /> 切換年級
+                        </button>
+                    )}
                     <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-white/10">
                         XP: {user.xp || 0}
                     </span>
@@ -139,8 +156,7 @@ const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-lg">
               <AlertCircle className="text-red-500" size={24} /> 建議重點加強
           </h3>
-          // 👇 請找到這行，加入 list-none m-0 p-0
-            <ul className="space-y-4 list-none m-0 p-0">  
+          <ul className="space-y-4 list-none m-0 p-0">
             <li className="flex items-center gap-4 p-4 bg-red-50 rounded-xl border border-red-100 group hover:bg-red-100 transition cursor-pointer">
                 <div className="w-10 h-10 rounded-full bg-red-200 text-red-600 flex items-center justify-center font-bold">1</div>
                 <div>

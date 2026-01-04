@@ -2,8 +2,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Settings, Home, Upload, Save, FileJson, RefreshCw, Sparkles, Database, Trash2, Plus } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
-import { AI_SERVICE } from '../lib/ai-service';
 
+// 👇 注意這裡 props 接收了 setTopics
 export default function DeveloperView({ topics, setTopics, setView, isFirebaseReady }) {
   const [activeTab, setActiveTab] = useState('syllabus');
   const [paperJson, setPaperJson] = useState('');
@@ -21,10 +21,10 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // 取得目前條件下的可用單元
+  // 取得目前條件下的可用單元 (用於下拉選單)
   const availableTopics = useMemo(() => {
-    return topics.filter(t => t.grade === paperMeta.grade && t.term === paperMeta.term);
-  }, [topics, paperMeta.grade, paperMeta.term]);
+    return topics.filter(t => t.grade === paperMeta.grade);
+  }, [topics, paperMeta.grade]);
 
   useEffect(() => {
     const fetchCount = async () => { 
@@ -48,9 +48,22 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
          type: 'text', lang: newTopic.subject === 'math' ? 'zh-HK' : 'en', 
          subTopics: subTopics, createdAt: new Date().toISOString() 
      };
-     await DB_SERVICE.addTopic(topicToAdd);
-     alert("單元已新增！");
-     // 這裡應該要重新 fetch topics，但為了簡化先跳過
+     
+     // 1. 寫入資料庫
+     const docId = await DB_SERVICE.addTopic(topicToAdd);
+     
+     if (docId) {
+         // 2. 關鍵修正：立即更新前端狀態 (State)，不用等重新整理
+         const newTopicWithId = { id: docId, ...topicToAdd };
+         setTopics(prevTopics => [...prevTopics, newTopicWithId]);
+         
+         alert("單元已成功新增！");
+         // 清空輸入
+         setNewTopic({...newTopic, name: ''});
+         setSubTopics([]);
+     } else {
+         alert("新增失敗，請檢查連線。");
+     }
   };
 
   const handleUploadPastPaper = async () => {
@@ -66,12 +79,11 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
              if(found) selectedTopicName = found.name;
           }
 
-          // 標記為 seed_init 代表這是人工上傳的種子
           const enrichedPapers = questions.map(q => ({
               ...q, 
               year: paperMeta.year, grade: paperMeta.grade, term: paperMeta.term,
               topic: selectedTopicName || q.topic, 
-              source: 'seed_init', // 關鍵：標記來源
+              source: 'seed_init', 
               uploadedAt: new Date().toISOString()
           }));
 
@@ -86,16 +98,12 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       setIsUploading(false);
   };
 
-  // 測試 AI 生成功能
   const handleTestGenerate = async () => {
       if (!testSeed) { alert("請先從下方貼上一道題目的 JSON 來當作測試種子"); return; }
       setIsGenerating(true);
       setGeneratedResult(null);
       try {
-          // 模擬 AI 生成請求
-          // 這裡我們借用 AI_SERVICE，但傳入一個虛擬的 topics 列表
           const mockTopicList = [{id: 'test', name: testSeed.topic || '一般數學'}];
-          // 這裡稍微 hack 一下，直接呼叫 API
           const prompt = `
             Role: Math Teacher.
             Task: Create a NEW variation of this seed: "${testSeed.question}".
@@ -109,7 +117,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
               body: JSON.stringify({ message: prompt }),
           });
           const data = await response.json();
-          setGeneratedResult(data.response); // 顯示原始回傳文字方便 Debug
+          setGeneratedResult(data.response); 
       } catch (e) {
           setGeneratedResult("Error: " + e.message);
       }
@@ -118,7 +126,6 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
 
   return (
     <div className="max-w-6xl mx-auto bg-slate-50 min-h-screen font-sans text-slate-800">
-      {/* Header */}
       <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md">
         <div className="flex items-center gap-2">
             <Settings size={20} className="text-blue-400" />
@@ -130,7 +137,6 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       </div>
 
       <div className="p-6">
-        {/* Tabs */}
         <div className="flex gap-4 mb-6 border-b border-slate-200">
             <button onClick={() => setActiveTab('syllabus')} className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'syllabus' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 1. 課程單元管理
@@ -140,7 +146,6 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
             </button>
         </div>
 
-        {/* Tab 1: Syllabus */}
         {activeTab === 'syllabus' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -186,6 +191,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Database size={18}/> 現有單元列表</h3>
                     <div className="h-64 overflow-y-auto space-y-2">
+                        {/* 👇 修正：這裡會根據更新後的 topics 渲染，新增的會馬上跑出來 */}
                         {topics.filter(t => t.grade === newTopic.grade).map(t => (
                             <div key={t.id} className="p-3 border rounded-lg hover:bg-slate-50 text-sm">
                                 <div className="font-bold text-indigo-700">{t.name}</div>
@@ -198,10 +204,8 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
             </div>
         )}
 
-        {/* Tab 2: Past Papers & Seeds */}
         {activeTab === 'past_papers' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 {/* Left: Upload Area */}
                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold text-slate-800 flex items-center gap-2"><Upload size={20} className="text-green-600"/> 上傳種子試題 (Seed Upload)</h3>
@@ -219,6 +223,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                             <label className="block text-xs font-bold text-slate-700 mb-1">指定單元 (選填)</label>
                             <select value={paperMeta.topicId} onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value})} className="border border-blue-200 bg-blue-50 text-blue-900 p-2 rounded text-sm w-full font-bold">
                                 <option value="">🤖 自動偵測 / 不指定</option>
+                                {/* 👇 修正：下拉選單也會同步更新 */}
                                 {availableTopics.map(t => (<option key={t.id} value={t.id}>📍 強制歸類: {t.name}</option>))}
                             </select>
                         </div>
@@ -236,7 +241,6 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                     </button>
                  </div>
 
-                 {/* Right: AI Test Area */}
                  <div className="bg-slate-800 text-white p-6 rounded-xl shadow-lg">
                      <h3 className="font-bold mb-4 flex items-center gap-2"><Sparkles className="text-yellow-400" size={20}/> AI 生成測試 (Seed Test)</h3>
                      <p className="text-xs text-slate-400 mb-4">貼上一段 JSON 種子，測試系統是否能正確生成變體。</p>
