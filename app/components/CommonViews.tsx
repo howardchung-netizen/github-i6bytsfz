@@ -1,6 +1,51 @@
 "use client";
 import React, { useState } from 'react';
 import { Sparkles, BookOpen, CheckCircle, RefreshCw, UserCog, Award, X, LogOut } from 'lucide-react';
+import { InlineMath } from 'react-katex';
+import 'katex/dist/katex.min.css';
+
+// 渲染包含 LaTeX 的文本（與 PracticeView 共享）
+const renderMathText = (text) => {
+  if (!text) return '';
+  
+  // 匹配 $...$ 格式的 LaTeX
+  const mathRegex = /\$([^$]+)\$/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = mathRegex.exec(text)) !== null) {
+    // 添加 LaTeX 前的文本
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+    }
+    // 添加 LaTeX 數學公式
+    parts.push({ type: 'math', content: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // 添加剩餘文本
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', content: text.substring(lastIndex) });
+  }
+  
+  // 如果沒有匹配到 LaTeX，直接返回原文本
+  if (parts.length === 0) {
+    return text;
+  }
+  
+  return parts.map((part, index) => {
+    if (part.type === 'math') {
+      try {
+        return <InlineMath key={index} math={part.content} />;
+      } catch (e) {
+        console.error('KaTeX render error:', e, part.content);
+        return <span key={index}>${part.content}$</span>;
+      }
+    }
+    return <span key={index}>{part.content}</span>;
+  });
+};
 
 export const TopicSelectionView = ({ user, setView, startPracticeSession, topics, setLoading }) => {
   const [selected, setSelected] = useState([]);
@@ -53,9 +98,9 @@ export const MistakesView = ({ setView, mistakes, retryQuestion }) => (
             <div className="space-y-4">
                 {mistakes.map((m, idx) => (
                     <div key={idx} className="p-4 border border-red-100 bg-red-50/50 rounded-xl">
-                        <div className="flex justify-between items-start mb-2"><span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded">{m.category || '數學'}</span><button onClick={() => retryQuestion(m)} className="text-indigo-600 text-sm font-bold hover:underline flex items-center gap-1"><RefreshCw size={14}/> 重練這一題</button></div>
-                        <p className="font-bold text-slate-800 mb-2">{m.question}</p>
-                        <p className="text-sm text-slate-500">你的答案: <span className="text-red-500 font-mono decoration-slice line-through">{m.userWrongAnswer}</span> / 正解: <span className="text-green-600 font-mono font-bold">{m.answer}</span></p>
+                        <div className="flex justify-between items-start mb-2"><span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded">{m.category || '數學'}</span><button onClick={() => retryQuestion(m)} className="text-indigo-600 text-sm font-bold hover:underline flex items-center gap-1"><RefreshCw size={14}/> 舉一反三練習</button></div>
+                        <p className="font-bold text-slate-800 mb-2"><span>{renderMathText(m.question)}</span></p>
+                        <p className="text-sm text-slate-500">你的答案: <span className="text-red-500 font-mono decoration-slice line-through"><span>{renderMathText(String(m.userWrongAnswer || ''))}</span></span> / 正解: <span className="text-green-600 font-mono font-bold"><span>{renderMathText(String(m.answer || ''))}</span></span></p>
                     </div>
                 ))}
             </div>
@@ -63,16 +108,7 @@ export const MistakesView = ({ setView, mistakes, retryQuestion }) => (
     </div>
 );
 
-export const ParentView = ({ setView, user }) => (
-    <div className="bg-white rounded-xl shadow p-6 max-w-3xl mx-auto animate-in zoom-in-95 font-sans">
-        <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800"><UserCog className="text-indigo-600"/> 家長監控台</h2><button onClick={() => setView('dashboard')} className="text-slate-500 hover:text-slate-800">返回</button></div>
-        <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-center"><div className="text-3xl font-black text-indigo-600">{user.xp || 0}</div><div className="text-xs font-bold text-indigo-400 uppercase">總經驗值 XP</div></div>
-            <div className="p-4 bg-green-50 rounded-xl border border-green-100 text-center"><div className="text-3xl font-black text-green-600">{user.level || 'P1'}</div><div className="text-xs font-bold text-green-400 uppercase">目前年級</div></div>
-        </div>
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200"><h3 className="font-bold mb-2 text-slate-700">學習建議</h3><p className="text-sm text-slate-600">AI 系統建議：請加強「應用題」的閱讀理解能力。</p></div>
-    </div>
-);
+// ParentView 已移至獨立文件 app/components/ParentView.tsx
 
 export const SummaryView = ({ sessionStats, restartSelection, setView }) => {
     const score = sessionStats.total > 0 ? Math.round((sessionStats.correct / sessionStats.total) * 100) : 0;

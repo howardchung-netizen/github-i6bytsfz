@@ -1,14 +1,14 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
 import { 
-  Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown
+  Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown, Bell, FileText
 } from 'lucide-react';
 
-export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } } }) {
+export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } } }) {
   // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
   const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
@@ -43,9 +43,86 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
   };
   
   const chartColor = getActiveColor();
+  
+  // 載入學生通知
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  useEffect(() => {
+    if (user.role === 'student' && (user.uid || user.id)) {
+      loadNotifications();
+    }
+  }, [user]);
+  
+  const loadNotifications = async () => {
+    try {
+      const { DB_SERVICE } = await import('../lib/db-service');
+      const studentUid = user.uid || user.id;
+      const notifs = await DB_SERVICE.getStudentNotifications(studentUid);
+      setNotifications(notifs);
+    } catch (e) {
+      console.error("Load notifications error:", e);
+    }
+  };
+  
+  const handleMarkAsRead = async (notificationId) => {
+    try {
+      const { DB_SERVICE } = await import('../lib/db-service');
+      await DB_SERVICE.markNotificationAsRead(notificationId);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    } catch (e) {
+      console.error("Mark notification read error:", e);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans">
+      {/* 作業通知（學生） */}
+      {user.role === 'student' && notifications.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl p-4 text-white shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Bell size={24} className="animate-pulse" />
+              <div>
+                <h3 className="font-bold text-lg">您有 {notifications.length} 個新作業</h3>
+                <p className="text-sm text-blue-100">點擊查看詳情</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg font-bold transition"
+            >
+              {showNotifications ? '收起' : '查看'}
+            </button>
+          </div>
+          
+          {showNotifications && (
+            <div className="mt-4 space-y-2">
+              {notifications.map((notif) => (
+                <div 
+                  key={notif.id} 
+                  className="bg-white/10 rounded-lg p-3 flex items-center justify-between hover:bg-white/20 transition cursor-pointer"
+                  onClick={() => handleMarkAsRead(notif.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText size={20} />
+                    <div>
+                      <p className="font-bold">{notif.title}</p>
+                      <p className="text-xs text-blue-100">
+                        {new Date(notif.createdAt).toLocaleDateString('zh-HK')}
+                      </p>
+                    </div>
+                  </div>
+                  <button className="text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded">
+                    標記已讀
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      
       {/* 頂部歡迎卡片 */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
         {/* 標題區域 */}
@@ -59,9 +136,23 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
             <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
                 登出
             </button>
-            <button onClick={goToParent} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
-                家長專區
-            </button>
+            {(user.role === 'parent' || user.role === 'admin') && (
+              <button onClick={goToParent} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
+                家長監控
+              </button>
+            )}
+            {(user.role === 'teacher' || user.role === 'admin') && (
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (goToTeacher) goToTeacher();
+                }} 
+                className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer"
+              >
+                教學者控制台
+              </button>
+            )}
             {isAdmin && (
                 <button 
                     onClick={(e) => {
@@ -91,6 +182,21 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
                  {isAdmin && (
                      <button onClick={toggleGrade} className="bg-white text-indigo-600 text-xs font-bold px-2 py-1 rounded hover:bg-indigo-50 transition flex items-center gap-1 shadow-sm">
                          <RefreshCw size={12} /> 切換年級
+                     </button>
+                 )}
+                 {/* 👇 測試用：角色切換 (只顯示給 Admin) */}
+                 {isAdmin && (
+                     <button 
+                         onClick={() => {
+                             const roles = ['admin', 'student', 'parent', 'teacher'];
+                             const currentIndex = roles.indexOf(user.role || 'admin');
+                             const nextIndex = (currentIndex + 1) % roles.length;
+                             setUser(u => ({...u, role: roles[nextIndex]}));
+                         }} 
+                         className="bg-white text-purple-600 text-xs font-bold px-2 py-1 rounded hover:bg-purple-50 transition flex items-center gap-1 shadow-sm"
+                         title="測試用：切換角色"
+                     >
+                         <User size={12} /> 角色: {user.role || 'admin'}
                      </button>
                  )}
              </div>

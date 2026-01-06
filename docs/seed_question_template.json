@@ -1,0 +1,109 @@
+[
+  {
+    "question": "計算這個長方形的面積。長 $5$cm，寬 $3$cm。",
+    "answer": "15",
+    "topic": "面積",
+    "type": "geometry",
+    "shape": "rectangle",
+    "params": {
+      "w": 5,
+      "h": 3
+    },
+    "explanation": "長方形面積 = 長 × 寬 = 5 × 3 = 15",
+    "hint": "記住長方形面積公式"
+  },
+  {
+    "question": "計算這個正方形的周界。邊長是 $8$cm。",
+    "answer": "32",
+    "topic": "周界",
+    "type": "geometry",
+    "shape": "square",
+    "params": {
+      "s": 8
+    },
+    "explanation": "正方形周界 = 邊長 × 4 = 8 × 4 = 32"
+  },
+  {
+    "question": "計算這個三角形的面積。底邊長 $6$cm，高 $4$cm。",
+    "answer": "12",
+    "topic": "面積",
+    "type": "geometry",
+    "shape": "triangle",
+    "params": {
+      "base": 6,
+      "height": 4
+    },
+    "explanation": "三角形面積 = 底 × 高 ÷ 2 = 6 × 4 ÷ 2 = 12"
+  },
+  {
+    "question": "計算這個圓的周界。半徑是 $5$cm。",
+    "answer": "31.4",
+    "topic": "周界",
+    "type": "geometry",
+    "shape": "circle",
+    "params": {
+      "radius": 5
+    },
+    "explanation": "圓周界 = 2 × π × 半徑 = 2 × 3.14 × 5 = 31.4"
+  },
+  {
+    "question": "計算這個梯形的面積。上底 $4$cm，下底 $8$cm，高 $5$cm。",
+    "answer": "30",
+    "topic": "面積",
+    "type": "geometry",
+    "shape": "trapezoid",
+    "params": {
+      "top": 4,
+      "bottom": 8,
+      "height": 5
+    },
+    "explanation": "梯形面積 = (上底 + 下底) × 高 ÷ 2 = (4 + 8) × 5 ÷ 2 = 30"
+  },
+  {
+    "question": "從起點向北走 2 格，再向東走 3 格，你會到達哪裡？",
+    "answer": "公園",
+    "topic": "方向",
+    "type": "geometry",
+    "shape": "map_grid",
+    "mapData": {
+      "gridSize": {
+        "rows": 5,
+        "cols": 5
+      },
+      "startPos": {
+        "row": 2,
+        "col": 2
+      },
+      "path": [
+        {
+          "direction": "north",
+          "steps": 2
+        },
+        {
+          "direction": "east",
+          "steps": 3
+        }
+      ],
+      "landmarks": [
+        {
+          "row": 1,
+          "col": 1,
+          "label": "學校"
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "label": "公園"
+        }
+      ]
+    },
+    "explanation": "從 (2,2) 向北 2 格到 (0,2)，再向東 3 格到 (0,5)，即公園位置"
+  },
+  {
+    "question": "有 45 粒糖果，平均分給 7 位小朋友，每人可得幾粒？還剩下幾粒？",
+    "answer": "6...3",
+    "topic": "除法",
+    "type": "word_problem",
+    "explanation": "45 ÷ 7 = 6 餘 3"
+  }
+]
