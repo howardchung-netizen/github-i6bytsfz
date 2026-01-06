@@ -19,7 +19,9 @@ import PracticeView from './components/PracticeView';
 import RegisterView from './components/RegisterView';
 import SubscriptionView from './components/SubscriptionView';
 import DailyTaskView from './components/DailyTaskView';
-import { TopicSelectionView, MistakesView, ParentView, SummaryView, ProfileView } from './components/CommonViews';
+import TeacherView from './components/TeacherView';
+import { TopicSelectionView, MistakesView, SummaryView, ProfileView } from './components/CommonViews';
+import ParentView from './components/ParentView';
 
 // Error Boundary for Runtime Safety
 class ErrorBoundary extends React.Component {
@@ -81,6 +83,7 @@ export default function App() {
   const goToDeveloper = () => setView('developer');
   const goToMistakes = () => setView('mistakes');
   const goToParent = () => setView('parent');
+  const goToTeacher = () => setView('teacher');
   const goToSubscription = () => setView('subscription');
   const goToDailyTask = (subject) => setView(`daily-task-${subject}`);
   const toggleAdhdMode = () => setAdhdMode(!adhdMode);
@@ -422,15 +425,43 @@ export default function App() {
       } 
   };
 
-  const retryQuestion = (mistakeData) => { 
-      const q = { ...mistakeData, id: Date.now() }; 
-      setCurrentQuestion(q);
+  const retryQuestion = async (mistakeData) => { 
+      // 設置 loading 狀態並切換到 practice view
+      setLoading(true);
+      setView('practice');
+      
+      // 重置狀態
       setSessionStats({ total: 1, current: 1, correct: 0 }); 
       setSessionMistakes([]); 
       setFeedback(null); 
       setShowExplanation(false); 
-      setUserAnswer(''); 
-      setView('practice'); 
+      setUserAnswer('');
+      
+      try {
+          // 調用 AI 生成「舉一反三」的新題目
+          const newQuestion = await AI_SERVICE.generateVariationFromMistake(mistakeData, user.level, topics);
+          
+          if (newQuestion) {
+              setCurrentQuestion(newQuestion);
+              // 記錄生成舉一反三題目
+              await logLearningActivity('generate_variation_from_mistake', {
+                  originalMistakeId: mistakeData.id || mistakeData.questionId,
+                  newQuestionId: newQuestion.id,
+                  category: mistakeData.category
+              });
+          } else {
+              // 如果生成失敗，使用原題目
+              const q = { ...mistakeData, id: Date.now() }; 
+              setCurrentQuestion(q);
+          }
+      } catch (error) {
+          console.error("Error generating variation:", error);
+          // 錯誤時使用原題目
+          const q = { ...mistakeData, id: Date.now() }; 
+          setCurrentQuestion(q);
+      } finally {
+          setLoading(false);
+      }
   };
 
   // --- Render ---
@@ -459,7 +490,7 @@ export default function App() {
         {isLoggedIn && view !== 'register' && (
           <div className="max-w-6xl mx-auto p-4 md:p-6">
              {/* Main Views */}
-             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
+             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
              {view === 'chinese-developer' && <ChineseDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
              {view === 'english-developer' && <EnglishDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
@@ -470,6 +501,7 @@ export default function App() {
              {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} setLoading={setLoading} />}
              {view === 'mistakes' && <MistakesView setView={setView} mistakes={mistakes} retryQuestion={retryQuestion} />}
              {view === 'parent' && <ParentView setView={setView} user={user} />}
+             {view === 'teacher' && <TeacherView setView={setView} user={user} topics={topics} />}
              {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} />}
              {view === 'summary' && <SummaryView sessionStats={sessionStats} restartSelection={goToSelection} setView={setView} />}
              

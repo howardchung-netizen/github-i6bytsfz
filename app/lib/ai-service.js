@@ -82,9 +82,14 @@ export const AI_SERVICE = {
         ${isMathSubject ? '6. For Math questions, you MUST create a multiple-choice question (MCQ) with exactly 8 options: 1 correct answer and 7 plausible distractors (wrong answers that are mathematically reasonable).' : '6. If creating a multiple-choice question, include 4 options: 1 correct answer and 3 plausible distractors.'}
         
         Output JSON Schema: ${isMathSubject ? 
-            '{ "question": "string", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string", "hint": "string", "params": null }' :
+            '{ "question": "string", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string", "hint": "string", "shape": "string (optional: rectangle, square, triangle, circle, trapezoid, parallelogram, irregular, composite, map_grid)", "params": "object (optional: for geometry shapes, e.g. {w: 5, h: 3} for rectangle, {radius: 4} for circle, {base: 6, height: 4} for triangle, {top: 4, bottom: 8, height: 5} for trapezoid, {points: [{x: -2, y: -1}, {x: 2, y: -1}, {x: 3, y: 2}, {x: -1, y: 2}]} for irregular)", "mapData": "object (optional: for map_grid type, e.g. {gridSize: {rows: 5, cols: 5}, startPos: {row: 2, col: 2}, path: [{direction: "north", steps: 2}, {direction: "east", steps: 3}], landmarks: [{row: 1, col: 1, label: "學校"}]})" }' :
             '{ "question": "string", "answer": "string/number", "explanation": "string", "hint": "string", "params": null }'
         }
+        
+        IMPORTANT for geometry questions:
+        - If the question involves area/perimeter calculations with shapes, include "type": "geometry" and appropriate "shape" and "params"
+        - For map/direction questions, use "shape": "map_grid" and provide "mapData" with grid layout, start position, path, and landmarks
+        - Use LaTeX format for fractions: $\\frac{3}{8}$ for displaying fractions in the question text
     `;
 
     // 3. 呼叫 Next.js API Route
@@ -146,6 +151,118 @@ export const AI_SERVICE = {
       utterance.lang = lang === 'zh-HK' ? 'zh-HK' : 'en-US';
       utterance.rate = 0.85; 
       window.speechSynthesis.speak(utterance);
+    }
+  },
+  
+  // 基於錯題生成「舉一反三」的新題目
+  generateVariationFromMistake: async (mistakeData, level, allTopicsList) => {
+    // 從錯題中提取信息
+    const originalQuestion = mistakeData.question || '';
+    const originalAnswer = mistakeData.answer || '';
+    const category = mistakeData.category || '數學';
+    const topic = mistakeData.topic || category;
+    
+    // 判斷科目（從 category 或 topic 推斷）
+    let targetSubject = 'math';
+    if (category && (category.includes('中文') || category.includes('Chinese'))) {
+      targetSubject = 'chi';
+    } else if (category && (category.includes('英文') || category.includes('English'))) {
+      targetSubject = 'eng';
+    } else {
+      // 嘗試從 topics 中判斷
+      const matchingTopic = allTopicsList.find(t => t.name === topic || t.name === category);
+      if (matchingTopic) {
+        targetSubject = matchingTopic.subject || 'math';
+      }
+    }
+    
+    // 檢查是否為數學科
+    const isMathSubject = targetSubject === 'math';
+    
+    // 判斷題目類型（是否有 options 表示是選擇題）
+    const hasOptions = mistakeData.options && Array.isArray(mistakeData.options);
+    const isMCQ = hasOptions || originalQuestion.includes('選擇') || originalQuestion.includes('選項');
+    
+    // 建構 Prompt - 基於錯題生成新題目
+    const promptText = `
+        Role: Professional HK Primary ${targetSubject === 'math' ? 'Math' : targetSubject === 'chi' ? 'Chinese' : 'English'} Teacher.
+        Task: Create a NEW variation question based on the student's mistake. This is a "舉一反三" (Learn by Analogy) exercise.
+        
+        Original Question: "${originalQuestion}"
+        Correct Answer: "${originalAnswer}"
+        Category/Topic: ${category} / ${topic}
+        Level: ${level}
+        
+        Requirements:
+        1. Maintain the SAME difficulty level and core concept as the original question.
+        2. Change the numbers, names, context, and scenario completely.
+        3. Keep the same mathematical/logical structure (e.g., if it's a division problem, make it a division problem with different numbers).
+        4. Output strict JSON only.
+        5. IMPORTANT: Ensure all strings are valid JSON. Escape all backslashes.
+        ${isMathSubject && isMCQ ? '6. For Math MCQ questions, you MUST create a multiple-choice question with exactly 8 options: 1 correct answer and 7 plausible distractors (wrong answers that are mathematically reasonable).' : isMCQ ? '6. For MCQ questions, include 4 options: 1 correct answer and 3 plausible distractors.' : '6. Create a clear question that tests the same concept.'}
+        7. The explanation should be concise (within 30 characters) and help the student understand the concept.
+        
+        Output JSON Schema: ${isMathSubject && isMCQ ? 
+            '{ "question": "string", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string (max 30 chars)", "hint": "string", "params": null }' :
+            isMCQ ?
+            '{ "question": "string", "type": "mcq", "options": ["option1", "option2", "option3", "option4"] (exactly 4 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string (max 30 chars)", "hint": "string", "params": null }' :
+            '{ "question": "string", "type": "text", "answer": "string/number", "explanation": "string (max 30 chars)", "hint": "string", "params": null }'
+        }
+    `;
+
+    console.log("🔄 Generating variation from mistake:", originalQuestion);
+    
+    try {
+        const response = await fetch('/api/chat', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: promptText }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        let aiResult = data;
+        // 如果後端回傳的是字串，嘗試解析
+        if (data.response && typeof data.response === 'string') {
+             try {
+                const cleanJson = data.response.replace(/```json/g, '').replace(/```/g, '').trim();
+                aiResult = JSON.parse(cleanJson);
+             } catch (e) {
+                 console.warn("JSON Parse from API text failed, using raw data if possible", e);
+             }
+        } else if (data.data) {
+             aiResult = data.data;
+        }
+
+        const newQ = {
+             ...aiResult,
+             id: Date.now(),
+             source: 'ai_variation_from_mistake',
+             type: aiResult.type || (isMCQ ? 'mcq' : 'text'),
+             topic: topic,
+             category: category,
+             is_variation: true,
+             original_mistake_id: mistakeData.id || mistakeData.questionId
+        };
+
+        console.log("✅ Generated variation question:", newQ.question);
+        return newQ;
+
+    } catch (err) {
+        console.error("AI Variation Generation Failed:", err);
+        // 錯誤時回退：返回原題目但標記為 variation attempt failed
+        return {
+            ...mistakeData,
+            id: Date.now(),
+            question: `(生成失敗) ${originalQuestion}\n\n系統無法生成新題目，請檢查網路連線或稍後再試。`,
+            source: 'variation_fallback',
+            is_variation: false
+        };
     }
   }
 };
