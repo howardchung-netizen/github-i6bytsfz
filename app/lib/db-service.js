@@ -97,8 +97,14 @@ export const DB_SERVICE = {
     saveMistake: async (uid, q, ans) => { 
         try {
             await addDoc(collection(db, "artifacts", APP_ID, "users", uid, "mistakes"), { 
-                questionId: q.id, question: q.question, answer: q.answer, userWrongAnswer: ans, 
-                hint: q.hint || '請重讀題目關鍵字', explanation: q.explanation || '參考相關課本章節', category: q.category || '一般', createdAt: new Date().toISOString() 
+                questionId: q.id, 
+                question: q.question, 
+                answer: q.answer, 
+                userWrongAnswer: ans, 
+                hint: q.hint || '請重讀題目關鍵字',
+                explanation: q.explanation || '參考相關課本章節',
+                category: q.category || '一般',
+                createdAt: new Date().toISOString() 
             }); 
         } catch(e) { console.error("Save Mistake Error", e); } 
     },
@@ -131,7 +137,7 @@ export const DB_SERVICE = {
         try {
             const count = await DB_SERVICE.countPastPapers();
             if (count === 0) {
-                console.log("🌱 Seeding initial mock data...");
+                console.log("?�� Seeding initial mock data...");
                 await DB_SERVICE.uploadPastPaperBatch(SAMPLE_PAST_PAPERS);
             }
         } catch (e) {
@@ -172,7 +178,7 @@ export const DB_SERVICE = {
             today.setHours(0, 0, 0, 0);
             const todayStart = today.toISOString();
             
-            // 獲取今日所有生成題目的記錄
+            // ?��?今日??��??��??��?記�?
             const q = query(
                 collection(db, "artifacts", APP_ID, "users", uid, "logs"),
                 where("action", "in", ["start_practice", "generate_question"]),
@@ -180,19 +186,19 @@ export const DB_SERVICE = {
             );
             const snap = await getDocs(q);
             
-            // 統計各科目的使用量
+            // 統?????使用??
             const tasks = { math: 0, chi: 0, eng: 0 };
             snap.forEach(doc => {
                 const data = doc.data();
                 const subject = data.subject || data.topicId?.split('_')[0] || 'math';
-                if (subject.includes('math') || subject.includes('數學')) {
+                if (subject.includes('math') || subject.includes('?�學')) {
                     tasks.math++;
-                } else if (subject.includes('chi') || subject.includes('中文')) {
+                } else if (subject.includes('chi') || subject.includes('中�?')) {
                     tasks.chi++;
-                } else if (subject.includes('eng') || subject.includes('英文')) {
+                } else if (subject.includes('eng') || subject.includes('?��?')) {
                     tasks.eng++;
                 } else {
-                    // 默認歸類為數學
+                    // 默?歸??數?
                     tasks.math++;
                 }
             });
@@ -213,7 +219,7 @@ export const DB_SERVICE = {
     },
     updateUserSubscription: async (uid, isPremium, subscriptionId = null) => {
         try {
-            // 更新用戶資料中的訂閱狀態
+            // ?新?戶資?中?訂閱???
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("uid", "==", uid));
             const snap = await getDocs(q);
             
@@ -238,14 +244,14 @@ export const DB_SERVICE = {
         }
     },
     
-    // === 家長功能 ===
+    // === 家長?能 ===
     linkParentToStudent: async (parentUid, studentEmail) => {
         try {
-            // 查找學生帳號
+            // ?找學?帳?
             const studentProfile = await DB_SERVICE.getUserProfile(studentEmail);
             if (!studentProfile) return false;
             
-            // 更新學生資料，添加家長 ID
+            // ?新學?資?，添?家??ID
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("uid", "==", studentProfile.uid));
             const snap = await getDocs(q);
             
@@ -283,7 +289,7 @@ export const DB_SERVICE = {
             startDate.setDate(startDate.getDate() - days);
             const startDateStr = startDate.toISOString();
             
-            // 獲取學習日誌
+            // ??學???
             const q = query(
                 collection(db, "artifacts", APP_ID, "users", studentUid, "logs"),
                 where("timestamp", ">=", startDateStr)
@@ -305,9 +311,9 @@ export const DB_SERVICE = {
                 if (data.action === 'generate_question' || data.action === 'start_practice') {
                     stats.totalQuestions++;
                     const subject = data.subject || 'math';
-                    if (subject.includes('math') || subject.includes('數學')) stats.subjects.math++;
-                    else if (subject.includes('chi') || subject.includes('中文')) stats.subjects.chi++;
-                    else if (subject.includes('eng') || subject.includes('英文')) stats.subjects.eng++;
+                    if (subject.includes('math') || subject.includes('?�學')) stats.subjects.math++;
+                    else if (subject.includes('chi') || subject.includes('中�?')) stats.subjects.chi++;
+                    else if (subject.includes('eng') || subject.includes('?��?')) stats.subjects.eng++;
                 }
                 if (data.action === 'answer_correct') {
                     stats.correctAnswers++;
@@ -318,7 +324,7 @@ export const DB_SERVICE = {
                     if (data.timeSpent) stats.totalTimeSpent += data.timeSpent;
                 }
                 
-                // 按日期統計
+                // ?日?統?
                 if (data.timestamp) {
                     const date = data.timestamp.split('T')[0];
                     if (!stats.dailyActivity[date]) {
@@ -330,7 +336,7 @@ export const DB_SERVICE = {
                 }
             });
             
-            // 獲取錯題
+            // ????
             const mistakesSnap = await getDocs(collection(db, "artifacts", APP_ID, "users", studentUid, "mistakes"));
             mistakesSnap.forEach(d => stats.mistakes.push({ id: d.id, ...d.data() }));
             
@@ -341,7 +347,7 @@ export const DB_SERVICE = {
         }
     },
     
-    // === 教師功能 ===
+    // === ?師?能 ===
     createClass: async (teacherUid, className, grade) => {
         try {
             const classData = {
@@ -434,14 +440,14 @@ export const DB_SERVICE = {
     
     createAssignmentNotifications: async (classId, assignmentId, assignmentTitle) => {
         try {
-            // 獲取班級信息
+            // ????信息
             const classDoc = await getDoc(doc(db, "artifacts", APP_ID, "public", "data", "classes", classId));
             if (!classDoc.exists()) return false;
             
             const classData = classDoc.data();
             const students = classData.students || [];
             
-            // 為每個學生創建通知
+            // ???學?創建通知
             const batch = writeBatch(db);
             const notificationsRef = collection(db, "artifacts", APP_ID, "public", "data", "notifications");
             
@@ -520,9 +526,9 @@ export const DB_SERVICE = {
                 students: []
             };
             
-            // 獲取每個學生的統計數據
+            // ??每個學??統???
             for (const student of classData.students) {
-                const studentStats = await DB_SERVICE.getStudentLearningStats(student.uid, 14); // 最近 14 天
+                const studentStats = await DB_SERVICE.getStudentLearningStats(student.uid, 14); // ??14 ?
                 stats.students.push({
                     ...student,
                     stats: studentStats
@@ -536,31 +542,28 @@ export const DB_SERVICE = {
         }
     },
     
-    // === AI 報告功能 ===
+    // === AI ?��??�能 ===
     generateProgressReport: async (studentUid, periodDays = 14) => {
         try {
             const stats = await DB_SERVICE.getStudentLearningStats(studentUid, periodDays);
             if (!stats) return null;
             
-            // 調用 AI 生成報告
+            // 調用 AI ?��??��?
             const reportPrompt = `
-                作為專業的教育顧問，請為學生生成一份 ${periodDays} 天的學習進度報告。
+                作為專業?��??�顧?��?請為學�??��?一?${periodDays} 天�?學�??�度?��???                
+                學�??��??                - 總�??��?${stats.totalQuestions}
+                - 答�??{stats.correctAnswers}
+                - 答錯?{stats.wrongAnswers}
+                - ?��?��?${stats.totalQuestions > 0 ? Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0}%
+                - ?��??��??��??�學 ${stats.subjects.math}，中??${stats.subjects.chi}，英??${stats.subjects.eng}
+                - ?��??��?${stats.mistakes.length}
                 
-                學習數據：
-                - 總題數：${stats.totalQuestions}
-                - 答對：${stats.correctAnswers}
-                - 答錯：${stats.wrongAnswers}
-                - 正確率：${stats.totalQuestions > 0 ? Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0}%
-                - 各科目題數：數學 ${stats.subjects.math}，中文 ${stats.subjects.chi}，英文 ${stats.subjects.eng}
-                - 錯題數：${stats.mistakes.length}
-                
-                請生成一份包含以下內容的 JSON 報告：
-                {
-                    "summary": "總體學習情況摘要（50字以內）",
-                    "strengths": ["強項1", "強項2"],
-                    "weaknesses": ["弱項1", "弱項2"],
+                請�??��?份�??�以下內容�? JSON ?��??                {
+                    "summary": "總�?學�??��??��??0字以?��?",
+                    "strengths": ["強�?1", "強�?2"],
+                    "weaknesses": ["弱�?1", "弱�?2"],
                     "recommendations": ["建議1", "建議2", "建議3"],
-                    "nextPhasePlan": "下一階段的學習計劃（100字以內）"
+                    "nextPhasePlan": "下�??�段?�學習�??��?100字以?��?"
                 }
             `;
             
@@ -601,4 +604,4 @@ export const DB_SERVICE = {
             return [];
         }
     }
-};
+}; 
