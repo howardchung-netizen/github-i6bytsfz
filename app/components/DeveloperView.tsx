@@ -11,7 +11,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [isUploading, setIsUploading] = useState(false);
   const [paperCount, setPaperCount] = useState(0);
   
-  // 新增單元相關狀態
+  // 新增單元相關狀態（數學科）
   const [newTopic, setNewTopic] = useState({ name: '', grade: 'P4', term: '上學期', subject: 'math' });
   const [subTopics, setSubTopics] = useState([]);
   const [subTopicInput, setSubTopicInput] = useState('');
@@ -21,9 +21,9 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // 取得目前條件下的可用單元 (用於下拉選單)
+  // 取得目前條件下的可用單元 (用於下拉選單，只顯示數學科)
   const availableTopics = useMemo(() => {
-    return topics.filter(t => t.grade === paperMeta.grade);
+    return topics.filter(t => t.grade === paperMeta.grade && t.subject === 'math');
   }, [topics, paperMeta.grade]);
 
   useEffect(() => {
@@ -83,7 +83,8 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
               ...q, 
               year: paperMeta.year, grade: paperMeta.grade, term: paperMeta.term,
               topic: selectedTopicName || q.topic, 
-              source: 'seed_init', 
+              source: 'seed_init',
+              subject: 'math',
               uploadedAt: new Date().toISOString()
           }));
 
@@ -126,14 +127,22 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
 
   return (
     <div className="max-w-6xl mx-auto bg-slate-50 min-h-screen font-sans text-slate-800">
-      <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md">
+      <div className="bg-indigo-900 text-white p-4 flex justify-between items-center shadow-md">
         <div className="flex items-center gap-2">
-            <Settings size={20} className="text-blue-400" />
-            <h1 className="font-bold text-lg">Developer Console (Admin)</h1>
+            <Settings size={20} className="text-indigo-300" />
+            <h1 className="font-bold text-lg">數學科管理 (Math Subject)</h1>
         </div>
-        <button onClick={() => setView('dashboard')} className="text-slate-300 hover:text-white text-sm flex items-center gap-1 bg-white/10 px-3 py-1.5 rounded-lg transition">
-            <Home size={14} /> Back to App
-        </button>
+        <div className="flex items-center gap-2">
+            <button onClick={() => setView('chinese-developer')} className="text-white/80 hover:text-white text-xs bg-rose-600 px-3 py-1.5 rounded-lg transition">
+                中文科
+            </button>
+            <button onClick={() => setView('english-developer')} className="text-white/80 hover:text-white text-xs bg-amber-600 px-3 py-1.5 rounded-lg transition">
+                英文科
+            </button>
+            <button onClick={() => setView('dashboard')} className="text-slate-300 hover:text-white text-sm flex items-center gap-1 bg-white/10 px-3 py-1.5 rounded-lg transition">
+                <Home size={14} /> 返回首頁
+            </button>
+        </div>
       </div>
 
       <div className="p-6">
@@ -149,7 +158,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
         {activeTab === 'syllabus' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Plus size={18}/> 新增單元 (Topic)</h3>
+                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Plus size={18}/> 新增數學單元</h3>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -191,14 +200,14 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Database size={18}/> 現有單元列表</h3>
                     <div className="h-64 overflow-y-auto space-y-2">
-                        {/* 👇 修正：這裡會根據更新後的 topics 渲染，新增的會馬上跑出來 */}
-                        {topics.filter(t => t.grade === newTopic.grade).map(t => (
+                        {/* 👇 修正：這裡會根據更新後的 topics 渲染，新增的會馬上跑出來（只顯示數學科） */}
+                        {topics.filter(t => t.grade === newTopic.grade && t.subject === 'math').map(t => (
                             <div key={t.id} className="p-3 border rounded-lg hover:bg-slate-50 text-sm">
                                 <div className="font-bold text-indigo-700">{t.name}</div>
                                 <div className="text-xs text-slate-400 mt-1">{t.grade} • {t.term} • {t.subTopics?.length || 0} 子題</div>
                             </div>
                         ))}
-                        {topics.filter(t => t.grade === newTopic.grade).length === 0 && <div className="text-center text-slate-400 py-10">此年級尚無單元</div>}
+                        {topics.filter(t => t.grade === newTopic.grade && t.subject === 'math').length === 0 && <div className="text-center text-slate-400 py-10">此年級尚無數學單元</div>}
                     </div>
                 </div>
             </div>
@@ -221,9 +230,9 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                         </div>
                         <div className="flex-1">
                             <label className="block text-xs font-bold text-slate-700 mb-1">指定單元 (選填)</label>
-                            <select value={paperMeta.topicId} onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value})} className="border border-blue-200 bg-blue-50 text-blue-900 p-2 rounded text-sm w-full font-bold">
+                            <select value={paperMeta.topicId} onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value})} className="border border-indigo-200 bg-indigo-50 text-indigo-900 p-2 rounded text-sm w-full font-bold">
                                 <option value="">🤖 自動偵測 / 不指定</option>
-                                {/* 👇 修正：下拉選單也會同步更新 */}
+                                {/* 👇 修正：下拉選單也會同步更新（只顯示數學科） */}
                                 {availableTopics.map(t => (<option key={t.id} value={t.id}>📍 強制歸類: {t.name}</option>))}
                             </select>
                         </div>

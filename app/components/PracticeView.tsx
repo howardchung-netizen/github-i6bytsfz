@@ -54,10 +54,38 @@ export default function PracticeView({
   };
 
   return (
-    <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-300 border-t-8 border-indigo-500">
+    <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-300 border-t-8 border-indigo-500 relative">
+      {/* 全屏 Loading Overlay - 鎖定畫面 */}
+      {loading && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-12 shadow-2xl max-w-md mx-4 text-center">
+            {/* 漏斗動畫 */}
+            <div className="relative w-24 h-24 mx-auto mb-6">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 size={32} className="text-indigo-600 animate-spin" />
+              </div>
+            </div>
+            <h3 className="text-2xl font-black text-slate-800 mb-2">題目生成中</h3>
+            <p className="text-slate-600 text-sm">AI 老師正在為您準備題目，請稍候...</p>
+            <div className="mt-6 flex justify-center gap-1">
+              <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-slate-50 p-4 border-b flex justify-between items-center">
-        <button onClick={() => setView('dashboard')} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 text-sm font-bold">
+      <div className={`bg-slate-50 p-4 border-b flex justify-between items-center ${loading ? 'pointer-events-none opacity-50' : ''}`}>
+        <button 
+          onClick={() => !loading && setView('dashboard')} 
+          disabled={loading}
+          className="text-slate-500 hover:text-slate-800 flex items-center gap-1 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+        >
             <Home size={16} /> 退出練習
         </button>
         
@@ -79,23 +107,23 @@ export default function PracticeView({
         )}
       </div>
 
-      <div className="p-8">
+      <div className={`p-8 ${loading ? 'pointer-events-none opacity-50' : ''}`}>
         {/* Progress Bar */}
         <div className="w-full bg-slate-100 h-3 rounded-full mb-8 overflow-hidden">
             <div className="bg-indigo-600 h-3 rounded-full transition-all duration-500 ease-out" style={{ width: `${(sessionProgress.current / sessionProgress.total) * 100}%` }}></div>
         </div>
 
-        {loading || !currentQuestion ? (
+        {!currentQuestion && !loading ? (
           <div className="py-20 text-center text-slate-400 flex flex-col items-center gap-3">
               <Loader2 size={48} className="animate-spin text-indigo-500" />
-              <p className="font-bold">AI 老師正在出題中...</p>
+              <p className="font-bold">準備中...</p>
           </div>
-        ) : (
+        ) : currentQuestion ? (
           <>
             <div className="mb-8 relative">
               {adhdMode && (
                 <div className="flex justify-end mb-4">
-                   <button onClick={handleSpeak} className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg transition shadow-sm font-bold text-sm">
+                   <button onClick={() => !loading && handleSpeak()} disabled={loading} className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg transition shadow-sm font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">
                        <Volume2 size={18} /> 讀題
                    </button>
                 </div>
@@ -130,12 +158,13 @@ export default function PracticeView({
               {!feedback ? (
                 <>
                   {currentQuestion.options ? (
-                      <div className="grid grid-cols-2 gap-3 w-full">
+                      <div className={`grid gap-3 w-full ${currentQuestion.options.length === 8 ? 'grid-cols-4' : 'grid-cols-2'}`}>
                           {currentQuestion.options.map((opt, i) => (
                              <button 
                                 key={i}
-                                onClick={() => handleOptionClick(opt)}
-                                className={`py-4 px-2 rounded-xl font-bold border-2 transition-all shadow-sm ${userAnswer === opt ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:border-indigo-300 text-slate-600 hover:bg-slate-50'}`}
+                                onClick={() => !loading && handleOptionClick(opt)}
+                                disabled={loading}
+                                className={`py-4 px-2 rounded-xl font-bold border-2 transition-all shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed ${userAnswer === opt ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:border-indigo-300 text-slate-600 hover:bg-slate-50'}`}
                               >
                                   {opt}
                               </button>
@@ -147,17 +176,18 @@ export default function PracticeView({
                             type="text" 
                             inputMode="decimal" 
                             value={userAnswer} 
-                            onChange={(e) => setUserAnswer(e.target.value)} 
+                            onChange={(e) => !loading && setUserAnswer(e.target.value)} 
                             placeholder="在此輸入答案..." 
                             autoFocus 
-                            className={`w-full text-center text-2xl p-4 border-2 rounded-xl outline-none transition shadow-inner ${adhdMode ? 'border-indigo-300 focus:border-indigo-600' : 'border-slate-200 focus:border-indigo-500'}`} 
-                            onKeyDown={(e) => e.key === 'Enter' && userAnswer && checkAnswer()} 
+                            disabled={loading}
+                            className={`w-full text-center text-2xl p-4 border-2 rounded-xl outline-none transition shadow-inner disabled:opacity-50 disabled:cursor-not-allowed ${adhdMode ? 'border-indigo-300 focus:border-indigo-600' : 'border-slate-200 focus:border-indigo-500'}`} 
+                            onKeyDown={(e) => !loading && e.key === 'Enter' && userAnswer && checkAnswer()} 
                         />
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{currentQuestion.unit}</span>
                      </div>
                   )}
                   
-                  <button onClick={() => checkAnswer()} disabled={!userAnswer} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition transform active:scale-95 mt-2">
+                  <button onClick={() => !loading && checkAnswer()} disabled={!userAnswer || loading} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition transform active:scale-95 mt-2 disabled:cursor-not-allowed">
                       提交答案 (Submit)
                   </button>
                 </>
@@ -167,7 +197,7 @@ export default function PracticeView({
                     <div className="space-y-4">
                       <div className="flex justify-center text-green-500 mb-2"><CheckCircle size={56} /></div>
                       <h4 className="text-2xl font-black text-green-700">答對了！🎉</h4>
-                      <button onClick={handleNext} className="mt-4 bg-green-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 transition w-full flex items-center justify-center gap-2">
+                      <button onClick={() => !loading && handleNext()} disabled={loading} className="mt-4 bg-green-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 transition w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                           {sessionProgress.current === sessionProgress.total ? '查看成績單' : '下一題'} <ArrowRight size={20} />
                       </button>
                     </div>
@@ -184,13 +214,13 @@ export default function PracticeView({
                           </div>
                           
                           <div className="flex gap-2 mt-4 flex-wrap">
-                            <button onClick={() => {setFeedback(null); setUserAnswer('')}} className="flex-1 min-w-[100px] bg-white border border-slate-300 text-slate-600 px-3 py-3 rounded-xl font-bold hover:bg-slate-50 transition shadow-sm">
+                            <button onClick={() => !loading && (setFeedback(null), setUserAnswer(''))} disabled={loading} className="flex-1 min-w-[100px] bg-white border border-slate-300 text-slate-600 px-3 py-3 rounded-xl font-bold hover:bg-slate-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                 <RefreshCw size={16} className="inline mr-1" /> 重試
                             </button>
-                            <button onClick={() => setShowExplanation(true)} className="flex-1 min-w-[100px] bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-3 rounded-xl font-bold hover:bg-indigo-200 transition shadow-sm">
+                            <button onClick={() => !loading && setShowExplanation(true)} disabled={loading} className="flex-1 min-w-[100px] bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-3 rounded-xl font-bold hover:bg-indigo-200 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                 <HelpCircle size={16} className="inline mr-1" /> 看詳解
                             </button>
-                            <button onClick={handleNext} className="flex-1 min-w-[80px] bg-red-100 border border-red-200 text-red-600 px-3 py-3 rounded-xl font-bold hover:bg-red-200 transition shadow-sm">
+                            <button onClick={() => !loading && handleNext()} disabled={loading} className="flex-1 min-w-[80px] bg-red-100 border border-red-200 text-red-600 px-3 py-3 rounded-xl font-bold hover:bg-red-200 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                 跳過 <ArrowRight size={16} className="inline ml-1" />
                             </button>
                           </div>
@@ -205,7 +235,7 @@ export default function PracticeView({
                           </div>
                           <div className="mt-4 pt-4 border-t border-red-100">
                             <p className="text-sm font-bold text-slate-500 mb-4 text-center">正確答案: <span className="text-green-600 text-lg">{currentQuestion.answer}{currentQuestion.unit}</span></p>
-                            <button onClick={handleNext} className="w-full bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                            <button onClick={() => !loading && handleNext()} disabled={loading} className="w-full bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow hover:bg-indigo-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                                 {sessionProgress.current === sessionProgress.total ? '查看成績單' : '下一題'} <ArrowRight size={16} />
                             </button>
                           </div>
@@ -217,7 +247,7 @@ export default function PracticeView({
               )}
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );

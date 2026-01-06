@@ -5,10 +5,10 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
 import { 
-  Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType 
+  Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown
 } from 'lucide-react';
 
-export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, handleLogout, dailyQuestionCount = 0 }) {
+export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } } }) {
   // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
   const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
@@ -16,7 +16,7 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
   // 👇 新增：切換年級的邏輯
   const toggleGrade = () => { 
       if (!isAdmin) return;
-      const grades = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'S1', 'S2', 'S3'];
+      const grades = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
       const currentIndex = grades.indexOf(user.level);
       // 找不到就從頭開始，否則往後跳一級
       const nextIndex = (currentIndex === -1) ? 0 : (currentIndex + 1) % grades.length;
@@ -48,49 +48,57 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
     <div className="space-y-6 animate-in fade-in duration-500 font-sans">
       {/* 頂部歡迎卡片 */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-        {/* 開發者按鈕 (只給 Admin) */}
-        {isAdmin && (
-             <button onClick={goToDeveloper} className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition backdrop-blur-sm border border-white/10">
-                <Settings size={12} /> Developer Console
-             </button>
-        )}
-        
-        <button onClick={handleLogout} className="absolute top-4 right-40 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1 transition backdrop-blur-sm border border-white/10">
-            <LogOut size={12} /> 登出
-        </button>
+        {/* 標題區域 */}
+        <div className="mb-4">
+            <h1 className="text-3xl font-black tracking-tight mb-1">AI Math Tutor</h1>
+            <p className="text-sm text-white/80 font-medium">Beta v2.2 (Full Restore)</p>
+        </div>
 
-        <div className="flex justify-between items-start mt-4 relative z-10">
-          <div className="flex items-center gap-4">
-             <div className="w-16 h-16 rounded-full border-4 border-white/30 overflow-hidden bg-white hover:scale-105 transition shadow-lg">
-                 <img src={user.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.name}`} alt="avatar" className="w-full h-full" />
-             </div>
-             <div>
-                <h2 className="text-3xl font-bold mb-1 tracking-tight">Hi, {user.name}! 👋</h2>
-                <div className="flex flex-wrap items-center gap-3 mt-2">
-                    <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-white/10">
-                        Level: {user.level} {isAdmin ? '(Admin)' : ''}
-                    </span>
-                    {/* 👇 新增：切換年級按鈕 (只顯示給 Admin) */}
-                    {isAdmin && (
-                        <button onClick={toggleGrade} className="bg-white text-indigo-600 text-xs font-bold px-2 py-1 rounded hover:bg-indigo-50 transition flex items-center gap-1 shadow-sm">
-                            <RefreshCw size={12} /> 切換年級
-                        </button>
-                    )}
-                    <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-white/10">
-                        XP: {user.xp || 0}
-                    </span>
-                    {user.isPremium && (
-                        <span className="bg-yellow-400/30 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-yellow-300/30 text-yellow-900">
-                            ✨ 訂閱版
-                        </span>
-                    )}
-                </div>
+        {/* 右上角導航按鈕 */}
+        <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
+            <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
+                登出
+            </button>
+            <button onClick={goToParent} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
+                家長專區
+            </button>
+            {isAdmin && (
+                <button 
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        goToDeveloper();
+                    }} 
+                    className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer"
+                >
+                    Developer
+                </button>
+            )}
+        </div>
+
+        {/* 用戶信息區域 */}
+        <div className="flex items-center gap-4 mt-6 relative z-0">
+          <div className="w-20 h-20 rounded-full border-4 border-white/30 overflow-hidden bg-white hover:scale-105 transition shadow-lg flex-shrink-0">
+              <img src={user.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.name}`} alt="avatar" className="w-full h-full" />
+          </div>
+          <div className="flex-1">
+             <h2 className="text-2xl font-bold mb-2 tracking-tight">Hi, {user.name}! 👋</h2>
+             <div className="flex flex-wrap items-center gap-3">
+                 <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-white/10">
+                     Level: {user.level} {isAdmin ? '(Unlocked)' : ''}
+                 </span>
+                 {/* 👇 新增：切換年級按鈕 (只顯示給 Admin) */}
+                 {isAdmin && (
+                     <button onClick={toggleGrade} className="bg-white text-indigo-600 text-xs font-bold px-2 py-1 rounded hover:bg-indigo-50 transition flex items-center gap-1 shadow-sm">
+                         <RefreshCw size={12} /> 切換年級
+                     </button>
+                 )}
              </div>
           </div>
         </div>
         
         {/* 功能按鈕區 */}
-        <div className="mt-8 flex gap-4 relative z-10">
+        <div className="mt-6 flex gap-4 relative z-10">
           <button onClick={goToSelection} className="flex-1 bg-white text-indigo-700 font-bold py-4 px-6 rounded-xl shadow-lg hover:bg-indigo-50 transition flex items-center justify-center gap-2 transform active:scale-95 group">
               <div className="bg-indigo-100 p-2 rounded-full group-hover:bg-indigo-200 transition"><Sparkles size={20} className="text-indigo-600"/></div>
               開始 AI 試卷
@@ -100,59 +108,106 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
           </button>
         </div>
 
-        {/* 用戶狀態提示 */}
-        {!user.isPremium && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm">
-                <p className="text-yellow-800 font-bold">
-                    📊 今日已生成 {dailyQuestionCount} / 20 題 
-                    {dailyQuestionCount >= 20 && <span className="text-red-600"> (已達上限)</span>}
-                </p>
-                <p className="text-yellow-700 text-xs mt-1">升級至訂閱版可獲得無限題目與 AI 老師跟進功能</p>
+        {/* 每日任務顯示（所有用戶） */}
+        <div className="mt-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl relative z-10">
+          <h4 className="text-indigo-800 font-bold mb-3 flex items-center gap-2">
+            <Sparkles size={18} /> 每日任務進度
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* 數學 - 可點擊按鍵 */}
+            <button 
+              onClick={() => goToDailyTask('math')}
+              className={`p-3 rounded-lg border-2 text-left transition-all hover:scale-105 hover:shadow-md ${dailyTasks.math.used >= dailyTasks.math.limit ? 'bg-red-50 border-red-200' : 'bg-white border-indigo-100'}`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-slate-700">數學</span>
+                <span className={`text-xs font-bold ${dailyTasks.math.used >= dailyTasks.math.limit ? 'text-red-600' : 'text-indigo-600'}`}>
+                  {dailyTasks.math.used} / {dailyTasks.math.limit}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-2 rounded-full transition-all ${dailyTasks.math.used >= dailyTasks.math.limit ? 'bg-red-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${Math.min((dailyTasks.math.used / dailyTasks.math.limit) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </button>
+            
+            {/* 中文 - 可點擊按鍵 */}
+            <button 
+              onClick={() => goToDailyTask('chi')}
+              className={`p-3 rounded-lg border-2 text-left transition-all hover:scale-105 hover:shadow-md ${dailyTasks.chi.used >= dailyTasks.chi.limit ? 'bg-red-50 border-red-200' : 'bg-white border-indigo-100'}`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-slate-700">中文</span>
+                <span className={`text-xs font-bold ${dailyTasks.chi.used >= dailyTasks.chi.limit ? 'text-red-600' : 'text-indigo-600'}`}>
+                  {dailyTasks.chi.used} / {dailyTasks.chi.limit}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-2 rounded-full transition-all ${dailyTasks.chi.used >= dailyTasks.chi.limit ? 'bg-red-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${Math.min((dailyTasks.chi.used / dailyTasks.chi.limit) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </button>
+            
+            {/* 英文 - 可點擊按鍵 */}
+            <button 
+              onClick={() => goToDailyTask('eng')}
+              className={`p-3 rounded-lg border-2 text-left transition-all hover:scale-105 hover:shadow-md ${dailyTasks.eng.used >= dailyTasks.eng.limit ? 'bg-red-50 border-red-200' : 'bg-white border-indigo-100'}`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-bold text-slate-700">英文</span>
+                <span className={`text-xs font-bold ${dailyTasks.eng.used >= dailyTasks.eng.limit ? 'text-red-600' : 'text-indigo-600'}`}>
+                  {dailyTasks.eng.used} / {dailyTasks.eng.limit}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-2 rounded-full transition-all ${dailyTasks.eng.used >= dailyTasks.eng.limit ? 'bg-red-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${Math.min((dailyTasks.eng.used / dailyTasks.eng.limit) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </button>
+          </div>
+          
+          {/* 訂閱提示（僅免費用戶顯示） */}
+          {!user.isPremium && (
+            <div className="mt-3 pt-3 border-t border-indigo-200">
+              <div className="flex items-center justify-between">
+                <p className="text-indigo-700 text-sm">升級至訂閱版可獲得更多功能</p>
+                <button 
+                  onClick={goToSubscription}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold px-4 py-2 rounded-lg shadow-lg hover:from-indigo-700 hover:to-purple-700 transition flex items-center gap-2 text-sm"
+                >
+                  <Crown size={16} /> 立即升級
+                </button>
+              </div>
             </div>
-        )}
-        {user.isPremium && (
-            <div className="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-sm">
-                <p className="text-indigo-800 font-bold">✨ 訂閱用戶：無限題目生成</p>
-            </div>
-        )}
+          )}
+        </div>
 
         {/* 裝飾背景 */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500 opacity-20 rounded-full blur-3xl transform -translate-x-1/2 translate-y-1/2"></div>
       </div>
 
-      {/* 專注模式開關 - 僅訂閱用戶可用 */}
-      {(user.isPremium || user.role === 'admin') ? (
-          <div className={`p-4 rounded-xl border-2 transition-all duration-300 flex items-center justify-between ${adhdMode ? 'bg-yellow-50 border-yellow-400 shadow-md' : 'bg-white border-slate-200'}`}>
-            <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${adhdMode ? 'bg-yellow-400 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                    <Accessibility size={24} />
-                </div>
-                <div>
-                    <h3 className={`font-bold ${adhdMode ? 'text-yellow-800' : 'text-slate-700'}`}>專注輔助模式 (ADHD Support)</h3>
-                    <p className="text-xs text-slate-500">啟用後將放大文字、隱藏干擾元素並提供語音輔助</p>
-                </div>
+      {/* 專注模式開關 - 所有用戶可用 */}
+      <div className={`p-4 rounded-xl border-2 transition-all duration-300 flex items-center justify-between ${adhdMode ? 'bg-yellow-50 border-yellow-400 shadow-md' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-full ${adhdMode ? 'bg-yellow-400 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <Accessibility size={24} />
             </div>
-            <button onClick={toggleAdhdMode} className={`relative w-14 h-8 rounded-full transition-colors duration-300 focus:outline-none ${adhdMode ? 'bg-yellow-400' : 'bg-slate-300'}`}>
-                <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${adhdMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
-            </button>
-          </div>
-      ) : (
-          <div className="p-4 rounded-xl border-2 bg-slate-50 border-slate-200 flex items-center justify-between opacity-60">
-            <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-slate-200 text-slate-400">
-                    <Accessibility size={24} />
-                </div>
-                <div>
-                    <h3 className="font-bold text-slate-500">專注輔助模式 (ADHD Support)</h3>
-                    <p className="text-xs text-slate-400">此功能僅限訂閱用戶使用</p>
-                </div>
+            <div>
+                <h3 className={`font-bold ${adhdMode ? 'text-yellow-800' : 'text-slate-700'}`}>專注輔助模式 (ADHD Support)</h3>
+                <p className="text-xs text-slate-500">啟用後將放大文字、隱藏干擾元素並提供語音輔助</p>
             </div>
-            <button disabled className="relative w-14 h-8 rounded-full bg-slate-200 cursor-not-allowed">
-                <div className="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow"></div>
-            </button>
-          </div>
-      )}
+        </div>
+        <button onClick={toggleAdhdMode} className={`relative w-14 h-8 rounded-full transition-colors duration-300 focus:outline-none ${adhdMode ? 'bg-yellow-400' : 'bg-slate-300'}`}>
+            <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${adhdMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
+        </button>
+      </div>
 
       {/* 儀表板主要內容 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -192,7 +247,7 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
         {/* 重點加強 */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-lg">
-              <AlertCircle className="text-red-500" size={24} /> 建議重點加強
+              <AlertCircle className="text-red-500" size={24} /> 重點加強
           </h3>
           <ul className="space-y-4 list-none m-0 p-0">
             <li className="flex items-center gap-4 p-4 bg-red-50 rounded-xl border border-red-100 group hover:bg-red-100 transition cursor-pointer">

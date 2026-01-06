@@ -162,5 +162,76 @@ export const DB_SERVICE = {
             console.error("Get Daily Question Count Error:", e); 
             return 0; 
         }
+    },
+    getDailyTasks: async (uid) => {
+        try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStart = today.toISOString();
+            
+            // 獲取今日所有生成題目的記錄
+            const q = query(
+                collection(db, "artifacts", APP_ID, "users", uid, "logs"),
+                where("action", "in", ["start_practice", "generate_question"]),
+                where("timestamp", ">=", todayStart)
+            );
+            const snap = await getDocs(q);
+            
+            // 統計各科目的使用量
+            const tasks = { math: 0, chi: 0, eng: 0 };
+            snap.forEach(doc => {
+                const data = doc.data();
+                const subject = data.subject || data.topicId?.split('_')[0] || 'math';
+                if (subject.includes('math') || subject.includes('數學')) {
+                    tasks.math++;
+                } else if (subject.includes('chi') || subject.includes('中文')) {
+                    tasks.chi++;
+                } else if (subject.includes('eng') || subject.includes('英文')) {
+                    tasks.eng++;
+                } else {
+                    // 默認歸類為數學
+                    tasks.math++;
+                }
+            });
+            
+            return {
+                math: { used: tasks.math, limit: 20 },
+                chi: { used: tasks.chi, limit: 20 },
+                eng: { used: tasks.eng, limit: 20 }
+            };
+        } catch(e) { 
+            console.error("Get Daily Tasks Error:", e); 
+            return {
+                math: { used: 0, limit: 20 },
+                chi: { used: 0, limit: 20 },
+                eng: { used: 0, limit: 20 }
+            };
+        }
+    },
+    updateUserSubscription: async (uid, isPremium, subscriptionId = null) => {
+        try {
+            // 更新用戶資料中的訂閱狀態
+            const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("uid", "==", uid));
+            const snap = await getDocs(q);
+            
+            if (!snap.empty) {
+                const userDoc = snap.docs[0];
+                const updateData = {
+                    isPremium: isPremium,
+                    subscriptionUpdatedAt: new Date().toISOString()
+                };
+                
+                if (subscriptionId) {
+                    updateData.stripeSubscriptionId = subscriptionId;
+                }
+                
+                await updateDoc(doc(db, "artifacts", APP_ID, "public", "data", "users", userDoc.id), updateData);
+                return true;
+            }
+            return false;
+        } catch(e) {
+            console.error("Update User Subscription Error:", e);
+            return false;
+        }
     }
 };

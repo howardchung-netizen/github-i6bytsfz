@@ -55,7 +55,7 @@ B. 介面層級 (Interface Views)
 
 [x] 核心 AI 引擎：已串接 Google Gemini API，實現「種子 -> 變體題目」的生成邏輯。
 
-[x] 出題系統：支援文字題、選擇題 (MCQ) 自動生成 (4 選項 + 誘答項)。
+[x] 出題系統：支援文字題、選擇題 (MCQ) 自動生成 (數學科 8 選項 + 誘答項，其他科目 4 選項 + 誘答項)。
 
 [x] 效能優化：實作「預加載 (Pre-loading)」機制，實現無感秒開下一題。
 
@@ -112,11 +112,15 @@ JSON Output: 所有回應必須是嚴格的 JSON 格式。
 
 選擇題機制:
 
-必須包含 options 陣列 (長度 4)。
+數學科選擇題：
+- 必須包含 options 陣列 (長度 8)。
+- 必須包含 7 個「合理的錯誤答案 (Distractors)」。
+- answer 必須完全匹配 options 中的一項。
 
-必須包含 3 個「合理的錯誤答案 (Distractors)」。
-
-answer 必須完全匹配 options 中的一項。
+其他科目選擇題：
+- 必須包含 options 陣列 (長度 4)。
+- 必須包含 3 個「合理的錯誤答案 (Distractors)」。
+- answer 必須完全匹配 options 中的一項。
 
 種子變體 (Seed Variation):
 

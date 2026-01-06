@@ -11,7 +11,8 @@ export const ADMIN_USER = {
     role: 'admin',
     school: 'Test Academy',
     gender: 'boy',
-    age: 30
+    age: 30,
+    isPremium: true // 測試帳號設為全權限模式
 };
 
 export const INITIAL_TOPICS = [

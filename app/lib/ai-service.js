@@ -23,18 +23,50 @@ const LOCAL_BRAIN = {
 };
 
 export const AI_SERVICE = {
-  generateQuestion: async (level, difficulty, selectedTopicIds, allTopicsList) => {
-    // 1. 先嘗試找種子題目 (RAG)
-    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, selectedTopicIds, allTopicsList);
+  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null) => {
+    // 1. 如果 selectedTopicIds 為空，使用 subjectHint 或自動偵測
+    let targetSubject = subjectHint;
+    if (!targetSubject && selectedTopicIds.length === 0) {
+        // 自動偵測：從該年級的所有題目中隨機選擇一個科目
+        const availableSubjects = [...new Set(allTopicsList.filter(t => t.grade === level).map(t => t.subject))];
+        targetSubject = availableSubjects.length > 0 
+            ? availableSubjects[Math.floor(Math.random() * availableSubjects.length)]
+            : 'math';
+    } else if (!targetSubject && selectedTopicIds.length > 0) {
+        // 從選中的 topics 判斷科目
+        const topic = allTopicsList.find(t => selectedTopicIds.includes(t.id));
+        targetSubject = topic?.subject || 'math';
+    }
+    
+    // 如果 selectedTopicIds 為空，從該科目的所有單元中隨機選擇
+    let finalTopicIds = selectedTopicIds;
+    if (finalTopicIds.length === 0 && targetSubject) {
+        const subjectTopics = allTopicsList.filter(t => t.subject === targetSubject && t.grade === level);
+        if (subjectTopics.length > 0) {
+            // 隨機選擇一個單元
+            const randomTopic = subjectTopics[Math.floor(Math.random() * subjectTopics.length)];
+            finalTopicIds = [randomTopic.id];
+        }
+    }
+    
+    // 2. 先嘗試找種子題目 (RAG)
+    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, finalTopicIds, allTopicsList);
     // Fallback seed logic if none found in RAG
     const activeSeed = seedQuestion || {
-        question: "基礎數學運算",
-        topic: allTopicsList.find(t => t.id === selectedTopicIds[0])?.name || "General Math",
-        type: 'text'
+        question: targetSubject === 'math' ? "基礎數學運算" : targetSubject === 'chi' ? "基礎中文練習" : "Basic English Practice",
+        topic: allTopicsList.find(t => finalTopicIds.includes(t.id))?.name || `${targetSubject === 'math' ? '數學' : targetSubject === 'chi' ? '中文' : '英文'}綜合練習`,
+        type: 'text',
+        subject: targetSubject
     };
-    console.log("🌱 Seed Found for Context:", activeSeed.question);
+    console.log("🌱 Seed Found for Context:", activeSeed.question, "Subject:", targetSubject);
 
-    // 2. 建構 Prompt
+    // 3. 建構 Prompt
+    // 檢查是否為數學科
+    const isMathSubject = targetSubject === 'math' || (selectedTopicIds.length > 0 && selectedTopicIds.some(topicId => {
+        const topic = allTopicsList.find(t => t.id === topicId);
+        return topic && topic.subject === 'math';
+    }));
+    
     const promptText = `
         Role: Professional HK Primary Math Teacher.
         Task: Create a NEW variation of the following seed question.
@@ -47,8 +79,12 @@ export const AI_SERVICE = {
         3. If it is a division word problem, ensure you calculate the new answer properly.
         4. Output strict JSON only.
         5. IMPORTANT: Ensure all strings are valid JSON. Escape all backslashes.
+        ${isMathSubject ? '6. For Math questions, you MUST create a multiple-choice question (MCQ) with exactly 8 options: 1 correct answer and 7 plausible distractors (wrong answers that are mathematically reasonable).' : '6. If creating a multiple-choice question, include 4 options: 1 correct answer and 3 plausible distractors.'}
         
-        Output JSON Schema: { "question": "string", "answer": "string/number", "explanation": "string", "hint": "string", "params": null }
+        Output JSON Schema: ${isMathSubject ? 
+            '{ "question": "string", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string", "hint": "string", "params": null }' :
+            '{ "question": "string", "answer": "string/number", "explanation": "string", "hint": "string", "params": null }'
+        }
     `;
 
     // 3. 呼叫 Next.js API Route

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut, signInAnonymously } from "firebase/auth";
-import { Loader2, Calculator } from 'lucide-react';
+import { Loader2, Sparkles, MoreVertical } from 'lucide-react';
 
 // Logic Services
 import { auth } from './lib/firebase';
@@ -13,8 +13,12 @@ import { INITIAL_TOPICS, ADMIN_USER } from './lib/constants';
 // UI Components
 import DashboardView from './components/DashboardView';
 import DeveloperView from './components/DeveloperView';
+import ChineseDeveloperView from './components/ChineseDeveloperView';
+import EnglishDeveloperView from './components/EnglishDeveloperView';
 import PracticeView from './components/PracticeView';
 import RegisterView from './components/RegisterView';
+import SubscriptionView from './components/SubscriptionView';
+import DailyTaskView from './components/DailyTaskView';
 import { TopicSelectionView, MistakesView, ParentView, SummaryView, ProfileView } from './components/CommonViews';
 
 // Error Boundary for Runtime Safety
@@ -66,14 +70,34 @@ export default function App() {
   const [sessionMistakes, setSessionMistakes] = useState([]);
   const [sessionTopics, setSessionTopics] = useState([]);
   const [preloadedQuestion, setPreloadedQuestion] = useState(null); // 預加載的下一題
-  const [dailyQuestionCount, setDailyQuestionCount] = useState(0); // 今日已生成題數
+  const [dailyTasks, setDailyTasks] = useState({
+    math: { used: 0, limit: 20 },
+    chi: { used: 0, limit: 20 },
+    eng: { used: 0, limit: 20 }
+  }); // 每日任務：每科20題
 
   // --- Handlers ---
   const goToSelection = () => setView('selection');
   const goToDeveloper = () => setView('developer');
   const goToMistakes = () => setView('mistakes');
   const goToParent = () => setView('parent');
+  const goToSubscription = () => setView('subscription');
+  const goToDailyTask = (subject) => setView(`daily-task-${subject}`);
   const toggleAdhdMode = () => setAdhdMode(!adhdMode);
+
+  // 處理支付（可整合實際支付服務如 Stripe）
+  const handlePayment = async (plan, amount) => {
+    // TODO: 整合實際支付服務
+    // 例如：Stripe, PayPal, 或其他支付網關
+    console.log(`處理支付: ${plan} - HKD ${amount}`);
+    
+    // 模擬支付流程
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true, transactionId: `txn_${Date.now()}` });
+      }, 1500);
+    });
+  };
 
   const handleLogout = () => { 
       signOut(auth).then(() => {
@@ -164,9 +188,9 @@ export default function App() {
               }));
               setMistakes(formattedMistakes);
 
-              // 載入今日已生成題數
-              const todayCount = await DB_SERVICE.getDailyQuestionCount(user.id);
-              setDailyQuestionCount(todayCount);
+              // 載入每日任務（每科使用量）
+              const tasks = await DB_SERVICE.getDailyTasks(user.id);
+              setDailyTasks(tasks);
           } catch(e) { 
               console.error("Load User Data Error:", e); 
           }
@@ -175,14 +199,28 @@ export default function App() {
   }, [isLoggedIn, user.id]);
 
 
-  // --- 檢查每日題數限制 ---
-  const checkDailyLimit = () => {
-      // 免費用戶每日限制 20 題，訂閱用戶無限制
-      const FREE_USER_DAILY_LIMIT = 20;
-      if (!user.isPremium && dailyQuestionCount >= FREE_USER_DAILY_LIMIT) {
+  // --- 檢查每日任務限制（按科目） ---
+  const checkDailyTaskLimit = (subject = 'math') => {
+      // 所有用戶（包括訂閱用戶）都有每日任務限制：每科20題
+      const task = dailyTasks[subject] || dailyTasks.math;
+      if (task.used >= task.limit) {
           return false;
       }
       return true;
+  };
+
+  // --- 獲取科目（從 topicIds 判斷，如果為空則需要從當前 view 判斷） ---
+  const getSubjectFromTopics = (topicIds, fallbackSubject = 'math') => {
+      if (!topicIds || topicIds.length === 0) {
+          // 如果 topicIds 為空，嘗試從當前 view 判斷科目
+          if (view === 'daily-task-math' || view === 'practice' && sessionTopics.length === 0 && fallbackSubject === 'math') return 'math';
+          if (view === 'daily-task-chi' || view === 'practice' && sessionTopics.length === 0 && fallbackSubject === 'chi') return 'chi';
+          if (view === 'daily-task-eng' || view === 'practice' && sessionTopics.length === 0 && fallbackSubject === 'eng') return 'eng';
+          return fallbackSubject || 'math';
+      }
+      const topic = topics.find(t => topicIds.includes(t.id));
+      if (!topic) return fallbackSubject || 'math';
+      return topic.subject || fallbackSubject || 'math';
   };
 
   // --- 記錄學習歷程 ---
@@ -200,27 +238,41 @@ export default function App() {
   };
 
   // --- Game Loop Logic ---
-  const startPracticeSession = async (selectedTopicIds, count = 10) => { 
-      // 檢查每日題數限制
-      if (!checkDailyLimit()) {
-          alert(`⚠️ 免費用戶每日限制 ${20} 題，您今日已達上限。請升級至訂閱版以獲得無限題目！`);
+  const startPracticeSession = async (selectedTopicIds = [], count = 10, subjectHint = null) => { 
+      // 檢查每日任務限制（按科目）
+      // 如果 selectedTopicIds 為空，使用 subjectHint；否則從 topics 判斷
+      const subject = selectedTopicIds.length > 0 
+          ? getSubjectFromTopics(selectedTopicIds) 
+          : (subjectHint || 'math');
+      
+      if (!checkDailyTaskLimit(subject)) {
+          const subjectName = { math: '數學', chi: '中文', eng: '英文' }[subject] || '該科目';
+          alert(`⚠️ ${subjectName}每日任務已達上限（20題），請選擇其他科目或明天再試！`);
+          setLoading(false); // 如果達到限制，確保 loading 狀態被重置
           return;
       }
 
       setSessionStats({ total: count, current: 1, correct: 0 }); 
       setSessionMistakes([]); 
       setSessionTopics(selectedTopicIds);
+      // 注意：loading 狀態應該在調用此函數之前就已經設置為 true（在 DailyTaskView 或 TopicSelectionView 中）
+      // 這裡確保 loading 狀態是 true
       setLoading(true); 
       
       // 記錄開始練習
-      await logLearningActivity('start_practice', { topicIds: selectedTopicIds, questionCount: count });
+      await logLearningActivity('start_practice', { topicIds: selectedTopicIds, questionCount: count, subject, autoDetect: selectedTopicIds.length === 0 });
       
       let q = null; 
       try { 
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics);
-          setDailyQuestionCount(prev => prev + 1);
+          // 如果 selectedTopicIds 為空，傳入 subject 讓 AI 自動偵測該科目的題目
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject);
+          // 更新對應科目的任務計數
+          setDailyTasks(prev => ({
+              ...prev,
+              [subject]: { ...prev[subject], used: prev[subject].used + 1 }
+          }));
           // 記錄生成題目
-          await logLearningActivity('generate_question', { topicIds: selectedTopicIds });
+          await logLearningActivity('generate_question', { topicIds: selectedTopicIds, subject, autoDetect: selectedTopicIds.length === 0 });
       } catch (e) { console.error("Start session error:", e); } 
       
       if (!q) { 
@@ -242,16 +294,23 @@ export default function App() {
 
   // --- 預加載下一題 ---
   const preloadNextQuestion = async (selectedTopicIds) => {
-      if (!checkDailyLimit()) return; // 如果已達限制，不預加載
+      const topicIds = selectedTopicIds || sessionTopics;
+      const subject = getSubjectFromTopics(topicIds);
+      if (!checkDailyTaskLimit(subject)) return; // 如果已達限制，不預加載
       
       try {
-          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds || sessionTopics, topics);
+          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics);
           if (q) {
               setPreloadedQuestion(q);
-              setDailyQuestionCount(prev => prev + 1);
+              // 更新對應科目的任務計數
+              setDailyTasks(prev => ({
+                  ...prev,
+                  [subject]: { ...prev[subject], used: prev[subject].used + 1 }
+              }));
               // 記錄預加載題目
               await logLearningActivity('generate_question', { 
-                  topicIds: selectedTopicIds || sessionTopics,
+                  topicIds: topicIds,
+                  subject,
                   isPreload: true 
               });
           }
@@ -271,9 +330,11 @@ export default function App() {
           return;
       }
 
-      // 檢查每日題數限制
-      if (!checkDailyLimit()) {
-          alert(`⚠️ 免費用戶每日限制 ${20} 題，您今日已達上限。請升級至訂閱版以獲得無限題目！`);
+      // 檢查每日任務限制（按科目）
+      const subject = getSubjectFromTopics(sessionTopics);
+      if (!checkDailyTaskLimit(subject)) {
+          const subjectName = { math: '數學', chi: '中文', eng: '英文' }[subject] || '該科目';
+          alert(`⚠️ ${subjectName}每日任務已達上限（20題），請選擇其他科目或明天再試！`);
           setView('summary');
           return;
       }
@@ -281,10 +342,15 @@ export default function App() {
       setLoading(true); 
       let q = null;
       try { 
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics);
-          setDailyQuestionCount(prev => prev + 1);
+          // 傳入 subject 參數以支持自動偵測
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject);
+          // 更新對應科目的任務計數
+          setDailyTasks(prev => ({
+              ...prev,
+              [subject]: { ...prev[subject], used: prev[subject].used + 1 }
+          }));
           // 記錄生成題目
-          await logLearningActivity('generate_question', { topicIds: sessionTopics });
+          await logLearningActivity('generate_question', { topicIds: sessionTopics, subject });
       } catch(e) { console.error("New question error:", e); } 
       
       if (!q) { 
@@ -380,7 +446,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-900 p-4 md:p-8">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <ErrorBoundary>
         {view === 'register' && <RegisterView setView={setView} setUser={(u) => { setUser(u); setIsLoggedIn(true); }} />}
         
@@ -391,30 +457,31 @@ export default function App() {
         )}
 
         {isLoggedIn && view !== 'register' && (
-          <div className="max-w-4xl mx-auto">
-             {/* App Header */}
-             <div className="flex justify-between items-center mb-6">
-                 <div className="flex items-center gap-2">
-                     <div className="bg-indigo-600 p-2 rounded-lg text-white"><Calculator size={24} /></div>
-                     <h1 className="text-2xl font-black tracking-tight text-slate-800">
-                         AI Math Tutor <span className="text-indigo-600 text-sm font-normal bg-indigo-100 px-2 py-1 rounded-full">Pro</span>
-                     </h1>
-                 </div>
-                 {view !== 'dashboard' && view !== 'developer' && (
-                     <button onClick={() => setView('dashboard')} className="text-indigo-600 hover:text-indigo-800 font-bold text-sm">回首頁</button>
-                 )}
-             </div>
-
+          <div className="max-w-6xl mx-auto p-4 md:p-6">
              {/* Main Views */}
-             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} handleLogout={handleLogout} dailyQuestionCount={dailyQuestionCount} />}
+             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
-             {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} />}
+             {view === 'chinese-developer' && <ChineseDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
+             {view === 'english-developer' && <EnglishDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
+             {view === 'subscription' && <SubscriptionView user={user} setUser={setUser} setView={setView} />}
+             {view === 'daily-task-math' && <DailyTaskView subject="math" dailyTasks={dailyTasks} setView={setView} startPracticeSession={startPracticeSession} user={user} setLoading={setLoading} />}
+             {view === 'daily-task-chi' && <DailyTaskView subject="chi" dailyTasks={dailyTasks} setView={setView} startPracticeSession={startPracticeSession} user={user} setLoading={setLoading} />}
+             {view === 'daily-task-eng' && <DailyTaskView subject="eng" dailyTasks={dailyTasks} setView={setView} startPracticeSession={startPracticeSession} user={user} setLoading={setLoading} />}
+             {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} setLoading={setLoading} />}
              {view === 'mistakes' && <MistakesView setView={setView} mistakes={mistakes} retryQuestion={retryQuestion} />}
              {view === 'parent' && <ParentView setView={setView} user={user} />}
              {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} />}
              {view === 'summary' && <SummaryView sessionStats={sessionStats} restartSelection={goToSelection} setView={setView} />}
              
-             <div className="mt-8 text-center text-slate-400 text-xs">Powered by Google Gemini 2.0 Flash & Next.js</div>
+             {/* Floating Action Button */}
+             {view === 'dashboard' && (
+                 <div className="fixed bottom-6 right-6">
+                     <button className="bg-slate-800 hover:bg-slate-900 text-white p-3 rounded-lg shadow-lg transition flex items-center gap-2">
+                         <Sparkles size={18} />
+                         <MoreVertical size={16} className="opacity-70" />
+                     </button>
+                 </div>
+             )}
           </div>
         )}
       </ErrorBoundary>

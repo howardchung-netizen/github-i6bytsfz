@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Sparkles, BookOpen, CheckCircle, RefreshCw, UserCog, Award, X, LogOut } from 'lucide-react';
 
-export const TopicSelectionView = ({ user, setView, startPracticeSession, topics }) => {
+export const TopicSelectionView = ({ user, setView, startPracticeSession, topics, setLoading }) => {
   const [selected, setSelected] = useState([]);
   const availableTopics = topics.filter(t => t.grade === user.level);
   const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -22,7 +22,20 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
         </div>
         <div className="flex gap-4">
             <button onClick={() => setView('dashboard')} className="flex-1 py-3 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-50">返回首頁</button>
-            <button onClick={() => startPracticeSession(selected)} disabled={selected.length === 0} className="flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">開始練習 ({selected.length})</button>
+            <button 
+              onClick={async () => {
+                if (selected.length === 0) return;
+                // 先設置 loading 狀態並切換到 practice view，顯示「題目生成中」畫面
+                if (setLoading) setLoading(true);
+                setView('practice');
+                // 然後開始生成題目
+                await startPracticeSession(selected);
+              }} 
+              disabled={selected.length === 0} 
+              className="flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              開始練習 ({selected.length})
+            </button>
         </div>
     </div>
   );

@@ -4,11 +4,13 @@ export async function POST(request: Request) {
   try {
     const { message } = await request.json();
 
-    // 👇 1. 填入你的新 Key
-    const apiKey = "AIzaSyCe3wWsqGuEE8lV93uGsoMuRPC8lrlwC3w";
+    // 👇 從環境變數讀取 API Key（安全性最佳實踐）
+    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ error: 'No API Key found' }, { status: 500 });
+      return NextResponse.json({ 
+        error: 'API Key not configured. Please set GOOGLE_GEMINI_API_KEY in .env.local file.' 
+      }, { status: 500 });
     }
 
     // 👇 2. 終極修正：使用診斷列表裡確認存在的 "gemini-flash-latest"
