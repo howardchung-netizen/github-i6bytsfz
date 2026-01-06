@@ -39,7 +39,14 @@ export default function RegisterView({ setView, setUser }) {
         const emailExists = await DB_SERVICE.checkEmailExists(formData.email); 
         if (emailExists) { setErrorMessage("❌ 此電郵已被註冊！"); setIsProcessing(false); return; } 
         
-        const { password, ...profileData } = { ...formData, avatar: selectedAvatar, xp: 0, level: formData.grade }; 
+        const { password, ...profileData } = { 
+            ...formData, 
+            avatar: selectedAvatar, 
+            xp: 0, 
+            level: formData.grade,
+            role: 'student', // 預設為學生角色
+            isPremium: false // 預設為免費用戶
+        }; 
         const userId = await DB_SERVICE.registerUser(profileData, formData.password); 
         
         if (userId) { setUser({ ...profileData, id: userId }); setView('dashboard'); } 

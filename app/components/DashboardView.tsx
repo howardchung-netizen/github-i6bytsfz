@@ -8,7 +8,7 @@ import {
   Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType 
 } from 'lucide-react';
 
-export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, handleLogout }) {
+export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, handleLogout, dailyQuestionCount = 0 }) {
   // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
   const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
@@ -79,6 +79,11 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
                     <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-white/10">
                         XP: {user.xp || 0}
                     </span>
+                    {user.isPremium && (
+                        <span className="bg-yellow-400/30 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm border border-yellow-300/30 text-yellow-900">
+                            ✨ 訂閱版
+                        </span>
+                    )}
                 </div>
              </div>
           </div>
@@ -95,26 +100,59 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
           </button>
         </div>
 
+        {/* 用戶狀態提示 */}
+        {!user.isPremium && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm">
+                <p className="text-yellow-800 font-bold">
+                    📊 今日已生成 {dailyQuestionCount} / 20 題 
+                    {dailyQuestionCount >= 20 && <span className="text-red-600"> (已達上限)</span>}
+                </p>
+                <p className="text-yellow-700 text-xs mt-1">升級至訂閱版可獲得無限題目與 AI 老師跟進功能</p>
+            </div>
+        )}
+        {user.isPremium && (
+            <div className="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-sm">
+                <p className="text-indigo-800 font-bold">✨ 訂閱用戶：無限題目生成</p>
+            </div>
+        )}
+
         {/* 裝飾背景 */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500 opacity-20 rounded-full blur-3xl transform -translate-x-1/2 translate-y-1/2"></div>
       </div>
 
-      {/* 專注模式開關 */}
-      <div className={`p-4 rounded-xl border-2 transition-all duration-300 flex items-center justify-between ${adhdMode ? 'bg-yellow-50 border-yellow-400 shadow-md' : 'bg-white border-slate-200'}`}>
-        <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-full ${adhdMode ? 'bg-yellow-400 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                <Accessibility size={24} />
+      {/* 專注模式開關 - 僅訂閱用戶可用 */}
+      {(user.isPremium || user.role === 'admin') ? (
+          <div className={`p-4 rounded-xl border-2 transition-all duration-300 flex items-center justify-between ${adhdMode ? 'bg-yellow-50 border-yellow-400 shadow-md' : 'bg-white border-slate-200'}`}>
+            <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${adhdMode ? 'bg-yellow-400 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    <Accessibility size={24} />
+                </div>
+                <div>
+                    <h3 className={`font-bold ${adhdMode ? 'text-yellow-800' : 'text-slate-700'}`}>專注輔助模式 (ADHD Support)</h3>
+                    <p className="text-xs text-slate-500">啟用後將放大文字、隱藏干擾元素並提供語音輔助</p>
+                </div>
             </div>
-            <div>
-                <h3 className={`font-bold ${adhdMode ? 'text-yellow-800' : 'text-slate-700'}`}>專注輔助模式 (ADHD Support)</h3>
-                <p className="text-xs text-slate-500">啟用後將放大文字、隱藏干擾元素並提供語音輔助</p>
+            <button onClick={toggleAdhdMode} className={`relative w-14 h-8 rounded-full transition-colors duration-300 focus:outline-none ${adhdMode ? 'bg-yellow-400' : 'bg-slate-300'}`}>
+                <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${adhdMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
+            </button>
+          </div>
+      ) : (
+          <div className="p-4 rounded-xl border-2 bg-slate-50 border-slate-200 flex items-center justify-between opacity-60">
+            <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-slate-200 text-slate-400">
+                    <Accessibility size={24} />
+                </div>
+                <div>
+                    <h3 className="font-bold text-slate-500">專注輔助模式 (ADHD Support)</h3>
+                    <p className="text-xs text-slate-400">此功能僅限訂閱用戶使用</p>
+                </div>
             </div>
-        </div>
-        <button onClick={toggleAdhdMode} className={`relative w-14 h-8 rounded-full transition-colors duration-300 focus:outline-none ${adhdMode ? 'bg-yellow-400' : 'bg-slate-300'}`}>
-            <div className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${adhdMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
-        </button>
-      </div>
+            <button disabled className="relative w-14 h-8 rounded-full bg-slate-200 cursor-not-allowed">
+                <div className="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow"></div>
+            </button>
+          </div>
+      )}
 
       {/* 儀表板主要內容 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -65,6 +65,8 @@ export default function App() {
   const [sessionStats, setSessionStats] = useState({ total: 20, current: 0, correct: 0 });
   const [sessionMistakes, setSessionMistakes] = useState([]);
   const [sessionTopics, setSessionTopics] = useState([]);
+  const [preloadedQuestion, setPreloadedQuestion] = useState(null); // 預加載的下一題
+  const [dailyQuestionCount, setDailyQuestionCount] = useState(0); // 今日已生成題數
 
   // --- Handlers ---
   const goToSelection = () => setView('selection');
@@ -142,17 +144,83 @@ export default function App() {
       loadData(); 
   }, [isFirebaseReady]);
 
+  // 4. 載入錯題本數據和今日題數
+  useEffect(() => {
+      const loadUserData = async () => {
+          if (!isLoggedIn || !user.id) return;
+          try {
+              // 載入錯題本
+              const mistakesData = await DB_SERVICE.fetchMistakes(user.id);
+              // 轉換格式以符合組件需求
+              const formattedMistakes = mistakesData.map(m => ({
+                  id: m.questionId || m.id,
+                  question: m.question,
+                  answer: m.answer,
+                  userWrongAnswer: m.userWrongAnswer,
+                  hint: m.hint,
+                  explanation: m.explanation,
+                  category: m.category,
+                  createdAt: m.createdAt
+              }));
+              setMistakes(formattedMistakes);
+
+              // 載入今日已生成題數
+              const todayCount = await DB_SERVICE.getDailyQuestionCount(user.id);
+              setDailyQuestionCount(todayCount);
+          } catch(e) { 
+              console.error("Load User Data Error:", e); 
+          }
+      };
+      loadUserData();
+  }, [isLoggedIn, user.id]);
+
+
+  // --- 檢查每日題數限制 ---
+  const checkDailyLimit = () => {
+      // 免費用戶每日限制 20 題，訂閱用戶無限制
+      const FREE_USER_DAILY_LIMIT = 20;
+      if (!user.isPremium && dailyQuestionCount >= FREE_USER_DAILY_LIMIT) {
+          return false;
+      }
+      return true;
+  };
+
+  // --- 記錄學習歷程 ---
+  const logLearningActivity = async (action, data = {}) => {
+      if (!user.id || !isFirebaseReady) return;
+      try {
+          await DB_SERVICE.saveLearningLog(user.id, {
+              action,
+              timestamp: new Date().toISOString(),
+              ...data
+          });
+      } catch(e) { 
+          console.error("Save Learning Log Error:", e); 
+      }
+  };
 
   // --- Game Loop Logic ---
   const startPracticeSession = async (selectedTopicIds, count = 10) => { 
+      // 檢查每日題數限制
+      if (!checkDailyLimit()) {
+          alert(`⚠️ 免費用戶每日限制 ${20} 題，您今日已達上限。請升級至訂閱版以獲得無限題目！`);
+          return;
+      }
+
       setSessionStats({ total: count, current: 1, correct: 0 }); 
       setSessionMistakes([]); 
       setSessionTopics(selectedTopicIds);
       setLoading(true); 
       
+      // 記錄開始練習
+      await logLearningActivity('start_practice', { topicIds: selectedTopicIds, questionCount: count });
+      
       let q = null; 
       try { 
           q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics);
+          setDailyQuestionCount(prev => prev + 1);
+          // 記錄生成題目
+          await logLearningActivity('generate_question', { topicIds: selectedTopicIds });
       } catch (e) { console.error("Start session error:", e); } 
       
       if (!q) { 
@@ -165,13 +233,58 @@ export default function App() {
       setShowExplanation(false); 
       setUserAnswer(''); 
       setView('practice'); 
+
+      // 預加載下一題
+      if (count > 1) {
+          preloadNextQuestion(selectedTopicIds);
+      }
+  };
+
+  // --- 預加載下一題 ---
+  const preloadNextQuestion = async (selectedTopicIds) => {
+      if (!checkDailyLimit()) return; // 如果已達限制，不預加載
+      
+      try {
+          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds || sessionTopics, topics);
+          if (q) {
+              setPreloadedQuestion(q);
+              setDailyQuestionCount(prev => prev + 1);
+              // 記錄預加載題目
+              await logLearningActivity('generate_question', { 
+                  topicIds: selectedTopicIds || sessionTopics,
+                  isPreload: true 
+              });
+          }
+      } catch(e) { 
+          console.error("Preload question error:", e); 
+      }
   };
 
   const generateNewQuestion = async () => { 
+      // 如果有預加載的題目，直接使用
+      if (preloadedQuestion) {
+          setCurrentQuestion(preloadedQuestion);
+          setPreloadedQuestion(null);
+          setFeedback(null); 
+          setShowExplanation(false); 
+          setUserAnswer('');
+          return;
+      }
+
+      // 檢查每日題數限制
+      if (!checkDailyLimit()) {
+          alert(`⚠️ 免費用戶每日限制 ${20} 題，您今日已達上限。請升級至訂閱版以獲得無限題目！`);
+          setView('summary');
+          return;
+      }
+
       setLoading(true); 
       let q = null;
       try { 
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics); 
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics);
+          setDailyQuestionCount(prev => prev + 1);
+          // 記錄生成題目
+          await logLearningActivity('generate_question', { topicIds: sessionTopics });
       } catch(e) { console.error("New question error:", e); } 
       
       if (!q) { 
@@ -183,10 +296,17 @@ export default function App() {
       setFeedback(null); 
       setShowExplanation(false); 
       setUserAnswer(''); 
+
+      // 如果還有下一題，預加載
+      if (sessionStats.current < sessionStats.total) {
+          preloadNextQuestion();
+      }
   };
 
   const checkAnswer = (answerToCheck) => { 
       const finalAnswer = answerToCheck || userAnswer; 
+      const startTime = Date.now();
+      
       // 簡單的答案檢查邏輯
       const isCorrect = (typeof currentQuestion.answer === 'number') ?
           Math.abs(parseFloat(finalAnswer) - currentQuestion.answer) < 0.1 : 
@@ -196,12 +316,28 @@ export default function App() {
           setFeedback('correct'); 
           setUser(u => ({...u, xp: (u.xp || 0) + 100}));
           setSessionStats(s => ({...s, correct: s.correct + 1})); 
+          
+          // 記錄答對
+          logLearningActivity('answer_correct', {
+              questionId: currentQuestion.id,
+              topic: currentQuestion.topic || sessionTopics[0],
+              timeSpent: Date.now() - startTime
+          });
       } else { 
           setFeedback('wrong'); 
           const qData = { ...currentQuestion }; 
           DB_SERVICE.saveMistake(user.id, qData, finalAnswer);
           if (!mistakes.find(m => m.id === currentQuestion.id)) setMistakes([...mistakes, currentQuestion]); 
           setSessionMistakes([...sessionMistakes, currentQuestion]); 
+          
+          // 記錄答錯
+          logLearningActivity('answer_wrong', {
+              questionId: currentQuestion.id,
+              topic: currentQuestion.topic || sessionTopics[0],
+              userAnswer: finalAnswer,
+              correctAnswer: currentQuestion.answer,
+              timeSpent: Date.now() - startTime
+          });
       } 
   };
 
@@ -210,6 +346,12 @@ export default function App() {
           setSessionStats(s => ({...s, current: s.current + 1})); 
           generateNewQuestion();
       } else { 
+          // 記錄完成練習
+          logLearningActivity('complete_practice', {
+              totalQuestions: sessionStats.total,
+              correctAnswers: sessionStats.correct,
+              mistakes: sessionMistakes.length
+          });
           setView('summary'); 
       } 
   };
@@ -264,7 +406,7 @@ export default function App() {
              </div>
 
              {/* Main Views */}
-             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} handleLogout={handleLogout} />}
+             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} handleLogout={handleLogout} dailyQuestionCount={dailyQuestionCount} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
              {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} />}
              {view === 'mistakes' && <MistakesView setView={setView} mistakes={mistakes} retryQuestion={retryQuestion} />}

@@ -134,5 +134,33 @@ export const DB_SERVICE = {
         } catch (e) {
             console.error("Auto-seed failed:", e);
         }
+    },
+    saveLearningLog: async (uid, logData) => {
+        try {
+            await addDoc(collection(db, "artifacts", APP_ID, "users", uid, "logs"), {
+                ...logData,
+                createdAt: new Date().toISOString()
+            });
+        } catch(e) { 
+            console.error("Save Learning Log Error:", e); 
+        }
+    },
+    getDailyQuestionCount: async (uid) => {
+        try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStart = today.toISOString();
+            
+            const q = query(
+                collection(db, "artifacts", APP_ID, "users", uid, "logs"),
+                where("action", "in", ["start_practice", "generate_question"]),
+                where("timestamp", ">=", todayStart)
+            );
+            const snap = await getDocs(q);
+            return snap.size;
+        } catch(e) { 
+            console.error("Get Daily Question Count Error:", e); 
+            return 0; 
+        }
     }
 };
