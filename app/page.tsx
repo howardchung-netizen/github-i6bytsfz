@@ -141,7 +141,19 @@ export default function App() {
               // 登出用戶
               await signOut(auth);
               setIsLoggedIn(false);
-              setUser({ name: '', level: '', xp: 0, avatar: null });
+              setUser({ 
+                id: '', 
+                name: '', 
+                email: '', 
+                level: '', 
+                xp: 0, 
+                avatar: '', 
+                role: '', 
+                school: '', 
+                gender: '', 
+                age: 0, 
+                isPremium: false 
+              });
               setView('register');
           }
           return success;
