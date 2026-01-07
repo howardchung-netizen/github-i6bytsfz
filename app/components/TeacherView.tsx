@@ -12,7 +12,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [selectedClass, setSelectedClass] = useState(null);
   const [classStats, setClassStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation'
+  const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation', 'paper-preview'
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -1304,7 +1304,7 @@ export default function TeacherView({ setView, user, topics }) {
                   }
                   
                   setGeneratedPaper(questions);
-                  setShowPaperPreview(true); // 打開試卷預覽頁面
+                  setActiveTab('paper-preview'); // 切換到試卷預覽頁面
                   alert(`✅ 成功生成 ${questions.length} 道題目！`);
                 } catch (e) {
                   console.error("Generate Paper Error:", e);
@@ -1410,7 +1410,7 @@ export default function TeacherView({ setView, user, topics }) {
                           e.stopPropagation();
                           // 重用試卷（不能修改）
                           setSelectedPaperForReuse(paper);
-                          setShowPaperPreview(true);
+                          setActiveTab('paper-preview');
                         }}
                         className="ml-4 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
                       >
@@ -1718,6 +1718,253 @@ export default function TeacherView({ setView, user, topics }) {
                 )}
               </div>
             </div>
+          </div>
+        </>
+      ) : activeTab === 'paper-preview' ? (
+        <>
+          {/* 試卷預覽獨立頁面 */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            {/* 標題欄 */}
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setActiveTab('paper-creation');
+                    setSelectedPaperForReuse(null);
+                  }}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition flex items-center gap-1"
+                >
+                  <Home size={16} />
+                  返回
+                </button>
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <FileText size={20} className="text-purple-600"/>
+                  {selectedPaperForReuse ? '試卷預覽（只讀）' : '試卷預覽'}
+                  <span className="text-sm font-normal text-slate-500">
+                    ({selectedPaperForReuse ? selectedPaperForReuse.questions?.length || 0 : generatedPaper.filter(q => q.isSelected).length}/{selectedPaperForReuse ? selectedPaperForReuse.questions?.length || 0 : generatedPaper.length} 題)
+                  </span>
+                </h3>
+              </div>
+            </div>
+
+            {/* 試卷內容 */}
+            <div className="space-y-4">
+              {(selectedPaperForReuse?.questions || generatedPaper).map((q, idx) => {
+                const question = selectedPaperForReuse ? q : generatedPaper[idx];
+                if (!question) return null;
+                
+                return (
+                  <div
+                    key={idx}
+                    className={`p-4 border-2 rounded-lg ${
+                      selectedPaperForReuse 
+                        ? 'border-slate-200 bg-slate-50' 
+                        : question.isSelected 
+                          ? 'border-green-200 bg-green-50' 
+                          : 'border-red-200 bg-red-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="font-bold text-slate-700">第 {question.index || idx + 1} 題</span>
+                        {question.isRegenerating && (
+                          <RefreshCw size={14} className="animate-spin text-blue-600" />
+                        )}
+                      </div>
+                      {!selectedPaperForReuse && (
+                        <div className="flex gap-2">
+                          {/* 選擇單元按鈕 */}
+                          <button
+                            onClick={() => {
+                              // 顯示單元選擇下拉菜單
+                              const topicNames = topics
+                                .filter(t => t.grade === paperCreation.grade && t.subject === 'math')
+                                .map(t => t.name);
+                              
+                              const selectedTopic = prompt(
+                                `請選擇單元：\n${topicNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}\n\n輸入編號：`
+                              );
+                              
+                              if (selectedTopic) {
+                                const topicIndex = parseInt(selectedTopic) - 1;
+                                if (topicIndex >= 0 && topicIndex < topicNames.length) {
+                                  const updatedPaper = [...generatedPaper];
+                                  updatedPaper[idx].selectedTopic = topicNames[topicIndex];
+                                  setGeneratedPaper(updatedPaper);
+                                  alert(`已為第 ${question.index || idx + 1} 題選擇單元：${topicNames[topicIndex]}`);
+                                }
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition flex items-center gap-1"
+                          >
+                            📚 選擇單元
+                          </button>
+                          {/* 重新生成按鈕 */}
+                          <button
+                            onClick={async () => {
+                              const updatedPaper = [...generatedPaper];
+                              updatedPaper[idx].isRegenerating = true;
+                              setGeneratedPaper(updatedPaper);
+                              
+                              try {
+                                const { AI_SERVICE } = await import('../lib/ai-service');
+                                const newQuestion = await AI_SERVICE.generateQuestion(
+                                  paperCreation.grade,
+                                  'normal',
+                                  paperCreation.selectedTopicIds.length > 0 ? paperCreation.selectedTopicIds : [],
+                                  topics,
+                                  'math',
+                                  user
+                                );
+                                
+                                if (newQuestion) {
+                                  updatedPaper[idx] = {
+                                    ...newQuestion,
+                                    index: question.index || idx + 1,
+                                    isSelected: true,
+                                    isRegenerating: false,
+                                    selectedTopic: question.selectedTopic || null
+                                  };
+                                  setGeneratedPaper(updatedPaper);
+                                }
+                              } catch (e) {
+                                console.error("Regenerate Question Error:", e);
+                                alert('重新生成失敗：' + (e.message || '未知錯誤'));
+                                updatedPaper[idx].isRegenerating = false;
+                                setGeneratedPaper(updatedPaper);
+                              }
+                            }}
+                            disabled={question.isRegenerating}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white text-xs rounded transition flex items-center gap-1"
+                          >
+                            {question.isRegenerating ? (
+                              <>
+                                <RefreshCw size={12} className="animate-spin" />
+                                生成中...
+                              </>
+                            ) : (
+                              <>
+                                🔄 重新生成
+                              </>
+                            )}
+                          </button>
+                          {/* 保留/移除按鈕 */}
+                          <button
+                            onClick={() => {
+                              const updatedPaper = [...generatedPaper];
+                              updatedPaper[idx].isSelected = !updatedPaper[idx].isSelected;
+                              setGeneratedPaper(updatedPaper);
+                            }}
+                            className={`px-3 py-1.5 text-xs rounded transition ${
+                              question.isSelected
+                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                : 'bg-green-600 hover:bg-green-700 text-white'
+                            }`}
+                          >
+                            {question.isSelected ? '❌ 移除' : '✅ 保留'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="bg-white rounded p-3 mb-2">
+                      {question.selectedTopic && (
+                        <div className="mb-2">
+                          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                            單元：{question.selectedTopic}
+                          </span>
+                        </div>
+                      )}
+                      <p className="text-sm text-slate-700 mb-2">{question.question}</p>
+                      {question.options && Array.isArray(question.options) && (
+                        <div className="space-y-1">
+                          {question.options.map((opt, optIdx) => (
+                            <div
+                              key={optIdx}
+                              className={`text-xs p-2 rounded ${
+                                opt === question.answer ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'
+                              }`}
+                            >
+                              {String.fromCharCode(65 + optIdx)}. {opt}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 text-xs text-slate-600">
+                        <strong>答案：</strong>{question.answer}
+                        {question.explanation && (
+                          <>
+                            <br />
+                            <strong>解釋：</strong>{question.explanation}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 底部操作按鈕 */}
+            {!selectedPaperForReuse && (
+              <div className="mt-6 pt-4 border-t border-slate-200 flex gap-3">
+                <button
+                  onClick={() => {
+                    if (!confirm('確定要清空當前試卷嗎？')) return;
+                    setGeneratedPaper([]);
+                    setActiveTab('paper-creation');
+                  }}
+                  className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-lg transition"
+                >
+                  清空試卷
+                </button>
+                <button
+                  onClick={async () => {
+                    const selectedQuestions = generatedPaper.filter(q => q.isSelected);
+                    if (selectedQuestions.length === 0) {
+                      alert('請至少保留一道題目');
+                      return;
+                    }
+                    
+                    // 保存試卷
+                    try {
+                      const paperId = await DB_SERVICE.saveSentPaper(
+                        {
+                          title: `試卷 ${new Date().toLocaleDateString('zh-HK')}`,
+                          description: '',
+                          questions: selectedQuestions,
+                          grade: paperCreation.grade,
+                          topicIds: paperCreation.selectedTopicIds,
+                          createdBy: user.email
+                        },
+                        user.uid || user.id,
+                        user.institutionName || ''
+                      );
+                      
+                      if (paperId) {
+                        alert(`✅ 試卷已保存並派發！共 ${selectedQuestions.length} 道題目。`);
+                        setActiveTab('paper-creation');
+                        setGeneratedPaper([]);
+                        // 重新載入已發送試卷列表
+                        const papers = await DB_SERVICE.getSentPapers(
+                          user.uid || user.id,
+                          user.institutionName || null
+                        );
+                        setSentPapers(papers);
+                      } else {
+                        alert('❌ 保存失敗，請檢查連線');
+                      }
+                    } catch (e) {
+                      console.error("Save Paper Error:", e);
+                      alert('保存失敗：' + (e.message || '未知錯誤'));
+                    }
+                  }}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition"
+                >
+                  保存並派發
+                </button>
+              </div>
+            )}
           </div>
         </>
       ) : null}
