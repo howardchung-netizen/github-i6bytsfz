@@ -61,7 +61,7 @@ export async function GET() {
           message: '❌ API 配額已達上限',
           suggestion: retryAfter 
             ? `請等待 ${retryAfter} 後再試`
-            : '免費層每日配額為 250 個請求，請明天再試或升級到付費方案',
+            : '免費層每日配額為 20 個請求，請等待重置（香港時間下午 4:00）或升級到付費方案',
           timestamp: new Date().toISOString()
         }, { status: 200 });
       }
