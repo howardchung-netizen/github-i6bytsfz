@@ -117,7 +117,19 @@ export default function App() {
   const handleLogout = () => { 
       signOut(auth).then(() => {
           setIsLoggedIn(false); 
-          setUser({ name: '', level: '', xp: 0, avatar: null }); 
+          setUser({ 
+            id: '', 
+            name: '', 
+            email: '', 
+            level: '', 
+            xp: 0, 
+            avatar: '', 
+            role: '', 
+            school: '', 
+            gender: '', 
+            age: 0, 
+            isPremium: false 
+          }); 
           setView('register'); 
       });
   };
