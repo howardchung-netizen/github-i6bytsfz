@@ -18,7 +18,7 @@ export default function RegisterView({ setView, setUser }) {
         let age = today.getFullYear() - birthDate.getFullYear(); 
         const m = today.getMonth() - birthDate.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) { age--; } 
-        setFormData({ ...formData, dob: dob, age: age >= 0 ? age : 0 }); 
+        setFormData({ ...formData, dob: dob, age: (age >= 0 ? age : 0).toString() }); 
     };
 
     const { boySeeds, girlSeeds } = useMemo(() => { 
