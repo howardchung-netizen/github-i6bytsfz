@@ -153,12 +153,13 @@ export default function ParentView({ setView, user }) {
   // 準備圖表數據
   const chartData = childStats?.dailyActivity ? Object.entries(childStats.dailyActivity)
     .map(([date, data]: [string, any]) => ({
+      dateString: date, // 保留原始日期字符串用於排序
       date: new Date(date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
       questions: data?.questions || 0,
       correct: data?.correct || 0,
       wrong: data?.wrong || 0
     }))
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime())
     .slice(-14) : [];
 
   const accuracyRate = childStats && childStats.totalQuestions > 0
