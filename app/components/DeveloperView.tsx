@@ -376,6 +376,16 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
             <h1 className="font-bold text-lg">數學科管理 (Math Subject)</h1>
         </div>
         <div className="flex items-center gap-2">
+            {user && user.email === 'admin@test.com' && (
+                <button 
+                    onClick={() => setView('feedback-review')} 
+                    className="text-white/80 hover:text-white text-xs bg-purple-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1"
+                    title="審核教學者回饋"
+                >
+                    <MessageSquare size={14} />
+                    回饋審核
+                </button>
+            )}
             <button onClick={() => setView('chinese-developer')} className="text-white/80 hover:text-white text-xs bg-rose-600 px-3 py-1.5 rounded-lg transition">
                 中文科
             </button>
