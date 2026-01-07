@@ -2039,6 +2039,225 @@ export default function TeacherView({ setView, user, topics }) {
             )}
           </div>
         </>
+      ) : activeTab === 'assignment-seed-selection' ? (
+        <>
+          {/* 作業種子題目選擇頁面（B頁） */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            {/* 標題欄 */}
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setActiveTab('assignments');
+                    setShowCreateAssignment(true);
+                  }}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition flex items-center gap-1"
+                >
+                  <Home size={16} />
+                  返回
+                </button>
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <FileText size={20} className="text-indigo-600"/>
+                  選擇種子題目（可選，留空則使用 AI 自動生成）
+                </h3>
+              </div>
+            </div>
+
+            {/* 作業信息顯示 */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-bold text-slate-700">作業標題：</span>
+                  <span className="text-slate-600 ml-2">{assignmentData.title}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-700">題目數量：</span>
+                  <span className="text-slate-600 ml-2">{assignmentData.questionCount}</span>
+                </div>
+                {assignmentData.topicIds.length > 0 && (
+                  <div className="col-span-2">
+                    <span className="font-bold text-slate-700">選擇單元：</span>
+                    <span className="text-slate-600 ml-2">
+                      {topics.filter(t => assignmentData.topicIds.includes(t.id)).map(t => t.name).join('、')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 種子題目列表 */}
+            <div className="space-y-3">
+              {assignmentSeedQuestions.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">暫無種子題目，將使用 AI 自動生成</p>
+                </div>
+              ) : (
+                assignmentSeedQuestions.map((q, idx) => {
+                  const isSelected = selectedAssignmentSeeds.includes(q.id);
+                  
+                  return (
+                    <div
+                      key={q.id || idx}
+                      className={`p-4 border-2 rounded-lg ${
+                        isSelected ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedAssignmentSeeds([...selectedAssignmentSeeds, q.id]);
+                              } else {
+                                setSelectedAssignmentSeeds(selectedAssignmentSeeds.filter(id => id !== q.id));
+                              }
+                            }}
+                            className="w-4 h-4 mt-1"
+                          />
+                          <span className="font-bold text-slate-700">題目 {idx + 1}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          {/* 選擇單元按鈕 */}
+                          <button
+                            onClick={() => {
+                              const topicNames = topics
+                                .filter(t => t.grade === selectedClass?.grade && t.subject === 'math')
+                                .map(t => t.name);
+                              
+                              const selectedTopic = prompt(
+                                `請選擇單元：\n${topicNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}\n\n輸入編號：`
+                              );
+                              
+                              if (selectedTopic) {
+                                const topicIndex = parseInt(selectedTopic) - 1;
+                                if (topicIndex >= 0 && topicIndex < topicNames.length) {
+                                  const updatedQuestions = [...assignmentSeedQuestions];
+                                  updatedQuestions[idx].selectedTopic = topicNames[topicIndex];
+                                  setAssignmentSeedQuestions(updatedQuestions);
+                                  alert(`已為題目 ${idx + 1} 選擇單元：${topicNames[topicIndex]}`);
+                                }
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition flex items-center gap-1"
+                          >
+                            📚 選擇單元
+                          </button>
+                          {/* 重新生成按鈕 */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                const { AI_SERVICE } = await import('../lib/ai-service');
+                                const newQuestion = await AI_SERVICE.generateQuestion(
+                                  selectedClass?.grade || 'P4',
+                                  'normal',
+                                  assignmentData.topicIds.length > 0 ? assignmentData.topicIds : [],
+                                  topics,
+                                  'math',
+                                  user
+                                );
+                                
+                                if (newQuestion) {
+                                  const updatedQuestions = [...assignmentSeedQuestions];
+                                  updatedQuestions[idx] = {
+                                    ...newQuestion,
+                                    id: q.id || `temp_${idx}`,
+                                    selectedTopic: q.selectedTopic || null
+                                  };
+                                  setAssignmentSeedQuestions(updatedQuestions);
+                                  alert('題目已重新生成！');
+                                }
+                              } catch (e) {
+                                console.error("Regenerate Question Error:", e);
+                                alert('重新生成失敗：' + (e.message || '未知錯誤'));
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition flex items-center gap-1"
+                          >
+                            🔄 重新生成
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-white rounded p-3 mt-2">
+                        {q.selectedTopic && (
+                          <div className="mb-2">
+                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                              單元：{q.selectedTopic}
+                            </span>
+                          </div>
+                        )}
+                        <p className="text-sm text-slate-700 mb-2">{q.question?.substring(0, 150) || '無題目文字'}...</p>
+                        <div className="text-xs text-slate-500">
+                          <span>答案: {q.answer}</span>
+                          {q.topic && <span className="ml-2">• {q.topic}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* 底部操作按鈕 */}
+            <div className="mt-6 pt-4 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => {
+                  setActiveTab('assignments');
+                  setShowCreateAssignment(true);
+                }}
+                className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-lg transition"
+              >
+                返回
+              </button>
+              <button
+                onClick={async () => {
+                  // 保存選擇的種子題目並創建作業
+                  const finalAssignmentData = {
+                    ...assignmentData,
+                    seedQuestionIds: selectedAssignmentSeeds
+                  };
+                  
+                  const assignmentId = await DB_SERVICE.createAssignment(
+                    selectedClass.id,
+                    finalAssignmentData
+                  );
+                  
+                  if (assignmentId) {
+                    // 為班級中的每個學生創建通知
+                    if (selectedClass.students && selectedClass.students.length > 0) {
+                      await DB_SERVICE.createAssignmentNotifications(selectedClass.id, assignmentId, assignmentData.title);
+                    }
+                    
+                    alert(`作業創建成功！已發送通知給 ${selectedClass.students?.length || 0} 名學生`);
+                    
+                    // 重置並返回
+                    setAssignmentData({
+                      title: '',
+                      description: '',
+                      topicIds: [],
+                      questionCount: 10,
+                      dueDate: '',
+                      seedQuestionIds: []
+                    });
+                    setSelectedAssignmentSeeds([]);
+                    setShowCreateAssignment(false);
+                    setActiveTab('assignments');
+                  } else {
+                    alert('創建作業失敗，請檢查連線');
+                  }
+                }}
+                disabled={!assignmentData.title.trim()}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Send size={18} />
+                發送作業 {selectedAssignmentSeeds.length > 0 && `(${selectedAssignmentSeeds.length} 道種子題目)`}
+              </button>
+            </div>
+          </div>
+        </>
       ) : null}
     </div>
   );
