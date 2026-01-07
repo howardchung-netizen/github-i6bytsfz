@@ -107,7 +107,7 @@ export default function App() {
     console.log(`處理支付: ${plan} - HKD ${amount}`);
     
     // 模擬支付流程
-    return new Promise((resolve) => {
+    return new Promise<{ success: boolean; transactionId: string }>((resolve) => {
       setTimeout(() => {
         resolve({ success: true, transactionId: `txn_${Date.now()}` });
       }, 1500);
@@ -197,9 +197,21 @@ export default function App() {
       if (currentUser) {
         setLoading(true);
         // 嘗試從 DB 抓取用戶資料
-        const profile = await DB_SERVICE.getUserProfile(currentUser.email);
+        const profile: any = await DB_SERVICE.getUserProfile(currentUser.email);
         if (profile) {
-            setUser({ ...profile, id: currentUser.uid });
+            setUser({ 
+              id: currentUser.uid,
+              name: profile.name || '',
+              email: profile.email || currentUser.email || '',
+              level: profile.level || '',
+              xp: profile.xp || 0,
+              avatar: profile.avatar || '',
+              role: profile.role || '',
+              school: profile.school || '',
+              gender: profile.gender || '',
+              age: profile.age || 0,
+              isPremium: profile.isPremium || false
+            });
             setIsLoggedIn(true);
             setView('dashboard');
         } else {
