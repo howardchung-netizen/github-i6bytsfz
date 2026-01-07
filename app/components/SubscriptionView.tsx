@@ -105,7 +105,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
 
   const simulatePayment = async (plan) => {
     // 模擬支付延遲
-    return new Promise((resolve) => {
+    return new Promise<void>((resolve) => {
       setTimeout(() => {
         console.log(`模擬支付成功: ${plan} - ${plans[plan].price} HKD`);
         resolve();
