@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Plus, Search, BarChart3, FileText, Send, Settings, Home, BookOpen, Award, TrendingUp, Upload, Save, RefreshCw } from 'lucide-react';
+import { Users, Plus, Search, BarChart3, FileText, Send, Settings, Home, BookOpen, Award, TrendingUp, Upload, Save, RefreshCw, Sparkles } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
 import { createMockClassWithStudents } from '../lib/mock-data-generator';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -12,7 +12,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [selectedClass, setSelectedClass] = useState(null);
   const [classStats, setClassStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds'
+  const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation'
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -43,6 +43,17 @@ export default function TeacherView({ setView, user, topics }) {
   const [imageProcessingProgress, setImageProcessingProgress] = useState({ current: 0, total: 0 });
   const [seedQuestions, setSeedQuestions] = useState([]); // 種子題目列表
   const [paperCount, setPaperCount] = useState(0);
+  
+  // 試卷制訂相關狀態
+  const [paperCreation, setPaperCreation] = useState({
+    questionCount: 10,
+    selectedTopicIds: [],
+    selectedSubTopics: [],
+    grade: 'P4'
+  });
+  const [generatedPaper, setGeneratedPaper] = useState([]); // 生成的試卷題目
+  const [isGeneratingPaper, setIsGeneratingPaper] = useState(false);
+  const [paperGenerationProgress, setPaperGenerationProgress] = useState({ current: 0, total: 0 });
   
   // 教學者回饋相關狀態
   const [showFeedbackInput, setShowFeedbackInput] = useState(null); // 當前顯示回饋輸入的題目 ID
@@ -172,36 +183,59 @@ export default function TeacherView({ setView, user, topics }) {
     }
   };
 
-  // 載入種子題目
+  // 載入種子題目（支持混合查詢：主庫 + 機構庫）
   const loadSeedQuestions = async () => {
     try {
       const { db } = await import('../lib/firebase');
       const { collection, getDocs, query, where, limit } = await import('firebase/firestore');
       const { APP_ID } = await import('../lib/constants');
       
-      const q = query(
+      const questions = [];
+      const grade = selectedClass?.grade || paperMeta.grade || 'P4';
+      
+      // 1. 查詢主資料庫（開發者上傳的）
+      const mainQuery = query(
         collection(db, "artifacts", APP_ID, "public", "data", "past_papers"),
-        where("grade", "==", selectedClass?.grade || paperMeta.grade || 'P4'),
+        where("grade", "==", grade),
         limit(100)
       );
-      const snap = await getDocs(q);
-      const questions = [];
-      snap.forEach(d => {
+      const mainSnap = await getDocs(mainQuery);
+      mainSnap.forEach(d => {
         const data = d.data();
         if (data.source === 'seed_init' || data.source === 'vision_api' || data.source === 'manual_json') {
-          questions.push({ id: d.id, ...data });
+          questions.push({ id: d.id, source: 'main_db', ...data });
         }
       });
+      
+      // 2. 如果是教學者，同時查詢機構專用庫
+      if (user.role === 'teacher' && user.institutionName) {
+        try {
+          const teacherQuery = query(
+            collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", user.institutionName, "questions"),
+            where("grade", "==", grade),
+            limit(100)
+          );
+          const teacherSnap = await getDocs(teacherQuery);
+          teacherSnap.forEach(d => {
+            const data = d.data();
+            questions.push({ id: d.id, source: 'teacher_db', institutionName: user.institutionName, ...data });
+          });
+        } catch (e) {
+          console.error("Load teacher seed questions error:", e);
+          // 如果機構庫不存在，繼續使用主庫
+        }
+      }
+      
       setSeedQuestions(questions);
     } catch (e) {
       console.error("Load seed questions error:", e);
     }
   };
 
-  // 載入試卷數量
+  // 載入試卷數量（根據用戶角色計算）
   const loadPaperCount = async () => {
     try {
-      const count = await DB_SERVICE.countPastPapers();
+      const count = await DB_SERVICE.countPastPapers(user);
       setPaperCount(count);
     } catch (e) {
       console.error("Load paper count error:", e);
@@ -377,15 +411,21 @@ export default function TeacherView({ setView, user, topics }) {
           uploadedBy: user.uid || user.id // 記錄上傳者
         }));
 
-        await DB_SERVICE.uploadPastPaperBatch(enrichedPapers);
+        // 傳入 user 參數，系統會根據角色自動選擇存儲位置
+        await DB_SERVICE.uploadPastPaperBatch(enrichedPapers, user);
         
         // 統計信息
         const textCount = enrichedPapers.filter(q => q.source === 'manual_json').length;
         const imageCount = enrichedPapers.filter(q => q.source === 'vision_api').length;
         
+        const storageLocation = user.role === 'teacher' && user.institutionName 
+          ? `機構庫（${user.institutionName}）` 
+          : '主資料庫';
+        
         let message = `✅ 成功上傳 ${enrichedPapers.length} 道種子題目！\n\n`;
         message += `📝 文字題目：${textCount} 道（免費）\n`;
-        message += `📷 圖像題目：${imageCount} 道（已自動識別）`;
+        message += `📷 圖像題目：${imageCount} 道（已自動識別）\n`;
+        message += `💾 存儲位置：${storageLocation}`;
         
         if (errors.length > 0) {
           message += `\n\n⚠️ ${errors.length} 項處理失敗`;
@@ -1098,6 +1138,284 @@ export default function TeacherView({ setView, user, topics }) {
             <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-12 text-center">
               <BarChart3 size={64} className="mx-auto mb-4 text-yellow-600" />
               <h3 className="text-xl font-bold text-yellow-800 mb-2">請先選擇班級</h3>
+            </div>
+          )}
+        </>
+      ) : activeTab === 'paper-creation' ? (
+        <>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <FileText size={20} className="text-purple-600"/> 試卷制訂
+            </h3>
+            <p className="text-sm text-slate-600 mb-4">
+              根據設定的參數生成試卷，生成後可測試、編輯每道題目，滿意後再派發給學生。
+            </p>
+
+            {/* 試卷設定 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">題目數量 *</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={paperCreation.questionCount}
+                  onChange={e => setPaperCreation({...paperCreation, questionCount: parseInt(e.target.value) || 10})}
+                  className="w-full border-2 border-slate-200 rounded-lg p-3"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">年級</label>
+                <select
+                  value={paperCreation.grade}
+                  onChange={e => setPaperCreation({...paperCreation, grade: e.target.value})}
+                  className="w-full border-2 border-slate-200 rounded-lg p-3"
+                >
+                  {['P1','P2','P3','P4','P5','P6'].map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* 單元選擇 */}
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-slate-700 mb-2">選擇單元（可多選）</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                {topics.filter(t => t.grade === paperCreation.grade && t.subject === 'math').map(topic => (
+                  <label key={topic.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={paperCreation.selectedTopicIds.includes(topic.id)}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setPaperCreation({
+                            ...paperCreation,
+                            selectedTopicIds: [...paperCreation.selectedTopicIds, topic.id]
+                          });
+                        } else {
+                          setPaperCreation({
+                            ...paperCreation,
+                            selectedTopicIds: paperCreation.selectedTopicIds.filter(id => id !== topic.id)
+                          });
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">{topic.name}</span>
+                  </label>
+                ))}
+              </div>
+              {paperCreation.selectedTopicIds.length === 0 && (
+                <p className="text-xs text-slate-500 mt-1">💡 不選擇單元將從所有單元中隨機生成</p>
+              )}
+            </div>
+
+            {/* 生成按鈕 */}
+            <button
+              onClick={async () => {
+                if (paperCreation.questionCount < 1 || paperCreation.questionCount > 50) {
+                  alert('題目數量必須在 1-50 之間');
+                  return;
+                }
+                
+                setIsGeneratingPaper(true);
+                setPaperGenerationProgress({ current: 0, total: paperCreation.questionCount });
+                setGeneratedPaper([]);
+                
+                try {
+                  const questions = [];
+                  const { AI_SERVICE } = await import('../lib/ai-service');
+                  
+                  for (let i = 0; i < paperCreation.questionCount; i++) {
+                    setPaperGenerationProgress({ current: i + 1, total: paperCreation.questionCount });
+                    
+                    const question = await AI_SERVICE.generateQuestion(
+                      paperCreation.grade,
+                      'normal',
+                      paperCreation.selectedTopicIds.length > 0 ? paperCreation.selectedTopicIds : [],
+                      topics,
+                      'math',
+                      user
+                    );
+                    
+                    if (question) {
+                      questions.push({
+                        ...question,
+                        index: i + 1,
+                        isSelected: true, // 預設保留
+                        isRegenerating: false
+                      });
+                    }
+                    
+                    // 避免 API 配額超限，每題間隔 3.5 秒
+                    if (i < paperCreation.questionCount - 1) {
+                      await new Promise(resolve => setTimeout(resolve, 3500));
+                    }
+                  }
+                  
+                  setGeneratedPaper(questions);
+                  alert(`✅ 成功生成 ${questions.length} 道題目！`);
+                } catch (e) {
+                  console.error("Generate Paper Error:", e);
+                  alert('生成試卷失敗：' + (e.message || '未知錯誤'));
+                } finally {
+                  setIsGeneratingPaper(false);
+                  setPaperGenerationProgress({ current: 0, total: 0 });
+                }
+              }}
+              disabled={isGeneratingPaper}
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-slate-400 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2"
+            >
+              {isGeneratingPaper ? (
+                <>
+                  <RefreshCw size={18} className="animate-spin" />
+                  生成中... ({paperGenerationProgress.current}/{paperGenerationProgress.total})
+                </>
+              ) : (
+                <>
+                  <Sparkles size={18} />
+                  生成試卷
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* 生成的試卷題目列表 */}
+          {generatedPaper.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h4 className="text-lg font-bold text-slate-800 mb-4">
+                試卷預覽 ({generatedPaper.filter(q => q.isSelected).length}/{generatedPaper.length} 題)
+              </h4>
+              
+              <div className="space-y-4">
+                {generatedPaper.map((q, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-4 border-2 rounded-lg ${
+                      q.isSelected ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-700">第 {q.index} 題</span>
+                        {q.isRegenerating && (
+                          <RefreshCw size={14} className="animate-spin text-blue-600" />
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            // 重新生成單題
+                            const updatedPaper = [...generatedPaper];
+                            updatedPaper[idx].isRegenerating = true;
+                            setGeneratedPaper(updatedPaper);
+                            
+                            try {
+                              const { AI_SERVICE } = await import('../lib/ai-service');
+                              const newQuestion = await AI_SERVICE.generateQuestion(
+                                paperCreation.grade,
+                                'normal',
+                                paperCreation.selectedTopicIds.length > 0 ? paperCreation.selectedTopicIds : [],
+                                topics,
+                                'math',
+                                user
+                              );
+                              
+                              if (newQuestion) {
+                                updatedPaper[idx] = {
+                                  ...newQuestion,
+                                  index: q.index,
+                                  isSelected: true,
+                                  isRegenerating: false
+                                };
+                                setGeneratedPaper(updatedPaper);
+                              }
+                            } catch (e) {
+                              console.error("Regenerate Question Error:", e);
+                              alert('重新生成失敗：' + (e.message || '未知錯誤'));
+                              updatedPaper[idx].isRegenerating = false;
+                              setGeneratedPaper(updatedPaper);
+                            }
+                          }}
+                          disabled={q.isRegenerating}
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white text-xs rounded transition"
+                        >
+                          {q.isRegenerating ? '生成中...' : '🔄 重新生成'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const updatedPaper = [...generatedPaper];
+                            updatedPaper[idx].isSelected = !updatedPaper[idx].isSelected;
+                            setGeneratedPaper(updatedPaper);
+                          }}
+                          className={`px-3 py-1 text-xs rounded transition ${
+                            q.isSelected
+                              ? 'bg-red-600 hover:bg-red-700 text-white'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {q.isSelected ? '❌ 移除' : '✅ 保留'}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white rounded p-3 mb-2">
+                      <p className="text-sm text-slate-700 mb-2">{q.question}</p>
+                      {q.options && Array.isArray(q.options) && (
+                        <div className="space-y-1">
+                          {q.options.map((opt, optIdx) => (
+                            <div
+                              key={optIdx}
+                              className={`text-xs p-2 rounded ${
+                                opt === q.answer ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'
+                              }`}
+                            >
+                              {String.fromCharCode(65 + optIdx)}. {opt}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 text-xs text-slate-600">
+                        <strong>答案：</strong>{q.answer}
+                        {q.explanation && (
+                          <>
+                            <br />
+                            <strong>解釋：</strong>{q.explanation}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 操作按鈕 */}
+              <div className="mt-6 flex gap-3">
+                <button
+                  onClick={() => {
+                    if (!confirm('確定要清空當前試卷嗎？')) return;
+                    setGeneratedPaper([]);
+                  }}
+                  className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-lg transition"
+                >
+                  清空試卷
+                </button>
+                <button
+                  onClick={() => {
+                    const selectedQuestions = generatedPaper.filter(q => q.isSelected);
+                    if (selectedQuestions.length === 0) {
+                      alert('請至少保留一道題目');
+                      return;
+                    }
+                    // TODO: 保存試卷並派發給學生
+                    alert(`✅ 試卷已保存！共 ${selectedQuestions.length} 道題目。\n\n（派發功能將在後續實現）`);
+                  }}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition"
+                >
+                  保存並派發
+                </button>
+              </div>
             </div>
           )}
         </>

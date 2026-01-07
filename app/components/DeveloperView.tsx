@@ -6,6 +6,10 @@ import { DB_SERVICE } from '../lib/db-service';
 // 👇 注意這裡 props 接收了 setTopics
 export default function DeveloperView({ topics, setTopics, setView, isFirebaseReady, user }) {
   const [activeTab, setActiveTab] = useState('syllabus');
+  
+  // 教學者試題管理狀態
+  const [teacherQuestions, setTeacherQuestions] = useState([]);
+  const [isLoadingTeacherQuestions, setIsLoadingTeacherQuestions] = useState(false);
   const [paperJson, setPaperJson] = useState('');
   const [paperMeta, setPaperMeta] = useState({ year: '2024', grade: 'P4', term: '上學期', topicId: '' });
   const [isUploading, setIsUploading] = useState(false);
@@ -406,6 +410,26 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
             <button onClick={() => setActiveTab('past_papers')} className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'past_papers' ? 'text-green-600 border-b-2 border-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 2. 試卷庫 & 種子管理
             </button>
+            {user && user.email === 'admin@test.com' && (
+                <button 
+                    onClick={async () => {
+                        setActiveTab('teacher_questions');
+                        setIsLoadingTeacherQuestions(true);
+                        try {
+                            const questions = await DB_SERVICE.getAllTeacherSeedQuestions();
+                            setTeacherQuestions(questions);
+                        } catch (e) {
+                            console.error("Load Teacher Questions Error:", e);
+                            alert('載入失敗：' + (e.message || '未知錯誤'));
+                        } finally {
+                            setIsLoadingTeacherQuestions(false);
+                        }
+                    }} 
+                    className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'teacher_questions' ? 'text-purple-600 border-b-2 border-purple-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    3. 教學者試題管理
+                </button>
+            )}
         </div>
 
         {activeTab === 'syllabus' && (
@@ -687,6 +711,100 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                          </div>
                      )}
                  </div>
+            </div>
+        )}
+
+        {/* 教學者試題管理標籤頁 */}
+        {activeTab === 'teacher_questions' && user && user.email === 'admin@test.com' && (
+            <div className="space-y-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700">
+                        <Database size={18}/> 教學者上傳的試題管理
+                    </h3>
+                    <p className="text-sm text-slate-600 mb-4">
+                        查看所有教學者上傳的試題，可以將優質試題加入主資料庫供所有用戶使用。
+                    </p>
+
+                    {isLoadingTeacherQuestions ? (
+                        <div className="text-center py-8">
+                            <RefreshCw size={32} className="animate-spin text-indigo-600 mx-auto mb-4" />
+                            <p className="text-slate-600">載入中...</p>
+                        </div>
+                    ) : teacherQuestions.length === 0 ? (
+                        <div className="text-center py-8 text-slate-400">
+                            <Database size={48} className="mx-auto mb-4 opacity-50" />
+                            <p className="text-sm">暫無教學者上傳的試題</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                <p className="text-sm text-blue-700">
+                                    📋 共有 <strong>{teacherQuestions.length}</strong> 道教學者試題
+                                </p>
+                            </div>
+
+                            <div className="space-y-4 max-h-96 overflow-y-auto">
+                                {teacherQuestions.map((q, idx) => (
+                                    <div
+                                        key={q.id || idx}
+                                        className="p-4 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100"
+                                    >
+                                        <div className="flex items-start justify-between mb-2">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded">
+                                                        {q.institutionName || '未知機構'}
+                                                    </span>
+                                                    {q.uploadedBy && (
+                                                        <span className="text-xs text-slate-500">
+                                                            上傳者：{q.uploadedBy}
+                                                        </span>
+                                                    )}
+                                                    {q.uploadedAt && (
+                                                        <span className="text-xs text-slate-500">
+                                                            {new Date(q.uploadedAt).toLocaleDateString('zh-HK')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm font-bold text-slate-800 mb-1">
+                                                    {q.question?.substring(0, 100) || '無題目文字'}...
+                                                </p>
+                                                <div className="flex gap-2 text-xs text-slate-500">
+                                                    <span>答案: {q.answer}</span>
+                                                    {q.topic && <span>• {q.topic}</span>}
+                                                    {q.grade && <span>• {q.grade}</span>}
+                                                    {q.shape && <span>• 圖形: {q.shape}</span>}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!confirm('確定要將此試題加入主資料庫嗎？')) return;
+                                                    
+                                                    try {
+                                                        const success = await DB_SERVICE.addTeacherQuestionToMainDB(q);
+                                                        if (success) {
+                                                            alert('✅ 試題已成功加入主資料庫！');
+                                                            // 從列表中移除（可選）
+                                                            setTeacherQuestions(teacherQuestions.filter(item => item.id !== q.id));
+                                                        } else {
+                                                            alert('❌ 加入失敗，請檢查連線');
+                                                        }
+                                                    } catch (e) {
+                                                        console.error("Add to Main DB Error:", e);
+                                                        alert('加入失敗：' + (e.message || '未知錯誤'));
+                                                    }
+                                                }}
+                                                className="ml-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
+                                            >
+                                                ➕ 加入主庫
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
         )}
       </div>

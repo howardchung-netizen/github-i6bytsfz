@@ -24,7 +24,7 @@ const LOCAL_BRAIN = {
 };
 
 export const AI_SERVICE = {
-  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null) => {
+  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null) => {
     // 1. 如果 selectedTopicIds 為空，使用 subjectHint 或自動偵測
     let targetSubject = subjectHint;
     if (!targetSubject && selectedTopicIds.length === 0) {
@@ -50,8 +50,8 @@ export const AI_SERVICE = {
         }
     }
     
-    // 2. 先嘗試找種子題目 (RAG)
-    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, finalTopicIds, allTopicsList);
+    // 2. 先嘗試找種子題目 (RAG) - 支持混合查詢（主庫 + 教學者機構庫）
+    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, finalTopicIds, allTopicsList, user);
     // Fallback seed logic if none found in RAG
     const activeSeed = seedQuestion || {
         question: targetSubject === 'math' ? "基礎數學運算" : targetSubject === 'chi' ? "基礎中文練習" : "Basic English Practice",

@@ -5,7 +5,7 @@ import { DB_SERVICE } from '../lib/db-service';
 
 export default function RegisterView({ setView, setUser }) {
     const [mode, setMode] = useState('login'); // login or register
-    const [formData, setFormData] = useState({ name: '', gender: 'boy', school: '', age: '', grade: 'P4', email: '', password: '', dob: '' });
+    const [formData, setFormData] = useState({ name: '', gender: 'boy', school: '', age: '', grade: 'P4', email: '', password: '', dob: '', role: 'student', institutionName: '' });
     const [selectedAvatar, setSelectedAvatar] = useState(null);
     const [avatarVersion, setAvatarVersion] = useState(0); 
     const [isProcessing, setIsProcessing] = useState(false);
@@ -39,12 +39,20 @@ export default function RegisterView({ setView, setUser }) {
         const emailExists = await DB_SERVICE.checkEmailExists(formData.email); 
         if (emailExists) { setErrorMessage("❌ 此電郵已被註冊！"); setIsProcessing(false); return; } 
         
+        // 如果是教學者，必須填寫教育機構名稱
+        if (formData.role === 'teacher' && !formData.institutionName.trim()) {
+            setErrorMessage("⚠️ 教學者帳號必須填寫教育機構名稱"); 
+            setIsProcessing(false); 
+            return;
+        }
+
         const { password, ...profileData } = { 
             ...formData, 
             avatar: selectedAvatar, 
             xp: 0, 
             level: formData.grade,
-            role: 'student', // 預設為學生角色
+            role: formData.role || 'student',
+            institutionName: formData.role === 'teacher' ? formData.institutionName.trim() : '', // 只有教學者需要
             isPremium: false // 預設為免費用戶
         }; 
         const userId = await DB_SERVICE.registerUser(profileData, formData.password); 
@@ -73,7 +81,7 @@ export default function RegisterView({ setView, setUser }) {
                     <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
                         {mode === 'register' ? <UserCircle size={40} /> : <LogIn size={40} />}
                     </div>
-                    <h2 className="text-3xl font-black text-slate-800">{mode === 'register' ? "建立學生帳戶" : "歡迎回來"}</h2>
+                    <h2 className="text-3xl font-black text-slate-800">{mode === 'register' ? "建立帳戶" : "歡迎回來"}</h2>
                 </div>
 
                 {mode === 'login' && (
@@ -90,6 +98,37 @@ export default function RegisterView({ setView, setUser }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10 animate-in fade-in">
                         <div className="space-y-4">
                             <h3 className="font-bold text-lg text-slate-700 flex items-center gap-2"><FileText size={20}/> 基本資料</h3>
+                            
+                            {/* 角色選擇 */}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-600 mb-1">帳號類型 *</label>
+                                <select 
+                                    value={formData.role} 
+                                    onChange={e => setFormData({...formData, role: e.target.value, institutionName: e.target.value === 'teacher' ? formData.institutionName : ''})} 
+                                    className="w-full border-2 border-slate-200 rounded-xl p-3 bg-white"
+                                >
+                                    <option value="student">學生</option>
+                                    <option value="teacher">教學者</option>
+                                </select>
+                            </div>
+
+                            {/* 教育機構名稱（僅教學者顯示） */}
+                            {formData.role === 'teacher' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-600 mb-1">
+                                        教育機構名稱 * <span className="text-red-500 text-xs">（相同機構的教學者可共用種子題目庫）</span>
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.institutionName} 
+                                        onChange={e => setFormData({...formData, institutionName: e.target.value})} 
+                                        placeholder="例如：香港小學、ABC補習社"
+                                        className="w-full border-2 border-slate-200 rounded-xl p-3" 
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">💡 相同機構名稱的教學者將共用種子題目庫</p>
+                                </div>
+                            )}
+
                             <div><label className="block text-sm font-bold text-slate-600 mb-1">姓名</label><input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-3" /></div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="block text-sm font-bold text-slate-600 mb-1">性別</label><select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-3 bg-white"><option value="boy">男生</option><option value="girl">女生</option></select></div>

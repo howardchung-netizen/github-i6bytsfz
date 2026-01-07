@@ -169,19 +169,113 @@ export const DB_SERVICE = {
         try { await deleteDoc(doc(db, "artifacts", APP_ID, "users", uid, "mistakes", id)); } 
         catch (e) { console.error("Delete Mistake Error:", e); } 
     },
-    uploadPastPaperBatch: async (papers) => { 
+    uploadPastPaperBatch: async (papers, user = null) => { 
         try {
             const batch = writeBatch(db);
-            const collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "past_papers"); 
-            papers.forEach(paper => { const docRef = doc(collectionRef); batch.set(docRef, { ...paper, createdAt: new Date().toISOString() }); });
-            await batch.commit(); return true; 
-        } catch (e) { console.error("Batch Upload Error:", e); return false; } 
+            
+            // 判斷存儲位置：教學者存到機構專用庫，開發者存到主庫
+            let collectionRef;
+            if (user && user.role === 'teacher' && user.institutionName) {
+                // 教學者：存到機構專用庫
+                collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", user.institutionName, "questions");
+            } else {
+                // 開發者/主庫：存到主庫
+                collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "past_papers");
+            }
+            
+            papers.forEach(paper => { 
+                const docRef = doc(collectionRef); 
+                batch.set(docRef, { 
+                    ...paper, 
+                    createdAt: new Date().toISOString(),
+                    uploadedBy: user?.email || 'system',
+                    institutionName: user?.institutionName || null
+                }); 
+            });
+            await batch.commit(); 
+            return true; 
+        } catch (e) { console.error("Batch Upload Error:", e); return false; }
     },
-    countPastPapers: async () => { 
+    countPastPapers: async (user = null) => {
         try {
+            // 如果是教學者，計算機構庫的數量
+            if (user && user.role === 'teacher' && user.institutionName) {
+                const snap = await getDocs(
+                    collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", user.institutionName, "questions")
+                );
+                return snap.size;
+            }
+            // 開發者/主庫
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "past_papers"));
             return snap.size; 
         } catch (e) { console.error("Count Error:", e); return 0; }
+    },
+    
+    // ========== 教學者種子題目庫管理 ==========
+    
+    // 獲取教學者機構的種子題目庫
+    getTeacherSeedQuestions: async (institutionName) => {
+        try {
+            const snap = await getDocs(
+                collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", institutionName, "questions")
+            );
+            const questions = [];
+            snap.forEach(d => {
+                questions.push({ id: d.id, ...d.data() });
+            });
+            return questions;
+        } catch (e) {
+            console.error("Get Teacher Seed Questions Error:", e);
+            return [];
+        }
+    },
+    
+    // 獲取所有教學者上傳的試題（開發者用）
+    getAllTeacherSeedQuestions: async () => {
+        try {
+            const allQuestions = [];
+            // 獲取所有機構
+            const institutionsSnap = await getDocs(
+                collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions")
+            );
+            
+            for (const institutionDoc of institutionsSnap.docs) {
+                const institutionName = institutionDoc.id;
+                const questionsSnap = await getDocs(
+                    collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", institutionName, "questions")
+                );
+                questionsSnap.forEach(qDoc => {
+                    allQuestions.push({
+                        id: qDoc.id,
+                        institutionName: institutionName,
+                        ...qDoc.data()
+                    });
+                });
+            }
+            return allQuestions;
+        } catch (e) {
+            console.error("Get All Teacher Seed Questions Error:", e);
+            return [];
+        }
+    },
+    
+    // 將教學者試題加入主資料庫（開發者用）
+    addTeacherQuestionToMainDB: async (questionData) => {
+        try {
+            await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "past_papers"),
+                {
+                    ...questionData,
+                    source: 'teacher_imported',
+                    importedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString()
+                }
+            );
+            return true;
+        } catch (e) {
+            console.error("Add Teacher Question to Main DB Error:", e);
+            return false;
+        }
     },
     seedInitialData: async () => {
         try {

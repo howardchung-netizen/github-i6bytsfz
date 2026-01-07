@@ -360,7 +360,7 @@ export default function App() {
           
           setLastRequestTime(Date.now());
           // 如果 selectedTopicIds 為空，傳入 subject 讓 AI 自動偵測該科目的題目
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject);
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject, user);
           
           // 檢查是否為錯誤回退（配額超限）
           if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -436,7 +436,7 @@ export default function App() {
       try {
           // 在發送請求前更新時間戳
           setLastRequestTime(Date.now());
-          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics);
+          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics, null, user);
           if (q) {
               // 檢查是否為錯誤回退（配額超限）
               if (q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -509,7 +509,7 @@ export default function App() {
           // 在發送請求前更新時間戳
           setLastRequestTime(Date.now());
           // 傳入 subject 參數以支持自動偵測
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject);
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject, user);
           
           // 檢查是否為錯誤回退（配額超限）
           if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
