@@ -2102,43 +2102,58 @@ export default function TeacherView({ setView, user, topics }) {
                       className={`p-4 border-2 rounded-lg ${
                         isSelected ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white'
                       }`}
+                      onClick={() => {
+                        // 點擊題目區域切換選擇狀態
+                        if (isSelected) {
+                          setSelectedAssignmentSeeds(selectedAssignmentSeeds.filter(id => id !== q.id));
+                        } else {
+                          setSelectedAssignmentSeeds([...selectedAssignmentSeeds, q.id]);
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedAssignmentSeeds([...selectedAssignmentSeeds, q.id]);
-                              } else {
-                                setSelectedAssignmentSeeds(selectedAssignmentSeeds.filter(id => id !== q.id));
-                              }
-                            }}
-                            className="w-4 h-4 mt-1"
-                          />
                           <span className="font-bold text-slate-700">題目 {idx + 1}</span>
                         </div>
                         <div className="flex gap-2">
                           {/* 選擇單元按鈕 */}
                           <button
                             onClick={() => {
-                              const topicNames = topics
-                                .filter(t => t.grade === selectedClass?.grade && t.subject === 'math')
-                                .map(t => t.name);
-                              
-                              const selectedTopic = prompt(
-                                `請選擇單元：\n${topicNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}\n\n輸入編號：`
-                              );
-                              
-                              if (selectedTopic) {
-                                const topicIndex = parseInt(selectedTopic) - 1;
-                                if (topicIndex >= 0 && topicIndex < topicNames.length) {
-                                  const updatedQuestions = [...assignmentSeedQuestions];
-                                  updatedQuestions[idx].selectedTopic = topicNames[topicIndex];
-                                  setAssignmentSeedQuestions(updatedQuestions);
-                                  alert(`已為題目 ${idx + 1} 選擇單元：${topicNames[topicIndex]}`);
+                              try {
+                                if (!topics || topics.length === 0) {
+                                  alert('單元列表未載入，請稍後再試');
+                                  return;
                                 }
+                                
+                                const grade = selectedClass?.grade || assignmentData.grade || 'P4';
+                                const topicNames = topics
+                                  .filter(t => t.grade === grade && t.subject === 'math')
+                                  .map(t => t.name);
+                                
+                                if (topicNames.length === 0) {
+                                  alert('該年級暫無單元');
+                                  return;
+                                }
+                                
+                                const selectedTopic = prompt(
+                                  `請選擇單元：\n${topicNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}\n\n輸入編號：`
+                                );
+                                
+                                if (selectedTopic) {
+                                  const topicIndex = parseInt(selectedTopic) - 1;
+                                  if (topicIndex >= 0 && topicIndex < topicNames.length) {
+                                    const updatedQuestions = [...assignmentSeedQuestions];
+                                    updatedQuestions[idx].selectedTopic = topicNames[topicIndex];
+                                    setAssignmentSeedQuestions(updatedQuestions);
+                                    alert(`已為題目 ${idx + 1} 選擇單元：${topicNames[topicIndex]}`);
+                                  } else {
+                                    alert('無效的編號');
+                                  }
+                                }
+                              } catch (e) {
+                                console.error("Select Topic Error:", e);
+                                alert('選擇單元時發生錯誤：' + (e.message || '未知錯誤'));
                               }
                             }}
                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition flex items-center gap-1"
