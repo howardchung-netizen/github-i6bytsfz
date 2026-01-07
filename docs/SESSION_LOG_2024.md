@@ -250,5 +250,56 @@ npm run dev
 
 ---
 
-**最後更新**：2024年
+### 8. ✅ 修復派卷功能介面問題
+
+**日期**：2024年12月
+
+**問題**：
+- 派卷功能的首頁顯示錯誤（顯示「作業列表功能開發中」佔位符，而非創建作業表單）
+- 圖3頁面（選擇種子題目頁）的「發送作業」按鈕功能不正確
+- 選擇單元按鈕使用 `prompt()` 函數，在某些環境中不被支持
+
+**解決方案**：
+
+#### 8.1 移除佔位符，顯示正確的首頁
+- 移除 assignments tab 中的「作業列表功能開發中」佔位符
+- 進入 assignments tab 時自動顯示創建作業表單（圖1）
+- 添加 `useEffect` 自動載入已儲存試卷列表
+
+#### 8.2 修改圖3頁面的按鈕功能
+- 將「發送作業」按鈕改為「儲存試卷」
+- 點擊「儲存試卷」後：
+  - 儲存試卷到資料庫（使用 `DB_SERVICE.saveSentPaper`）
+  - 返回派卷功能首頁（圖1）
+  - 自動重新載入已儲存試卷列表
+  - 更新 `assignmentData.seedQuestionIds` 以便在首頁顯示「發送作業」按鈕
+
+#### 8.3 修復選擇單元按鈕
+- 移除 `prompt()` 函數的使用
+- 改用下拉選單 UI 組件
+- 支持點擊題目區域切換選擇狀態
+- 添加單元選擇下拉菜單，顯示該年級的所有數學單元
+
+**相關文件**：
+- `app/components/TeacherView.tsx` - 修復 assignments tab 顯示邏輯、修改儲存試卷功能、修復選擇單元按鈕
+
+**技術細節**：
+- 使用 React state 管理下拉選單顯示狀態（`showTopicSelector`）
+- 使用 `z-50` 確保下拉選單顯示在最上層
+- 儲存試卷後自動更新狀態，確保 UI 同步
+
+**新的工作流程**：
+1. 進入派卷功能 → 自動顯示圖1（創建新作業表單 + 檢閱已儲存試卷）
+2. 填寫表單 → 點擊「下一步：選擇種子題目」→ 進入圖3（B頁）
+3. 在圖3選擇/編輯題目 → 點擊「儲存試卷」→ 返回圖1
+4. 在圖1的「檢閱曾經儲存的試卷」區域 → 選擇已儲存的試卷 → 自動顯示「發送作業」按鈕 → 發送作業
+
+**Git 提交記錄**：
+- `Fix topic selection: replace prompt() with dropdown menu UI`
+- `Fix topic selection in paper preview page: replace prompt() with dropdown menu`
+- `Fix assignments tab: remove placeholder, show creation form by default; Change Send Assignment to Save Paper in seed selection page`
+
+---
+
+**最後更新**：2024年12月
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
