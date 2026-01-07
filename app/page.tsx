@@ -22,6 +22,7 @@ import DailyTaskView from './components/DailyTaskView';
 import TeacherView from './components/TeacherView';
 import { TopicSelectionView, MistakesView, SummaryView, ProfileView } from './components/CommonViews';
 import ParentView from './components/ParentView';
+import FeedbackReviewView from './components/FeedbackReviewView';
 
 // Error Boundary for Runtime Safety
 interface ErrorBoundaryState {
@@ -677,6 +678,7 @@ export default function App() {
              {/* Main Views */}
              {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} user={user} />}
+             {view === 'feedback-review' && <FeedbackReviewView setView={setView} user={user} isFirebaseReady={isFirebaseReady} />}
              {view === 'chinese-developer' && <ChineseDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
              {view === 'english-developer' && <EnglishDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
              {view === 'subscription' && <SubscriptionView user={user} setUser={setUser} setView={setView} />}

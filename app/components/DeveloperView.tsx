@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
-import { Settings, Home, Upload, Save, FileJson, RefreshCw, Sparkles, Database, Trash2, Plus } from 'lucide-react';
+import { Settings, Home, Upload, Save, FileJson, RefreshCw, Sparkles, Database, Trash2, Plus, MessageSquare } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
 
 // 👇 注意這裡 props 接收了 setTopics

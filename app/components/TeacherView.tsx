@@ -43,6 +43,25 @@ export default function TeacherView({ setView, user, topics }) {
   const [imageProcessingProgress, setImageProcessingProgress] = useState({ current: 0, total: 0 });
   const [seedQuestions, setSeedQuestions] = useState([]); // 種子題目列表
   const [paperCount, setPaperCount] = useState(0);
+  
+  // 教學者回饋相關狀態
+  const [showFeedbackInput, setShowFeedbackInput] = useState(null); // 當前顯示回饋輸入的題目 ID
+  const [teacherFeedbackText, setTeacherFeedbackText] = useState('');
+  const [teacherSelectedTypes, setTeacherSelectedTypes] = useState([]);
+  const [teacherCategory, setTeacherCategory] = useState('');
+  const [isSavingTeacherFeedback, setIsSavingTeacherFeedback] = useState(false);
+  
+  // 題型選項（與開發者相同）
+  const questionTypeOptions = [
+    '應用題', '計算題', '幾何題', '選擇題', '文字題', 
+    '圖形題', '邏輯題', '數據題', '混合題'
+  ];
+  
+  // 分類選項
+  const categoryOptions = [
+    '加法', '減法', '乘法', '除法', '分數', '小數', 
+    '百分數', '周界', '面積', '體積', '時間', '金錢', '其他'
+  ];
 
   useEffect(() => {
     if (user.role === 'teacher' || user.role === 'admin') {
@@ -1209,22 +1228,171 @@ export default function TeacherView({ setView, user, topics }) {
                     <p className="text-sm">暫無種子題目</p>
                   </div>
                 ) : (
-                  seedQuestions.map((q, idx) => (
-                    <div key={q.id || idx} className="p-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-xs font-bold text-slate-800 mb-1">
-                            {q.question?.substring(0, 80) || '無題目文字'}...
-                          </p>
-                          <div className="flex gap-2 text-xs text-slate-500">
-                            <span>答案: {q.answer}</span>
-                            {q.topic && <span>• {q.topic}</span>}
-                            {q.shape && <span>• 圖形: {q.shape}</span>}
+                  seedQuestions.map((q, idx) => {
+                    const questionId = q.id || `temp_${idx}`;
+                    const isShowingFeedback = showFeedbackInput === questionId;
+                    
+                    return (
+                      <div key={questionId} className="p-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <p className="text-xs font-bold text-slate-800 mb-1">
+                              {q.question?.substring(0, 80) || '無題目文字'}...
+                            </p>
+                            <div className="flex gap-2 text-xs text-slate-500">
+                              <span>答案: {q.answer}</span>
+                              {q.topic && <span>• {q.topic}</span>}
+                              {q.shape && <span>• 圖形: {q.shape}</span>}
+                            </div>
                           </div>
+                          <button
+                            onClick={() => {
+                              if (isShowingFeedback) {
+                                setShowFeedbackInput(null);
+                                setTeacherFeedbackText('');
+                                setTeacherSelectedTypes([]);
+                                setTeacherCategory('');
+                              } else {
+                                setShowFeedbackInput(questionId);
+                              }
+                            }}
+                            className="ml-2 px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition"
+                          >
+                            {isShowingFeedback ? '取消' : '💬 回饋'}
+                          </button>
                         </div>
+                        
+                        {/* 回饋輸入區域 */}
+                        {isShowingFeedback && (
+                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-xs text-blue-700 mb-2 font-semibold">
+                              💡 您的回饋將提交給開發者審核，審核通過後才會應用於 AI 生成
+                            </p>
+                            
+                            {/* 題型選擇 */}
+                            <div className="mb-2">
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                題型分類（可多選）*：
+                              </label>
+                              <div className="flex flex-wrap gap-1">
+                                {questionTypeOptions.map(type => (
+                                  <button
+                                    key={type}
+                                    type="button"
+                                    onClick={() => {
+                                      if (teacherSelectedTypes.includes(type)) {
+                                        setTeacherSelectedTypes(teacherSelectedTypes.filter(t => t !== type));
+                                      } else {
+                                        setTeacherSelectedTypes([...teacherSelectedTypes, type]);
+                                      }
+                                    }}
+                                    className={`px-2 py-1 rounded text-xs transition ${
+                                      teacherSelectedTypes.includes(type)
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-blue-100'
+                                    }`}
+                                  >
+                                    {type}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            {/* 分類選擇 */}
+                            <div className="mb-2">
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                主分類 *：
+                              </label>
+                              <select
+                                value={teacherCategory}
+                                onChange={(e) => setTeacherCategory(e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs"
+                              >
+                                <option value="">請選擇分類</option>
+                                {categoryOptions.map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                            </div>
+                            
+                            {/* 回饋輸入 */}
+                            <div className="mb-2">
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                回饋內容 *：
+                              </label>
+                              <textarea
+                                value={teacherFeedbackText}
+                                onChange={(e) => setTeacherFeedbackText(e.target.value)}
+                                placeholder="例如：這類題目應該注意單位換算..."
+                                className="w-full h-20 bg-white border border-slate-300 rounded px-2 py-1 text-xs resize-none"
+                              />
+                            </div>
+                            
+                            {/* 提交按鈕 */}
+                            <button
+                              onClick={async () => {
+                                if (!teacherFeedbackText.trim()) {
+                                  alert('請輸入回饋內容');
+                                  return;
+                                }
+                                if (teacherSelectedTypes.length === 0) {
+                                  alert('請至少選擇一個題型');
+                                  return;
+                                }
+                                if (!teacherCategory) {
+                                  alert('請選擇分類');
+                                  return;
+                                }
+                                
+                                setIsSavingTeacherFeedback(true);
+                                try {
+                                  const feedbackData = {
+                                    questionId: questionId,
+                                    questionType: teacherSelectedTypes,
+                                    category: teacherCategory,
+                                    subject: 'math',
+                                    feedback: teacherFeedbackText.trim(),
+                                    createdBy: user.email
+                                  };
+                                  
+                                  const feedbackId = await DB_SERVICE.saveTeacherFeedback(feedbackData);
+                                  
+                                  if (feedbackId) {
+                                    alert('✅ 回饋已提交！開發者審核通過後，AI 將參考此回饋生成題目。');
+                                    setShowFeedbackInput(null);
+                                    setTeacherFeedbackText('');
+                                    setTeacherSelectedTypes([]);
+                                    setTeacherCategory('');
+                                  } else {
+                                    alert('❌ 提交失敗，請檢查連線');
+                                  }
+                                } catch (e) {
+                                  console.error("Save Teacher Feedback Error:", e);
+                                  alert('提交失敗：' + (e.message || '未知錯誤'));
+                                } finally {
+                                  setIsSavingTeacherFeedback(false);
+                                }
+                              }}
+                              disabled={isSavingTeacherFeedback || !teacherFeedbackText.trim() || teacherSelectedTypes.length === 0 || !teacherCategory}
+                              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-bold py-1.5 rounded text-xs transition flex items-center justify-center gap-1"
+                            >
+                              {isSavingTeacherFeedback ? (
+                                <>
+                                  <RefreshCw size={12} className="animate-spin" />
+                                  提交中...
+                                </>
+                              ) : (
+                                <>
+                                  <Send size={12} />
+                                  提交回饋給開發者
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
