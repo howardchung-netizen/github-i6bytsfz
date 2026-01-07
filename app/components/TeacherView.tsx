@@ -96,7 +96,7 @@ export default function TeacherView({ setView, user, topics }) {
   // 載入已發送試卷列表
   useEffect(() => {
     const loadSentPapers = async () => {
-      if (activeTab === 'paper-creation' && (user.role === 'teacher' || user.role === 'admin')) {
+      if ((activeTab === 'paper-creation' || activeTab === 'assignments') && (user.role === 'teacher' || user.role === 'admin')) {
         setIsLoadingSentPapers(true);
         try {
           const papers = await DB_SERVICE.getSentPapers(
@@ -113,6 +113,13 @@ export default function TeacherView({ setView, user, topics }) {
     };
     loadSentPapers();
   }, [activeTab, user]);
+
+  // 當進入 assignments tab 時，自動顯示創建作業表單
+  useEffect(() => {
+    if (activeTab === 'assignments' && selectedClass && !showCreateAssignment) {
+      setShowCreateAssignment(true);
+    }
+  }, [activeTab, selectedClass]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -927,22 +934,6 @@ export default function TeacherView({ setView, user, topics }) {
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold text-slate-800">派卷功能</h3>
-                <button
-                  onClick={async () => {
-                    // 載入種子題目和已儲存試卷
-                    await loadSeedQuestions();
-                    const papers = await DB_SERVICE.getSentPapers(
-                      user.uid || user.id,
-                      user.institutionName || null
-                    );
-                    setSentPapers(papers);
-                    setAssignmentSeedQuestions(seedQuestions);
-                    setActiveTab('assignment-seed-selection');
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2"
-                >
-                  <Send size={18} /> 創建作業
-                </button>
               </div>
 
               {showCreateAssignment && (
@@ -1185,11 +1176,6 @@ export default function TeacherView({ setView, user, topics }) {
                   </div>
                 </div>
               )}
-
-              <div className="text-center py-12 bg-slate-50 rounded-lg">
-                <FileText size={48} className="mx-auto mb-3 text-slate-400" />
-                <p className="text-slate-600 font-bold">作業列表功能開發中</p>
-              </div>
             </div>
           ) : (
             <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-12 text-center">
@@ -2332,46 +2318,60 @@ export default function TeacherView({ setView, user, topics }) {
               </button>
               <button
                 onClick={async () => {
-                  // 保存選擇的種子題目並創建作業
-                  const finalAssignmentData = {
-                    ...assignmentData,
-                    seedQuestionIds: selectedAssignmentSeeds
-                  };
-                  
-                  const assignmentId = await DB_SERVICE.createAssignment(
-                    selectedClass.id,
-                    finalAssignmentData
-                  );
-                  
-                  if (assignmentId) {
-                    // 為班級中的每個學生創建通知
-                    if (selectedClass.students && selectedClass.students.length > 0) {
-                      await DB_SERVICE.createAssignmentNotifications(selectedClass.id, assignmentId, assignmentData.title);
+                  // 儲存試卷（不發送作業）
+                  try {
+                    const selectedQuestions = assignmentSeedQuestions.filter(q => selectedAssignmentSeeds.includes(q.id));
+                    
+                    const paperId = await DB_SERVICE.saveSentPaper(
+                      {
+                        title: assignmentData.title || '未命名試卷',
+                        description: assignmentData.description || '',
+                        questions: selectedQuestions,
+                        questionCount: selectedQuestions.length,
+                        grade: selectedClass?.grade || assignmentData.grade || 'P4',
+                        topicIds: assignmentData.topicIds,
+                        createdBy: user.email
+                      },
+                      user.uid || user.id,
+                      user.institutionName || ''
+                    );
+                    
+                    if (paperId) {
+                      alert(`✅ 試卷已儲存！共 ${selectedQuestions.length} 道題目。`);
+                      
+                      // 更新 assignmentData 的 seedQuestionIds，以便在首頁顯示
+                      setAssignmentData({
+                        ...assignmentData,
+                        seedQuestionIds: selectedAssignmentSeeds
+                      });
+                      
+                      // 返回首頁
+                      setActiveTab('assignments');
+                      setShowCreateAssignment(true);
+                      
+                      // 重新載入已儲存試卷列表
+                      try {
+                        const papers = await DB_SERVICE.getSentPapers(
+                          user.uid || user.id,
+                          user.institutionName || null
+                        );
+                        setSentPapers(papers);
+                      } catch (e) {
+                        console.error("Reload Sent Papers Error:", e);
+                      }
+                    } else {
+                      alert('❌ 儲存失敗，請檢查連線');
                     }
-                    
-                    alert(`作業創建成功！已發送通知給 ${selectedClass.students?.length || 0} 名學生`);
-                    
-                    // 重置並返回
-                    setAssignmentData({
-                      title: '',
-                      description: '',
-                      topicIds: [],
-                      questionCount: 10,
-                      dueDate: '',
-                      seedQuestionIds: []
-                    });
-                    setSelectedAssignmentSeeds([]);
-                    setShowCreateAssignment(false);
-                    setActiveTab('assignments');
-                  } else {
-                    alert('創建作業失敗，請檢查連線');
+                  } catch (e) {
+                    console.error("Save Paper Error:", e);
+                    alert('儲存失敗：' + (e.message || '未知錯誤'));
                   }
                 }}
-                disabled={!assignmentData.title.trim()}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={selectedAssignmentSeeds.length === 0}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                <Send size={18} />
-                發送作業 {selectedAssignmentSeeds.length > 0 && `(${selectedAssignmentSeeds.length} 道種子題目)`}
+                <Save size={18} />
+                儲存試卷 {selectedAssignmentSeeds.length > 0 && `(${selectedAssignmentSeeds.length} 道題目)`}
               </button>
             </div>
           </div>
