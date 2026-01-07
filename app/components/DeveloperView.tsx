@@ -4,7 +4,7 @@ import { Settings, Home, Upload, Save, FileJson, RefreshCw, Sparkles, Database, 
 import { DB_SERVICE } from '../lib/db-service';
 
 // 👇 注意這裡 props 接收了 setTopics
-export default function DeveloperView({ topics, setTopics, setView, isFirebaseReady }) {
+export default function DeveloperView({ topics, setTopics, setView, isFirebaseReady, user }) {
   const [activeTab, setActiveTab] = useState('syllabus');
   const [paperJson, setPaperJson] = useState('');
   const [paperMeta, setPaperMeta] = useState({ year: '2024', grade: 'P4', term: '上學期', topicId: '' });
@@ -20,6 +20,24 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [testSeed, setTestSeed] = useState(null);
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // 回饋相關狀態
+  const [feedbackText, setFeedbackText] = useState('');
+  const [selectedQuestionTypes, setSelectedQuestionTypes] = useState([]); // 多標籤選擇
+  const [questionCategory, setQuestionCategory] = useState(''); // 主分類
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+  
+  // 題型選項（多標籤）
+  const questionTypeOptions = [
+    '應用題', '計算題', '幾何題', '選擇題', '文字題', 
+    '圖形題', '邏輯題', '數據題', '混合題'
+  ];
+  
+  // 分類選項
+  const categoryOptions = [
+    '加法', '減法', '乘法', '除法', '分數', '小數', 
+    '百分數', '周界', '面積', '體積', '時間', '金錢', '其他'
+  ];
   
   // 圖像上傳相關狀態
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -288,6 +306,68 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       setIsGenerating(false);
   };
 
+  // 保存開發者回饋
+  const handleSaveFeedback = async () => {
+      // 權限檢查：只有 admin@test.com 可以保存
+      if (!user || user.email !== 'admin@test.com') {
+          alert('❌ 只有開發者帳號（admin@test.com）可以保存回饋');
+          return;
+      }
+
+      if (!feedbackText.trim()) {
+          alert('請輸入回饋內容');
+          return;
+      }
+
+      if (selectedQuestionTypes.length === 0) {
+          alert('請至少選擇一個題型');
+          return;
+      }
+
+      if (!questionCategory) {
+          alert('請選擇分類');
+          return;
+      }
+
+      setIsSavingFeedback(true);
+      try {
+          const feedbackData = {
+              questionId: testSeed?.id || null,
+              questionType: selectedQuestionTypes,
+              category: questionCategory,
+              subject: 'math', // 數學科
+              feedback: feedbackText.trim(),
+              createdBy: user.email
+          };
+
+          const feedbackId = await DB_SERVICE.saveDeveloperFeedback(feedbackData);
+          
+          if (feedbackId) {
+              alert('✅ 回饋已保存！AI 將在生成類似題目時參考此回饋。');
+              // 清空輸入
+              setFeedbackText('');
+              setSelectedQuestionTypes([]);
+              setQuestionCategory('');
+          } else {
+              alert('❌ 保存失敗，請檢查連線');
+          }
+      } catch (e) {
+          console.error("Save Feedback Error:", e);
+          alert('保存失敗：' + (e.message || '未知錯誤'));
+      } finally {
+          setIsSavingFeedback(false);
+      }
+  };
+
+  // 切換題型選擇（多選）
+  const toggleQuestionType = (type) => {
+      if (selectedQuestionTypes.includes(type)) {
+          setSelectedQuestionTypes(selectedQuestionTypes.filter(t => t !== type));
+      } else {
+          setSelectedQuestionTypes([...selectedQuestionTypes, type]);
+      }
+  };
+
   return (
     <div className="max-w-6xl mx-auto bg-slate-50 min-h-screen font-sans text-slate-800">
       <div className="bg-indigo-900 text-white p-4 flex justify-between items-center shadow-md">
@@ -503,9 +583,99 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                         {isGenerating ? 'AI 思考中...' : '生成新題目'} <RefreshCw size={16}/>
                      </button>
 
-                     <div className="bg-black/50 p-4 rounded-lg min-h-[100px] text-xs font-mono text-slate-300 whitespace-pre-wrap border border-slate-700">
+                     <div className="bg-black/50 p-4 rounded-lg min-h-[100px] text-xs font-mono text-slate-300 whitespace-pre-wrap border border-slate-700 mb-4">
                          {generatedResult ? generatedResult : "// AI 生成結果將顯示於此..."}
                      </div>
+
+                     {/* 邏輯補充回饋區域（僅開發者可見） */}
+                     {user && user.email === 'admin@test.com' && (
+                         <div className="bg-indigo-900/50 border-2 border-indigo-500 rounded-lg p-4 mt-4">
+                             <h4 className="font-bold text-white mb-3 flex items-center gap-2">
+                                 <Sparkles size={16} className="text-yellow-400" />
+                                 邏輯補充（開發者回饋）
+                             </h4>
+                             <p className="text-xs text-indigo-200 mb-3">
+                                 輸入回饋後，AI 在生成類似題目時會參考此回饋，提升題目質量。
+                             </p>
+
+                             {/* 題型選擇（多選） */}
+                             <div className="mb-3">
+                                 <label className="block text-xs font-semibold text-indigo-200 mb-2">
+                                     題型分類（可多選）*：
+                                 </label>
+                                 <div className="flex flex-wrap gap-2">
+                                     {questionTypeOptions.map(type => (
+                                         <button
+                                             key={type}
+                                             type="button"
+                                             onClick={() => toggleQuestionType(type)}
+                                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                                                 selectedQuestionTypes.includes(type)
+                                                     ? 'bg-indigo-600 text-white border-2 border-indigo-400'
+                                                     : 'bg-slate-700 text-slate-300 border-2 border-slate-600 hover:bg-slate-600'
+                                             }`}
+                                         >
+                                             {type}
+                                         </button>
+                                     ))}
+                                 </div>
+                                 {selectedQuestionTypes.length > 0 && (
+                                     <p className="text-xs text-indigo-300 mt-2">
+                                         已選擇：{selectedQuestionTypes.join('、')}
+                                     </p>
+                                 )}
+                             </div>
+
+                             {/* 分類選擇（單選） */}
+                             <div className="mb-3">
+                                 <label className="block text-xs font-semibold text-indigo-200 mb-2">
+                                     主分類 *：
+                                 </label>
+                                 <select
+                                     value={questionCategory}
+                                     onChange={(e) => setQuestionCategory(e.target.value)}
+                                     className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400"
+                                 >
+                                     <option value="">請選擇分類</option>
+                                     {categoryOptions.map(cat => (
+                                         <option key={cat} value={cat}>{cat}</option>
+                                     ))}
+                                 </select>
+                             </div>
+
+                             {/* 回饋輸入 */}
+                             <div className="mb-3">
+                                 <label className="block text-xs font-semibold text-indigo-200 mb-2">
+                                     回饋內容 *：
+                                 </label>
+                                 <textarea
+                                     value={feedbackText}
+                                     onChange={(e) => setFeedbackText(e.target.value)}
+                                     placeholder="例如：這類題目應該注意單位換算，答案格式應為小數..."
+                                     className="w-full h-24 bg-slate-800 border border-slate-600 rounded-lg p-3 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400 resize-none"
+                                 />
+                             </div>
+
+                             {/* 保存按鈕 */}
+                             <button
+                                 onClick={handleSaveFeedback}
+                                 disabled={isSavingFeedback || !feedbackText.trim() || selectedQuestionTypes.length === 0 || !questionCategory}
+                                 className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold py-2 rounded-lg transition flex items-center justify-center gap-2"
+                             >
+                                 {isSavingFeedback ? (
+                                     <>
+                                         <RefreshCw size={16} className="animate-spin" />
+                                         保存中...
+                                     </>
+                                 ) : (
+                                     <>
+                                         <Save size={16} />
+                                         保存回饋
+                                     </>
+                                 )}
+                             </button>
+                         </div>
+                     )}
                  </div>
             </div>
         )}

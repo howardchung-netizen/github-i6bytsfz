@@ -1,4 +1,5 @@
 import { RAG_SERVICE } from './rag-service';
+import { DB_SERVICE } from './db-service';
 
 // --- Fallback Local Brain ---
 const LOCAL_BRAIN = {
@@ -60,7 +61,44 @@ export const AI_SERVICE = {
     };
     console.log("🌱 Seed Found for Context:", activeSeed.question, "Subject:", targetSubject);
 
-    // 3. 建構 Prompt
+    // 3. 查詢相關回饋（開發者回饋 + 已審核的教學者回饋）
+    let relevantFeedback = [];
+    try {
+        // 判斷題型（從種子題目或主題推斷）
+        const inferredQuestionTypes = [];
+        if (activeSeed.type === 'mcq' || activeSeed.type === 'multiple-choice') {
+            inferredQuestionTypes.push('選擇題');
+        }
+        if (activeSeed.question && (activeSeed.question.includes('應用') || activeSeed.question.includes('問題'))) {
+            inferredQuestionTypes.push('應用題');
+        }
+        if (activeSeed.question && (activeSeed.question.includes('計算') || activeSeed.question.includes('算'))) {
+            inferredQuestionTypes.push('計算題');
+        }
+        if (activeSeed.question && (activeSeed.question.includes('圖') || activeSeed.question.includes('形'))) {
+            inferredQuestionTypes.push('圖形題');
+        }
+        // 如果無法推斷，使用通用標籤
+        if (inferredQuestionTypes.length === 0) {
+            inferredQuestionTypes.push('文字題');
+        }
+
+        // 查詢回饋
+        relevantFeedback = await DB_SERVICE.getActiveFeedback(
+            inferredQuestionTypes,
+            targetSubject,
+            null // category 暫時不傳，因為種子題目可能沒有明確分類
+        );
+        
+        if (relevantFeedback.length > 0) {
+            console.log(`📝 找到 ${relevantFeedback.length} 條相關回饋，將應用於題目生成`);
+        }
+    } catch (e) {
+        console.error("Get Feedback Error:", e);
+        // 即使回饋查詢失敗，也繼續生成題目
+    }
+
+    // 4. 建構 Prompt
     // 檢查是否為數學科
     const isMathSubject = targetSubject === 'math' || (selectedTopicIds.length > 0 && selectedTopicIds.some(topicId => {
         const topic = allTopicsList.find(t => t.id === topicId);
@@ -80,6 +118,7 @@ export const AI_SERVICE = {
         4. Output strict JSON only.
         5. IMPORTANT: Ensure all strings are valid JSON. Escape all backslashes.
         ${isMathSubject ? '6. For Math questions, you MUST create a multiple-choice question (MCQ) with exactly 8 options: 1 correct answer and 7 plausible distractors (wrong answers that are mathematically reasonable).' : '6. If creating a multiple-choice question, include 4 options: 1 correct answer and 3 plausible distractors.'}
+        ${relevantFeedback.length > 0 ? `\n\n開發者回饋（請嚴格遵守）：\n${relevantFeedback.map((fb, idx) => `${idx + 1}. [題型：${fb.questionType?.join('、') || '通用'}，分類：${fb.category || '通用'}] ${fb.feedback}`).join('\n')}\n\n請在生成題目時參考以上回饋，確保題目質量符合要求。` : ''}
         
         Output JSON Schema: ${isMathSubject ? 
             '{ "question": "string", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string", "hint": "string", "shape": "string (optional: rectangle, square, triangle, circle, trapezoid, parallelogram, irregular, composite, map_grid)", "params": "object (optional: for geometry shapes, e.g. {w: 5, h: 3} for rectangle, {radius: 4} for circle, {base: 6, height: 4} for triangle, {top: 4, bottom: 8, height: 5} for trapezoid, {points: [{x: -2, y: -1}, {x: 2, y: -1}, {x: 3, y: 2}, {x: -1, y: 2}]} for irregular)", "mapData": "object (optional: for map_grid type, e.g. {gridSize: {rows: 5, cols: 5}, startPos: {row: 2, col: 2}, path: [{direction: "north", steps: 2}, {direction: "east", steps: 3}], landmarks: [{row: 1, col: 1, label: "學校"}]})" }' :

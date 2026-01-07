@@ -653,5 +653,204 @@ export const DB_SERVICE = {
             console.error("Get Student Reports Error:", e);
             return [];
         }
+    },
+
+    // ========== 回饋管理系統 ==========
+    
+    // 保存開發者回饋（只有 admin@test.com 可以）
+    saveDeveloperFeedback: async (feedbackData) => {
+        try {
+            const feedbackDoc = {
+                questionId: feedbackData.questionId || null,
+                questionType: feedbackData.questionType || [], // 多標籤數組
+                category: feedbackData.category || '', // 主分類
+                subject: feedbackData.subject || 'math', // 科目
+                feedback: feedbackData.feedback,
+                status: 'active',
+                createdBy: feedbackData.createdBy || 'admin@test.com',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            const docRef = await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "developer_feedback"), 
+                feedbackDoc
+            );
+            return docRef.id;
+        } catch(e) {
+            console.error("Save Developer Feedback Error:", e);
+            return null;
+        }
+    },
+
+    // 保存教學者回饋（待審核）
+    saveTeacherFeedback: async (feedbackData) => {
+        try {
+            const feedbackDoc = {
+                questionId: feedbackData.questionId || null,
+                questionType: feedbackData.questionType || [],
+                category: feedbackData.category || '',
+                subject: feedbackData.subject || 'math',
+                feedback: feedbackData.feedback,
+                status: 'pending',
+                createdBy: feedbackData.createdBy,
+                createdAt: new Date().toISOString()
+            };
+            const docRef = await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "teacher_feedback"), 
+                feedbackDoc
+            );
+            return docRef.id;
+        } catch(e) {
+            console.error("Save Teacher Feedback Error:", e);
+            return null;
+        }
+    },
+
+    // 查詢有效的回饋（開發者回饋 + 已審核的教學者回饋）
+    getActiveFeedback: async (questionType = [], subject = null, category = null) => {
+        try {
+            const feedbacks = [];
+            
+            // 1. 查詢開發者回饋（active）
+            const devQuery = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "developer_feedback"),
+                where("status", "==", "active")
+            );
+            const devSnap = await getDocs(devQuery);
+            devSnap.forEach(d => {
+                const data = d.data();
+                feedbacks.push({ id: d.id, source: 'developer', ...data });
+            });
+
+            // 2. 查詢已審核的教學者回饋（approved）
+            const teacherQuery = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "approved_feedback"),
+                where("status", "==", "active")
+            );
+            const teacherSnap = await getDocs(teacherQuery);
+            teacherSnap.forEach(d => {
+                const data = d.data();
+                feedbacks.push({ id: d.id, source: 'approved_teacher', ...data });
+            });
+
+            // 3. 過濾匹配的回饋
+            if (questionType.length === 0 && !subject && !category) {
+                return feedbacks; // 返回所有回饋
+            }
+
+            return feedbacks.filter(fb => {
+                // 科目匹配
+                if (subject && fb.subject !== subject) return false;
+                
+                // 分類匹配
+                if (category && fb.category !== category) return false;
+                
+                // 題型匹配（多標籤匹配：如果回饋的題型與目標題型有交集）
+                if (questionType.length > 0 && fb.questionType && Array.isArray(fb.questionType)) {
+                    const hasMatch = questionType.some(type => fb.questionType.includes(type));
+                    if (!hasMatch) return false;
+                }
+                
+                return true;
+            });
+        } catch(e) {
+            console.error("Get Active Feedback Error:", e);
+            return [];
+        }
+    },
+
+    // 獲取所有待審核的教學者回饋
+    getPendingTeacherFeedback: async () => {
+        try {
+            const q = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "teacher_feedback"),
+                where("status", "==", "pending"),
+                orderBy("createdAt", "desc")
+            );
+            const snap = await getDocs(q);
+            const feedbacks = [];
+            snap.forEach(d => {
+                feedbacks.push({ id: d.id, ...d.data() });
+            });
+            return feedbacks;
+        } catch(e) {
+            console.error("Get Pending Teacher Feedback Error:", e);
+            return [];
+        }
+    },
+
+    // 審核教學者回饋（批准）
+    approveTeacherFeedback: async (feedbackId, approvedBy = 'admin@test.com') => {
+        try {
+            // 1. 獲取原始回饋
+            const feedbackRef = doc(db, "artifacts", APP_ID, "public", "data", "teacher_feedback", feedbackId);
+            const feedbackSnap = await getDoc(feedbackRef);
+            
+            if (!feedbackSnap.exists()) {
+                console.error("Feedback not found");
+                return false;
+            }
+
+            const feedbackData = feedbackSnap.data();
+            
+            // 2. 轉移到 approved_feedback 集合
+            await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "approved_feedback"),
+                {
+                    ...feedbackData,
+                    status: 'active',
+                    approvedBy: approvedBy,
+                    approvedAt: new Date().toISOString(),
+                    originalFeedbackId: feedbackId
+                }
+            );
+
+            // 3. 更新原始回饋狀態為 approved
+            await updateDoc(feedbackRef, {
+                status: 'approved',
+                approvedBy: approvedBy,
+                approvedAt: new Date().toISOString()
+            });
+
+            return true;
+        } catch(e) {
+            console.error("Approve Teacher Feedback Error:", e);
+            return false;
+        }
+    },
+
+    // 拒絕教學者回饋
+    rejectTeacherFeedback: async (feedbackId, rejectedBy = 'admin@test.com') => {
+        try {
+            const feedbackRef = doc(db, "artifacts", APP_ID, "public", "data", "teacher_feedback", feedbackId);
+            await updateDoc(feedbackRef, {
+                status: 'rejected',
+                rejectedBy: rejectedBy,
+                rejectedAt: new Date().toISOString()
+            });
+            return true;
+        } catch(e) {
+            console.error("Reject Teacher Feedback Error:", e);
+            return false;
+        }
+    },
+
+    // 獲取所有開發者回饋（用於管理）
+    getAllDeveloperFeedback: async () => {
+        try {
+            const q = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "developer_feedback"),
+                orderBy("createdAt", "desc")
+            );
+            const snap = await getDocs(q);
+            const feedbacks = [];
+            snap.forEach(d => {
+                feedbacks.push({ id: d.id, ...d.data() });
+            });
+            return feedbacks;
+        } catch(e) {
+            console.error("Get All Developer Feedback Error:", e);
+            return [];
+        }
     }
 }; 
