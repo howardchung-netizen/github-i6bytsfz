@@ -1065,13 +1065,17 @@ export default function TeacherView({ setView, user, topics }) {
                                   </div>
                                 </div>
                                 <button
-                                  onClick={(e) => {
+                                  onClick={async (e) => {
                                     e.stopPropagation();
+                                    // 載入試卷題目到 B 頁
+                                    setAssignmentSeedQuestions(paper.questions || []);
+                                    setSelectedAssignmentSeeds(paper.questions?.map(q => q.id).filter(Boolean) || []);
                                     setAssignmentData({
                                       ...assignmentData,
                                       seedQuestionIds: paper.questions?.map(q => q.id).filter(Boolean) || []
                                     });
-                                    alert(`已選擇試卷「${paper.title}」的 ${paper.questions?.length || 0} 道題目`);
+                                    setActiveTab('assignment-seed-selection');
+                                    alert(`已載入試卷「${paper.title}」的 ${paper.questions?.length || 0} 道題目到選擇頁面`);
                                   }}
                                   className="ml-4 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
                                 >
@@ -1083,7 +1087,69 @@ export default function TeacherView({ setView, user, topics }) {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-3">
+                    
+                    {/* 發送作業按鈕（當有選擇種子題目時顯示） */}
+                    {assignmentData.seedQuestionIds && assignmentData.seedQuestionIds.length > 0 && (
+                      <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm text-green-700 mb-3 font-bold">
+                          ✓ 已選擇 {assignmentData.seedQuestionIds.length} 道種子題目，可直接發送作業
+                        </p>
+                        <button
+                          onClick={async () => {
+                            if (!selectedClass || !assignmentData.title.trim()) {
+                              alert('請填寫所有必填欄位');
+                              return;
+                            }
+                            
+                            setLoading(true);
+                            try {
+                              const assignmentId = await DB_SERVICE.createAssignment(
+                                selectedClass.id,
+                                {
+                                  ...assignmentData,
+                                  dueDate: assignmentData.dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                                  seedQuestionIds: assignmentData.seedQuestionIds || []
+                                }
+                              );
+                              
+                              if (assignmentId) {
+                                // 為班級中的每個學生創建通知
+                                if (selectedClass.students && selectedClass.students.length > 0) {
+                                  await DB_SERVICE.createAssignmentNotifications(selectedClass.id, assignmentId, assignmentData.title);
+                                }
+                                
+                                alert(`作業創建成功！已發送通知給 ${selectedClass.students?.length || 0} 名學生`);
+                                
+                                // 重置
+                                setAssignmentData({
+                                  title: '',
+                                  description: '',
+                                  topicIds: [],
+                                  questionCount: 10,
+                                  dueDate: '',
+                                  seedQuestionIds: []
+                                });
+                                setShowCreateAssignment(false);
+                              } else {
+                                alert('創建作業失敗，請檢查連線');
+                              }
+                            } catch (e) {
+                              console.error("Create Assignment Error:", e);
+                              alert('創建作業失敗：' + (e.message || '未知錯誤'));
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          disabled={loading}
+                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          <Send size={18} />
+                          發送作業
+                        </button>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-3 mt-4">
                       <button
                         onClick={async () => {
                           // 載入種子題目並進入選擇頁面
