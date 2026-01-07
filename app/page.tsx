@@ -72,6 +72,9 @@ export default function App() {
   const [sessionMistakes, setSessionMistakes] = useState([]);
   const [sessionTopics, setSessionTopics] = useState([]);
   const [preloadedQuestion, setPreloadedQuestion] = useState(null); // 預加載的下一題
+  const [quotaExceeded, setQuotaExceeded] = useState(false); // 配額超限標記
+  const [quotaRetryAfter, setQuotaRetryAfter] = useState(null); // 配額重試時間（秒）
+  const [lastRequestTime, setLastRequestTime] = useState(0); // 上次請求時間（用於速率限制）
   const [dailyTasks, setDailyTasks] = useState({
     math: { used: 0, limit: 20 },
     chi: { used: 0, limit: 20 },
@@ -109,6 +112,37 @@ export default function App() {
           setView('register'); 
       });
   };
+
+  const handleDeleteAccount = async (user) => {
+      try {
+          const success = await DB_SERVICE.deleteUserAccount(user);
+          if (success) {
+              // 登出用戶
+              await signOut(auth);
+              setIsLoggedIn(false);
+              setUser({ name: '', level: '', xp: 0, avatar: null });
+              setView('register');
+          }
+          return success;
+      } catch (error) {
+          console.error("Delete account error:", error);
+          return false;
+      }
+  };
+
+  // --- 配額超限自動恢復 ---
+  useEffect(() => {
+      if (quotaExceeded && quotaRetryAfter) {
+          console.log(`⏰ 配額超限，將在 ${quotaRetryAfter} 秒後自動恢復`);
+          const timer = setTimeout(() => {
+              setQuotaExceeded(false);
+              setQuotaRetryAfter(null);
+              console.log("✅ 配額限制已恢復，可以繼續生成題目");
+          }, quotaRetryAfter * 1000);
+          
+          return () => clearTimeout(timer);
+      }
+  }, [quotaExceeded, quotaRetryAfter]);
 
   // --- Auto-Login & Init Logic ---
   useEffect(() => {
@@ -267,16 +301,48 @@ export default function App() {
       
       let q = null; 
       try { 
+          // 速率限制：確保至少間隔 3 秒（如果之前有請求）
+          const now = Date.now();
+          const timeSinceLastRequest = now - lastRequestTime;
+          const minInterval = 3000; // 3 秒間隔
+          
+          if (lastRequestTime > 0 && timeSinceLastRequest < minInterval) {
+              const waitTime = minInterval - timeSinceLastRequest;
+              console.log(`⏳ 速率限制：等待 ${waitTime}ms 後再生成第一題`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          
+          setLastRequestTime(Date.now());
           // 如果 selectedTopicIds 為空，傳入 subject 讓 AI 自動偵測該科目的題目
           q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject);
-          // 更新對應科目的任務計數
-          setDailyTasks(prev => ({
-              ...prev,
-              [subject]: { ...prev[subject], used: prev[subject].used + 1 }
-          }));
-          // 記錄生成題目
-          await logLearningActivity('generate_question', { topicIds: selectedTopicIds, subject, autoDetect: selectedTopicIds.length === 0 });
-      } catch (e) { console.error("Start session error:", e); } 
+          
+          // 檢查是否為錯誤回退（配額超限）
+          if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
+              setQuotaExceeded(true);
+              // 從錯誤訊息中提取重試時間
+              const retryMatch = q.question.match(/等待約 (\d+) 秒/);
+              if (retryMatch) {
+                  setQuotaRetryAfter(parseInt(retryMatch[1]));
+              }
+          } else if (q && q.source !== 'error_fallback') {
+              // 成功生成題目，重置配額超限標記
+              setQuotaExceeded(false);
+              setQuotaRetryAfter(null);
+              // 更新對應科目的任務計數
+              setDailyTasks(prev => ({
+                  ...prev,
+                  [subject]: { ...prev[subject], used: prev[subject].used + 1 }
+              }));
+              // 記錄生成題目
+              await logLearningActivity('generate_question', { topicIds: selectedTopicIds, subject, autoDetect: selectedTopicIds.length === 0 });
+          }
+      } catch (e) { 
+          console.error("Start session error:", e);
+          // 檢查是否為配額超限錯誤
+          if (e.message && (e.message.includes('quota') || e.message.includes('配額'))) {
+              setQuotaExceeded(true);
+          }
+      } 
       
       if (!q) { 
           q = { id: Date.now(), question: '系統暫時無法產生題目，請檢查網絡連線或單元設定。', type: 'text', answer: 0, unit: '', lang: 'zh-HK', source: 'local' };
@@ -289,21 +355,55 @@ export default function App() {
       setUserAnswer(''); 
       setView('practice'); 
 
-      // 預加載下一題
-      if (count > 1) {
-          preloadNextQuestion(selectedTopicIds);
-      }
+      // 暫時禁用預加載功能，避免快速消耗免費層配額
+      // 預加載會在用戶點擊「下一題」時才觸發
+      // if (count > 1 && !quotaExceeded) {
+      //     setTimeout(() => {
+      //         preloadNextQuestion(selectedTopicIds);
+      //     }, 4000);
+      // }
   };
 
   // --- 預加載下一題 ---
   const preloadNextQuestion = async (selectedTopicIds) => {
+      // 如果配額超限，不進行預加載
+      if (quotaExceeded) {
+          console.log("⏸️ 配額超限，跳過預加載");
+          return;
+      }
+      
       const topicIds = selectedTopicIds || sessionTopics;
       const subject = getSubjectFromTopics(topicIds);
       if (!checkDailyTaskLimit(subject)) return; // 如果已達限制，不預加載
       
+      // 速率限制：確保至少間隔 3.5 秒（免費層每分鐘 20 個請求，保守起見使用 3.5 秒）
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+      const minInterval = 3500; // 3.5 秒間隔（更保守）
+      
+      if (lastRequestTime > 0 && timeSinceLastRequest < minInterval) {
+          const waitTime = minInterval - timeSinceLastRequest;
+          console.log(`⏳ 速率限制：等待 ${Math.ceil(waitTime/1000)} 秒後再預加載`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+      
       try {
+          // 在發送請求前更新時間戳
+          setLastRequestTime(Date.now());
           const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics);
           if (q) {
+              // 檢查是否為錯誤回退（配額超限）
+              if (q.source === 'error_fallback' && q.question.includes('配額')) {
+                  setQuotaExceeded(true);
+                  // 從錯誤訊息中提取重試時間
+                  const retryMatch = q.question.match(/等待約 (\d+) 秒/);
+                  if (retryMatch) {
+                      setQuotaRetryAfter(parseInt(retryMatch[1]));
+                  }
+                  console.log("⚠️ 預加載時檢測到配額超限");
+                  return;
+              }
+              
               setPreloadedQuestion(q);
               // 更新對應科目的任務計數
               setDailyTasks(prev => ({
@@ -318,7 +418,11 @@ export default function App() {
               });
           }
       } catch(e) { 
-          console.error("Preload question error:", e); 
+          console.error("Preload question error:", e);
+          // 檢查是否為配額超限錯誤
+          if (e.message && (e.message.includes('quota') || e.message.includes('配額'))) {
+              setQuotaExceeded(true);
+          }
       }
   };
 
@@ -345,16 +449,49 @@ export default function App() {
       setLoading(true); 
       let q = null;
       try { 
+          // 速率限制：確保至少間隔 3.5 秒（免費層每分鐘 20 個請求，保守起見使用 3.5 秒）
+          const now = Date.now();
+          const timeSinceLastRequest = now - lastRequestTime;
+          const minInterval = 3500; // 3.5 秒間隔（更保守）
+          
+          if (lastRequestTime > 0 && timeSinceLastRequest < minInterval) {
+              const waitTime = minInterval - timeSinceLastRequest;
+              console.log(`⏳ 速率限制：等待 ${Math.ceil(waitTime/1000)} 秒`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+          
+          // 在發送請求前更新時間戳
+          setLastRequestTime(Date.now());
           // 傳入 subject 參數以支持自動偵測
           q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject);
-          // 更新對應科目的任務計數
-          setDailyTasks(prev => ({
-              ...prev,
-              [subject]: { ...prev[subject], used: prev[subject].used + 1 }
-          }));
-          // 記錄生成題目
-          await logLearningActivity('generate_question', { topicIds: sessionTopics, subject });
-      } catch(e) { console.error("New question error:", e); } 
+          
+          // 檢查是否為錯誤回退（配額超限）
+          if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
+              setQuotaExceeded(true);
+              // 從錯誤訊息中提取重試時間
+              const retryMatch = q.question.match(/等待約 (\d+) 秒/);
+              if (retryMatch) {
+                  setQuotaRetryAfter(parseInt(retryMatch[1]));
+              }
+          } else if (q && q.source !== 'error_fallback') {
+              // 成功生成題目，重置配額超限標記
+              setQuotaExceeded(false);
+              setQuotaRetryAfter(null);
+              // 更新對應科目的任務計數
+              setDailyTasks(prev => ({
+                  ...prev,
+                  [subject]: { ...prev[subject], used: prev[subject].used + 1 }
+              }));
+              // 記錄生成題目
+              await logLearningActivity('generate_question', { topicIds: sessionTopics, subject });
+          }
+      } catch(e) { 
+          console.error("New question error:", e);
+          // 檢查是否為配額超限錯誤
+          if (e.message && (e.message.includes('quota') || e.message.includes('配額'))) {
+              setQuotaExceeded(true);
+          }
+      } 
       
       if (!q) { 
           q = { id: Date.now(), question: '題目生成失敗，請跳過或重試。', type: 'text', answer: 0, unit: '', lang: 'zh-HK', source: 'local' };
@@ -366,10 +503,13 @@ export default function App() {
       setShowExplanation(false); 
       setUserAnswer(''); 
 
-      // 如果還有下一題，預加載
-      if (sessionStats.current < sessionStats.total) {
-          preloadNextQuestion();
-      }
+      // 暫時禁用預加載功能，避免快速消耗免費層配額
+      // 用戶點擊「下一題」時才會生成新題目
+      // if (sessionStats.current < sessionStats.total && !quotaExceeded) {
+      //     setTimeout(() => {
+      //         preloadNextQuestion();
+      //     }, 4000);
+      // }
   };
 
   const checkAnswer = (answerToCheck) => { 
@@ -483,7 +623,7 @@ export default function App() {
         
         {user.isEditingProfile && (
             <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-                <ProfileView setView={() => setUser(u => ({...u, isEditingProfile: false}))} user={user} handleLogout={handleLogout} />
+                <ProfileView setView={() => setUser(u => ({...u, isEditingProfile: false}))} user={user} handleLogout={handleLogout} handleDeleteAccount={handleDeleteAccount} />
             </div>
         )}
 

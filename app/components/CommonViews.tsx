@@ -129,14 +129,93 @@ export const SummaryView = ({ sessionStats, restartSelection, setView }) => {
     );
 };
 
-export const ProfileView = ({ setView, user, handleLogout }) => (
-    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in fade-in zoom-in-95 font-sans">
-        <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-slate-800">個人檔案</h3><button onClick={setView} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button></div>
-        <div className="flex flex-col items-center mb-6">
-            <img src={user.avatar} className="w-24 h-24 rounded-full border-4 border-indigo-100 mb-3" alt="avatar" />
-            <h2 className="text-2xl font-bold text-slate-800">{user.name}</h2>
-            <p className="text-slate-500">{user.school || '學校未設定'} • {user.level}</p>
+export const ProfileView = ({ setView, user, handleLogout, handleDeleteAccount }) => {
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    
+    const handleDeleteClick = async () => {
+        if (!showDeleteConfirm) {
+            setShowDeleteConfirm(true);
+            return;
+        }
+        
+        // 確認刪除
+        const confirmed = window.confirm(
+            '⚠️ 警告：此操作無法復原！\n\n' +
+            '刪除帳號將永久刪除：\n' +
+            '• 您的個人資料\n' +
+            '• 所有學習歷程\n' +
+            '• 所有錯題記錄\n' +
+            '• 所有學習統計\n\n' +
+            '確定要刪除帳號嗎？'
+        );
+        
+        if (!confirmed) {
+            setShowDeleteConfirm(false);
+            return;
+        }
+        
+        setIsDeleting(true);
+        try {
+            const success = await handleDeleteAccount(user);
+            if (success) {
+                alert('✅ 帳號已成功刪除。');
+                handleLogout(); // 登出並返回註冊頁面
+            } else {
+                alert('❌ 刪除失敗，請稍後再試或聯繫客服。');
+            }
+        } catch (error) {
+            console.error("Delete account error:", error);
+            alert('❌ 刪除失敗：' + error.message);
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteConfirm(false);
+        }
+    };
+    
+    return (
+        <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-in fade-in zoom-in-95 font-sans">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-slate-800">個人檔案</h3>
+                <button onClick={() => setView('dashboard')} className="p-2 hover:bg-slate-100 rounded-full">
+                    <X size={20}/>
+                </button>
+            </div>
+            <div className="flex flex-col items-center mb-6">
+                <img src={user.avatar} className="w-24 h-24 rounded-full border-4 border-indigo-100 mb-3" alt="avatar" />
+                <h2 className="text-2xl font-bold text-slate-800">{user.name}</h2>
+                <p className="text-slate-500">{user.school || '學校未設定'} • {user.level}</p>
+            </div>
+            <div className="space-y-3">
+                <button 
+                    onClick={handleLogout} 
+                    className="w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold hover:bg-red-100 flex items-center justify-center gap-2"
+                >
+                    <LogOut size={18}/> 登出帳號
+                </button>
+                <button 
+                    onClick={handleDeleteClick}
+                    disabled={isDeleting}
+                    className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 ${
+                        showDeleteConfirm 
+                            ? 'bg-red-600 text-white hover:bg-red-700' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    } ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                    {isDeleting ? (
+                        <>⏳ 刪除中...</>
+                    ) : showDeleteConfirm ? (
+                        <>⚠️ 確認刪除帳號</>
+                    ) : (
+                        <>🗑️ 刪除帳號</>
+                    )}
+                </button>
+                {showDeleteConfirm && (
+                    <p className="text-xs text-red-600 text-center">
+                        再次點擊以確認刪除。此操作無法復原！
+                    </p>
+                )}
+            </div>
         </div>
-        <button onClick={handleLogout} className="w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold hover:bg-red-100 flex items-center justify-center gap-2"><LogOut size={18}/> 登出帳號</button>
-    </div>
-);
+    );
+};

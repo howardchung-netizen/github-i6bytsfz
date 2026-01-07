@@ -103,7 +103,18 @@ export const AI_SERVICE = {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || `API Error: ${response.status}`);
+            
+            // 特別處理配額超限錯誤
+            if (errorData.isQuotaExceeded) {
+                const retryAfter = errorData.retryAfter || null;
+                const userMsg = errorData.userMessage || `API 配額已達上限（免費層每分鐘 20 個請求）。${retryAfter ? `請等待約 ${retryAfter} 秒後再試。` : '請稍後再試。'}`;
+                const errorMsg = `${errorData.error || 'Quota Exceeded'}\n\n${userMsg}`;
+                throw new Error(errorMsg);
+            }
+            
+            // 使用後端返回的詳細錯誤訊息（如果有 message 欄位）
+            const errorMsg = errorData.userMessage || errorData.message || errorData.error || `API Error: ${response.status}`;
+            throw new Error(errorMsg);
         }
 
         const data = await response.json();
@@ -136,10 +147,34 @@ export const AI_SERVICE = {
 
     } catch (err) {
         console.error("AI Generation Failed:", err);
-        // 錯誤時回退到本地邏輯
+        // 錯誤時回退到本地邏輯，顯示詳細錯誤訊息
+        const errorMessage = err.message || '未知錯誤';
+        
+        // 檢查是否為配額超限錯誤
+        const isQuotaError = errorMessage.toLowerCase().includes('quota') || 
+                            errorMessage.toLowerCase().includes('rate limit') ||
+                            errorMessage.toLowerCase().includes('exceeded') ||
+                            errorMessage.toLowerCase().includes('配額');
+        
+        // 檢查是否為每日限制（從錯誤訊息中提取）
+        const isDailyLimit = errorMessage.includes('每日') || 
+                            errorMessage.includes('daily') ||
+                            (errorMessage.includes('250') && errorMessage.includes('請求'));
+        
+        let suggestionText = '';
+        if (isQuotaError) {
+            if (isDailyLimit) {
+                suggestionText = `\n\n💡 這是 API 每日配額限制（免費層每日 250 個請求）：\n1. 您今天的配額已用完，請明天再試\n2. 或考慮升級到付費方案以獲得更高配額\n3. 您可以到 https://ai.dev/usage?tab=rate-limit 查看使用情況\n4. 建議：避免頻繁測試，節省配額用於實際練習`;
+            } else {
+                suggestionText = `\n\n💡 這是 API 配額限制（免費層每分鐘 20 個請求）：\n1. 請等待約 20-30 秒後再試\n2. 或考慮升級到付費方案以獲得更高配額\n3. 目前建議：放慢生成題目的速度，避免連續快速請求\n4. 您可以到 https://ai.dev/usage?tab=rate-limit 查看使用情況`;
+            }
+        } else {
+            suggestionText = `\n\n💡 建議：\n1. 請確認 VPN 已開啟並連線到台灣地區\n2. 檢查網路連線是否正常\n3. 如問題持續，請稍後再試`;
+        }
+        
         return {
             ...LOCAL_BRAIN.generateQuestion(level, difficulty, selectedTopicIds, allTopicsList),
-            question: `(連線錯誤) 無法生成題目。\n錯誤訊息: ${err.message}\n請檢查 API Key 或網路連線。`,
+            question: `(連線錯誤) 無法生成題目。\n\n錯誤訊息: ${errorMessage}${suggestionText}`,
             source: 'error_fallback'
         };
     }
@@ -221,7 +256,18 @@ export const AI_SERVICE = {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || `API Error: ${response.status}`);
+            
+            // 特別處理配額超限錯誤
+            if (errorData.isQuotaExceeded) {
+                const retryAfter = errorData.retryAfter || null;
+                const userMsg = errorData.userMessage || `API 配額已達上限（免費層每分鐘 20 個請求）。${retryAfter ? `請等待約 ${retryAfter} 秒後再試。` : '請稍後再試。'}`;
+                const errorMsg = `${errorData.error || 'Quota Exceeded'}\n\n${userMsg}`;
+                throw new Error(errorMsg);
+            }
+            
+            // 使用後端返回的詳細錯誤訊息（如果有 message 欄位）
+            const errorMsg = errorData.userMessage || errorData.message || errorData.error || `API Error: ${response.status}`;
+            throw new Error(errorMsg);
         }
 
         const data = await response.json();

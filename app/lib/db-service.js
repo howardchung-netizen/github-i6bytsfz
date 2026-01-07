@@ -91,8 +91,58 @@ export const DB_SERVICE = {
         } 
     },
     deleteUserAccount: async (user) => { 
-        try { await deleteUser(user); return true; } 
-        catch (e) { console.error("Delete User Error:", e); return false; } 
+        try {
+            const uid = user.uid || user.id;
+            if (!uid) {
+                console.error("Delete User Error: No UID provided");
+                return false;
+            }
+            
+            // 1. 刪除 Firestore 中的所有用戶資料
+            const batch = writeBatch(db);
+            
+            // 刪除用戶個人資料
+            const userDocRef = doc(db, "artifacts", APP_ID, "public", "data", "users", uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+                batch.delete(userDocRef);
+            }
+            
+            // 刪除學習歷程
+            const logsQuery = query(collection(db, "artifacts", APP_ID, "users", uid, "logs"));
+            const logsSnap = await getDocs(logsQuery);
+            logsSnap.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+            
+            // 刪除錯題記錄
+            const mistakesQuery = query(collection(db, "artifacts", APP_ID, "users", uid, "mistakes"));
+            const mistakesSnap = await getDocs(mistakesQuery);
+            mistakesSnap.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+            
+            // 刪除學習統計（如果有的話）
+            const statsDocRef = doc(db, "artifacts", APP_ID, "users", uid, "stats", "summary");
+            const statsDoc = await getDoc(statsDocRef);
+            if (statsDoc.exists()) {
+                batch.delete(statsDocRef);
+            }
+            
+            // 執行批量刪除
+            await batch.commit();
+            
+            // 2. 刪除 Firebase Authentication 帳號
+            if (auth.currentUser && auth.currentUser.uid === uid) {
+                await deleteUser(auth.currentUser);
+            }
+            
+            console.log(`✅ User account and all data deleted: ${uid}`);
+            return true;
+        } catch (e) { 
+            console.error("Delete User Error:", e); 
+            return false; 
+        } 
     },
     saveMistake: async (uid, q, ans) => { 
         try {
