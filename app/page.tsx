@@ -24,13 +24,22 @@ import { TopicSelectionView, MistakesView, SummaryView, ProfileView } from './co
 import ParentView from './components/ParentView';
 
 // Error Boundary for Runtime Safety
-class ErrorBoundary extends React.Component {
-  constructor(props) {
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(error, errorInfo) { console.error("Uncaught Error:", error, errorInfo); }
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState { return { hasError: true, error }; }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) { console.error("Uncaught Error:", error, errorInfo); }
   render() {
     if (this.state.hasError) {
       return (
