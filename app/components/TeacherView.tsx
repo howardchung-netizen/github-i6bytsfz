@@ -1914,31 +1914,55 @@ export default function TeacherView({ setView, user, topics }) {
                       {!selectedPaperForReuse && (
                         <div className="flex gap-2">
                           {/* 選擇單元按鈕 */}
-                          <button
-                            onClick={() => {
-                              // 顯示單元選擇下拉菜單
-                              const topicNames = topics
-                                .filter(t => t.grade === paperCreation.grade && t.subject === 'math')
-                                .map(t => t.name);
-                              
-                              const selectedTopic = prompt(
-                                `請選擇單元：\n${topicNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}\n\n輸入編號：`
-                              );
-                              
-                              if (selectedTopic) {
-                                const topicIndex = parseInt(selectedTopic) - 1;
-                                if (topicIndex >= 0 && topicIndex < topicNames.length) {
-                                  const updatedPaper = [...generatedPaper];
-                                  updatedPaper[idx].selectedTopic = topicNames[topicIndex];
-                                  setGeneratedPaper(updatedPaper);
-                                  alert(`已為第 ${question.index || idx + 1} 題選擇單元：${topicNames[topicIndex]}`);
-                                }
-                              }
-                            }}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition flex items-center gap-1"
-                          >
-                            📚 選擇單元
-                          </button>
+                          <div className="relative">
+                            <button
+                              onClick={() => {
+                                // 使用狀態控制下拉菜單顯示
+                                const currentSelector = showTopicSelector;
+                                setShowTopicSelector(currentSelector === `preview_${idx}` ? null : `preview_${idx}`);
+                              }}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition flex items-center gap-1"
+                            >
+                              📚 選擇單元
+                            </button>
+                            
+                            {/* 單元選擇下拉菜單 */}
+                            {showTopicSelector === `preview_${idx}` && (
+                              <div className="absolute right-0 top-full mt-1 bg-white border-2 border-indigo-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-60 overflow-y-auto">
+                                <div className="p-2">
+                                  <div className="text-xs font-bold text-slate-700 mb-2">選擇單元：</div>
+                                  {topics && topics.length > 0 ? (
+                                    topics
+                                      .filter(t => t.grade === paperCreation.grade && t.subject === 'math')
+                                      .map((topic) => (
+                                        <button
+                                          key={topic.id}
+                                          onClick={() => {
+                                            const updatedPaper = [...generatedPaper];
+                                            updatedPaper[idx].selectedTopic = topic.name;
+                                            setGeneratedPaper(updatedPaper);
+                                            setShowTopicSelector(null);
+                                          }}
+                                          className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 rounded transition"
+                                        >
+                                          {topic.name}
+                                        </button>
+                                      ))
+                                  ) : (
+                                    <div className="px-3 py-2 text-xs text-slate-400">暫無單元</div>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setShowTopicSelector(null);
+                                    }}
+                                    className="w-full mt-2 px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded transition"
+                                  >
+                                    取消
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           {/* 重新生成按鈕 */}
                           <button
                             onClick={async () => {
