@@ -12,7 +12,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [selectedClass, setSelectedClass] = useState(null);
   const [classStats, setClassStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation', 'paper-preview'
+  const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation', 'paper-preview', 'assignment-seed-selection'
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -32,6 +32,10 @@ export default function TeacherView({ setView, user, topics }) {
     dueDate: '',
     seedQuestionIds: [] // 新增：選擇的種子題目 ID
   });
+  
+  // 作業種子題目選擇頁面狀態
+  const [assignmentSeedQuestions, setAssignmentSeedQuestions] = useState([]); // 用於選擇的種子題目列表
+  const [selectedAssignmentSeeds, setSelectedAssignmentSeeds] = useState([]); // 已選擇的種子題目
   
   // 種子題目上傳狀態
   const [showSeedUpload, setShowSeedUpload] = useState(false);
@@ -922,7 +926,17 @@ export default function TeacherView({ setView, user, topics }) {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold text-slate-800">派卷功能</h3>
                 <button
-                  onClick={() => setShowCreateAssignment(true)}
+                  onClick={async () => {
+                    // 載入種子題目和已儲存試卷
+                    await loadSeedQuestions();
+                    const papers = await DB_SERVICE.getSentPapers(
+                      user.uid || user.id,
+                      user.institutionName || null
+                    );
+                    setSentPapers(papers);
+                    setAssignmentSeedQuestions(seedQuestions);
+                    setActiveTab('assignment-seed-selection');
+                  }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2"
                 >
                   <Send size={18} /> 創建作業
@@ -975,55 +989,113 @@ export default function TeacherView({ setView, user, topics }) {
                         />
                       </div>
                     </div>
+                    {/* 選擇單元（可多項選擇） */}
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">選擇單元（可多選）</label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                        {topics.filter(t => t.grade === selectedClass?.grade && t.subject === 'math').map(topic => (
+                          <label key={topic.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-2 rounded">
+                            <input
+                              type="checkbox"
+                              checked={assignmentData.topicIds.includes(topic.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setAssignmentData({
+                                    ...assignmentData,
+                                    topicIds: [...assignmentData.topicIds, topic.id]
+                                  });
+                                } else {
+                                  setAssignmentData({
+                                    ...assignmentData,
+                                    topicIds: assignmentData.topicIds.filter(id => id !== topic.id)
+                                  });
+                                }
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <span className="text-sm">{topic.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {assignmentData.topicIds.length === 0 && (
+                        <p className="text-xs text-slate-500 mt-1">💡 不選擇單元將從所有單元中生成</p>
+                      )}
+                    </div>
+                    
+                    {/* 檢閱曾經儲存的試卷（Email風格） */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-2">
-                        選擇種子題目（可選，留空則使用 AI 自動生成）
+                        檢閱曾經儲存的試卷
                       </label>
-                      <div className="max-h-64 overflow-y-auto border-2 border-slate-200 rounded-lg p-2 bg-white">
-                        {seedQuestions.length === 0 ? (
-                          <p className="text-xs text-slate-400 text-center py-4">暫無種子題目，請先上傳</p>
+                      <div className="border border-slate-200 rounded-lg divide-y divide-slate-200 max-h-64 overflow-y-auto bg-white">
+                        {sentPapers.length === 0 ? (
+                          <div className="text-center py-8 text-slate-400">
+                            <FileText size={24} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-xs">暫無已儲存的試卷</p>
+                          </div>
                         ) : (
-                          seedQuestions.slice(0, 20).map((q, idx) => (
-                            <label key={q.id || idx} className="flex items-start gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={assignmentData.seedQuestionIds?.includes(q.id) || false}
-                                onChange={(e) => {
-                                  const currentIds = assignmentData.seedQuestionIds || [];
-                                  if (e.target.checked) {
+                          sentPapers.map((paper) => (
+                            <div
+                              key={paper.id}
+                              onClick={() => {
+                                // 重用試卷
+                                setAssignmentData({
+                                  ...assignmentData,
+                                  seedQuestionIds: paper.questions?.map(q => q.id).filter(Boolean) || []
+                                });
+                                alert(`已選擇試卷「${paper.title}」的 ${paper.questions?.length || 0} 道題目`);
+                              }}
+                              className="p-3 hover:bg-slate-50 cursor-pointer transition"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-bold text-sm text-slate-800">{paper.title || '未命名試卷'}</span>
+                                    <span className="text-xs text-slate-500">
+                                      {paper.questionCount || 0} 題
+                                    </span>
+                                    {paper.grade && (
+                                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                        {paper.grade}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    <span>{new Date(paper.sentAt || paper.createdAt).toLocaleString('zh-HK')}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     setAssignmentData({
                                       ...assignmentData,
-                                      seedQuestionIds: [...currentIds, q.id]
+                                      seedQuestionIds: paper.questions?.map(q => q.id).filter(Boolean) || []
                                     });
-                                  } else {
-                                    setAssignmentData({
-                                      ...assignmentData,
-                                      seedQuestionIds: currentIds.filter(id => id !== q.id)
-                                    });
-                                  }
-                                }}
-                                className="mt-1"
-                              />
-                              <span className="text-xs text-slate-700 flex-1">
-                                {q.question?.substring(0, 60) || '無題目文字'}...
-                              </span>
-                            </label>
+                                    alert(`已選擇試卷「${paper.title}」的 ${paper.questions?.length || 0} 道題目`);
+                                  }}
+                                  className="ml-4 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
+                                >
+                                  使用
+                                </button>
+                              </div>
+                            </div>
                           ))
                         )}
                       </div>
-                      {assignmentData.seedQuestionIds?.length > 0 && (
-                        <p className="text-xs text-green-600 mt-1">
-                          ✓ 已選擇 {assignmentData.seedQuestionIds.length} 道種子題目
-                        </p>
-                      )}
                     </div>
                     <div className="flex gap-3">
                       <button
-                        onClick={handleCreateAssignment}
-                        disabled={loading}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold transition disabled:opacity-50"
+                        onClick={async () => {
+                          // 載入種子題目並進入選擇頁面
+                          await loadSeedQuestions();
+                          setAssignmentSeedQuestions(seedQuestions);
+                          setSelectedAssignmentSeeds(assignmentData.seedQuestionIds || []);
+                          setActiveTab('assignment-seed-selection');
+                        }}
+                        disabled={loading || !assignmentData.title.trim()}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        發送作業
+                        <Send size={18} /> 下一步：選擇種子題目
                       </button>
                       <button
                         onClick={() => {
@@ -1037,7 +1109,7 @@ export default function TeacherView({ setView, user, topics }) {
                             seedQuestionIds: []
                           });
                         }}
-                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-bold transition"
+                        className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-lg transition"
                       >
                         取消
                       </button>
