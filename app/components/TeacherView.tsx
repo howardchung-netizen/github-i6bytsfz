@@ -54,6 +54,13 @@ export default function TeacherView({ setView, user, topics }) {
   const [generatedPaper, setGeneratedPaper] = useState([]); // 生成的試卷題目
   const [isGeneratingPaper, setIsGeneratingPaper] = useState(false);
   const [paperGenerationProgress, setPaperGenerationProgress] = useState({ current: 0, total: 0 });
+  const [showPaperPreview, setShowPaperPreview] = useState(false); // 顯示試卷預覽頁面
+  const [selectedPaperForReuse, setSelectedPaperForReuse] = useState(null); // 選擇要重用的試卷
+  
+  // 已發送試卷列表
+  const [sentPapers, setSentPapers] = useState([]);
+  const [isLoadingSentPapers, setIsLoadingSentPapers] = useState(false);
+  const [selectedSentPaper, setSelectedSentPaper] = useState(null); // 選中的試卷詳情
   
   // 教學者回饋相關狀態
   const [showFeedbackInput, setShowFeedbackInput] = useState(null); // 當前顯示回饋輸入的題目 ID
@@ -79,6 +86,27 @@ export default function TeacherView({ setView, user, topics }) {
       loadClasses();
     }
   }, [user]);
+
+  // 載入已發送試卷列表
+  useEffect(() => {
+    const loadSentPapers = async () => {
+      if (activeTab === 'paper-creation' && (user.role === 'teacher' || user.role === 'admin')) {
+        setIsLoadingSentPapers(true);
+        try {
+          const papers = await DB_SERVICE.getSentPapers(
+            user.uid || user.id,
+            user.institutionName || null
+          );
+          setSentPapers(papers);
+        } catch (e) {
+          console.error("Load Sent Papers Error:", e);
+        } finally {
+          setIsLoadingSentPapers(false);
+        }
+      }
+    };
+    loadSentPapers();
+  }, [activeTab, user]);
 
   useEffect(() => {
     if (selectedClass) {
@@ -951,7 +979,7 @@ export default function TeacherView({ setView, user, topics }) {
                       <label className="block text-sm font-bold text-slate-700 mb-2">
                         選擇種子題目（可選，留空則使用 AI 自動生成）
                       </label>
-                      <div className="max-h-40 overflow-y-auto border-2 border-slate-200 rounded-lg p-2 bg-white">
+                      <div className="max-h-64 overflow-y-auto border-2 border-slate-200 rounded-lg p-2 bg-white">
                         {seedQuestions.length === 0 ? (
                           <p className="text-xs text-slate-400 text-center py-4">暫無種子題目，請先上傳</p>
                         ) : (
@@ -1143,6 +1171,27 @@ export default function TeacherView({ setView, user, topics }) {
         </>
       ) : activeTab === 'paper-creation' ? (
         <>
+          {/* 載入已發送試卷列表 */}
+          {useEffect(() => {
+            const loadSentPapers = async () => {
+              setIsLoadingSentPapers(true);
+              try {
+                const papers = await DB_SERVICE.getSentPapers(
+                  user.uid || user.id,
+                  user.institutionName || null
+                );
+                setSentPapers(papers);
+              } catch (e) {
+                console.error("Load Sent Papers Error:", e);
+              } finally {
+                setIsLoadingSentPapers(false);
+              }
+            };
+            if (activeTab === 'paper-creation') {
+              loadSentPapers();
+            }
+          }, [activeTab, user])}
+
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
               <FileText size={20} className="text-purple-600"/> 試卷制訂
@@ -1255,6 +1304,7 @@ export default function TeacherView({ setView, user, topics }) {
                   }
                   
                   setGeneratedPaper(questions);
+                  setShowPaperPreview(true); // 打開試卷預覽頁面
                   alert(`✅ 成功生成 ${questions.length} 道題目！`);
                 } catch (e) {
                   console.error("Generate Paper Error:", e);
@@ -1281,143 +1331,97 @@ export default function TeacherView({ setView, user, topics }) {
             </button>
           </div>
 
-          {/* 生成的試卷題目列表 */}
-          {generatedPaper.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h4 className="text-lg font-bold text-slate-800 mb-4">
-                試卷預覽 ({generatedPaper.filter(q => q.isSelected).length}/{generatedPaper.length} 題)
+          {/* 已發送試卷列表（Email風格） */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <FileText size={20} className="text-indigo-600"/> 已發送試卷
               </h4>
-              
-              <div className="space-y-4">
-                {generatedPaper.map((q, idx) => (
+              <button
+                onClick={async () => {
+                  setIsLoadingSentPapers(true);
+                  try {
+                    const papers = await DB_SERVICE.getSentPapers(
+                      user.uid || user.id,
+                      user.institutionName || null
+                    );
+                    setSentPapers(papers);
+                  } catch (e) {
+                    console.error("Load Sent Papers Error:", e);
+                    alert('載入失敗：' + (e.message || '未知錯誤'));
+                  } finally {
+                    setIsLoadingSentPapers(false);
+                  }
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded transition flex items-center gap-1"
+              >
+                <RefreshCw size={14} className={isLoadingSentPapers ? 'animate-spin' : ''} />
+                刷新
+              </button>
+            </div>
+
+            {isLoadingSentPapers ? (
+              <div className="text-center py-8">
+                <RefreshCw size={24} className="animate-spin text-indigo-600 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">載入中...</p>
+              </div>
+            ) : sentPapers.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                <p className="text-sm">暫無已發送試卷</p>
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-lg divide-y divide-slate-200">
+                {sentPapers.map((paper) => (
                   <div
-                    key={idx}
-                    className={`p-4 border-2 rounded-lg ${
-                      q.isSelected ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                    key={paper.id}
+                    onClick={() => setSelectedSentPaper(paper)}
+                    className={`p-4 hover:bg-slate-50 cursor-pointer transition ${
+                      selectedSentPaper?.id === paper.id ? 'bg-indigo-50 border-l-4 border-indigo-600' : ''
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-700">第 {q.index} 題</span>
-                        {q.isRegenerating && (
-                          <RefreshCw size={14} className="animate-spin text-blue-600" />
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={async () => {
-                            // 重新生成單題
-                            const updatedPaper = [...generatedPaper];
-                            updatedPaper[idx].isRegenerating = true;
-                            setGeneratedPaper(updatedPaper);
-                            
-                            try {
-                              const { AI_SERVICE } = await import('../lib/ai-service');
-                              const newQuestion = await AI_SERVICE.generateQuestion(
-                                paperCreation.grade,
-                                'normal',
-                                paperCreation.selectedTopicIds.length > 0 ? paperCreation.selectedTopicIds : [],
-                                topics,
-                                'math',
-                                user
-                              );
-                              
-                              if (newQuestion) {
-                                updatedPaper[idx] = {
-                                  ...newQuestion,
-                                  index: q.index,
-                                  isSelected: true,
-                                  isRegenerating: false
-                                };
-                                setGeneratedPaper(updatedPaper);
-                              }
-                            } catch (e) {
-                              console.error("Regenerate Question Error:", e);
-                              alert('重新生成失敗：' + (e.message || '未知錯誤'));
-                              updatedPaper[idx].isRegenerating = false;
-                              setGeneratedPaper(updatedPaper);
-                            }
-                          }}
-                          disabled={q.isRegenerating}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white text-xs rounded transition"
-                        >
-                          {q.isRegenerating ? '生成中...' : '🔄 重新生成'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            const updatedPaper = [...generatedPaper];
-                            updatedPaper[idx].isSelected = !updatedPaper[idx].isSelected;
-                            setGeneratedPaper(updatedPaper);
-                          }}
-                          className={`px-3 py-1 text-xs rounded transition ${
-                            q.isSelected
-                              ? 'bg-red-600 hover:bg-red-700 text-white'
-                              : 'bg-green-600 hover:bg-green-700 text-white'
-                          }`}
-                        >
-                          {q.isSelected ? '❌ 移除' : '✅ 保留'}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white rounded p-3 mb-2">
-                      <p className="text-sm text-slate-700 mb-2">{q.question}</p>
-                      {q.options && Array.isArray(q.options) && (
-                        <div className="space-y-1">
-                          {q.options.map((opt, optIdx) => (
-                            <div
-                              key={optIdx}
-                              className={`text-xs p-2 rounded ${
-                                opt === q.answer ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'
-                              }`}
-                            >
-                              {String.fromCharCode(65 + optIdx)}. {opt}
-                            </div>
-                          ))}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold text-slate-800">{paper.title || '未命名試卷'}</span>
+                          <span className="text-xs text-slate-500">
+                            {paper.questionCount || 0} 題
+                          </span>
+                          {paper.grade && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                              {paper.grade}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div className="mt-2 text-xs text-slate-600">
-                        <strong>答案：</strong>{q.answer}
-                        {q.explanation && (
-                          <>
-                            <br />
-                            <strong>解釋：</strong>{q.explanation}
-                          </>
+                        {paper.description && (
+                          <p className="text-sm text-slate-600 mb-1 line-clamp-1">
+                            {paper.description}
+                          </p>
                         )}
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                          <span>{new Date(paper.sentAt || paper.createdAt).toLocaleString('zh-HK')}</span>
+                          {paper.institutionName && (
+                            <span>• {paper.institutionName}</span>
+                          )}
+                        </div>
                       </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // 重用試卷（不能修改）
+                          setSelectedPaperForReuse(paper);
+                          setShowPaperPreview(true);
+                        }}
+                        className="ml-4 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
+                      >
+                        重用
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
-
-              {/* 操作按鈕 */}
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={() => {
-                    if (!confirm('確定要清空當前試卷嗎？')) return;
-                    setGeneratedPaper([]);
-                  }}
-                  className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-lg transition"
-                >
-                  清空試卷
-                </button>
-                <button
-                  onClick={() => {
-                    const selectedQuestions = generatedPaper.filter(q => q.isSelected);
-                    if (selectedQuestions.length === 0) {
-                      alert('請至少保留一道題目');
-                      return;
-                    }
-                    // TODO: 保存試卷並派發給學生
-                    alert(`✅ 試卷已保存！共 ${selectedQuestions.length} 道題目。\n\n（派發功能將在後續實現）`);
-                  }}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-lg transition"
-                >
-                  保存並派發
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       ) : activeTab === 'seeds' ? (
         <>

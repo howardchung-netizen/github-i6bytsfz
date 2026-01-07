@@ -946,5 +946,76 @@ export const DB_SERVICE = {
             console.error("Get All Developer Feedback Error:", e);
             return [];
         }
+    },
+
+    // ========== 試卷管理系統 ==========
+    
+    // 保存已發送的試卷
+    saveSentPaper: async (paperData, teacherUid, institutionName) => {
+        try {
+            const paperDoc = {
+                title: paperData.title || '未命名試卷',
+                description: paperData.description || '',
+                questions: paperData.questions || [],
+                questionCount: paperData.questions?.length || 0,
+                grade: paperData.grade || 'P4',
+                topicIds: paperData.topicIds || [],
+                createdBy: paperData.createdBy || teacherUid,
+                institutionName: institutionName || '',
+                sentAt: new Date().toISOString(),
+                createdAt: new Date().toISOString()
+            };
+            const docRef = await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "sent_papers"),
+                paperDoc
+            );
+            return docRef.id;
+        } catch(e) {
+            console.error("Save Sent Paper Error:", e);
+            return null;
+        }
+    },
+
+    // 獲取教學者已發送的試卷
+    getSentPapers: async (teacherUid, institutionName = null) => {
+        try {
+            let q;
+            if (institutionName) {
+                // 如果是教學者，只獲取自己機構的試卷
+                q = query(
+                    collection(db, "artifacts", APP_ID, "public", "data", "sent_papers"),
+                    where("institutionName", "==", institutionName),
+                    orderBy("sentAt", "desc")
+                );
+            } else {
+                // 開發者可以查看所有試卷
+                q = query(
+                    collection(db, "artifacts", APP_ID, "public", "data", "sent_papers"),
+                    orderBy("sentAt", "desc")
+                );
+            }
+            const snap = await getDocs(q);
+            const papers = [];
+            snap.forEach(d => {
+                papers.push({ id: d.id, ...d.data() });
+            });
+            return papers;
+        } catch(e) {
+            console.error("Get Sent Papers Error:", e);
+            return [];
+        }
+    },
+
+    // 獲取單個試卷詳情
+    getPaperById: async (paperId) => {
+        try {
+            const paperRef = doc(db, "artifacts", APP_ID, "public", "data", "sent_papers", paperId);
+            const paperSnap = await getDoc(paperRef);
+            if (!paperSnap.exists()) return null;
+            return { id: paperSnap.id, ...paperSnap.data() };
+        } catch(e) {
+            console.error("Get Paper By ID Error:", e);
+            return null;
+        }
     }
 }; 
