@@ -301,5 +301,106 @@ npm run dev
 
 ---
 
+### 9. ✅ 解決 API Key 配額問題並遷移到 1.5 Flash
+
+**日期**：2024年12月
+
+**問題描述**：
+- 自從2天前晚上出現 API 用量到達上限後，問題一直沒解決
+- 即使使用 1.5 Flash，仍然顯示配額錯誤
+- 配額一直沒有重置，已持續2天
+
+**問題分析**：
+
+#### 9.1 配額共享機制發現
+- **關鍵發現**：Google Gemini API 的配額是**共享的**，不是按模型分別計算
+- 同一個 API Key 的所有模型（1.5 Flash、2.0 Flash、2.5 Flash）共享配額
+- 如果之前使用 `gemini-2.5-flash` 或 `gemini-2.0-flash-exp` 用完了配額
+- 即使改回使用 `gemini-flash-latest` (1.5 Flash)，配額仍然是用完狀態
+
+#### 9.2 配額重置機制
+- **24小時滾動窗口**：配額重置不是按日曆日（每天下午4:00），而是從最後一次請求開始的24小時滾動窗口
+- 如果2天前晚上用完配額，需要等待24小時後才會重置
+- 但用戶已等待2天仍未重置，可能是其他問題
+
+#### 9.3 模型配置不一致問題
+- 代碼中註釋提到使用 2.0 Flash，但實際配置是 1.5 Flash
+- 需要統一模型配置和註釋
+
+**解決方案**：
+
+#### 9.4 統一模型配置系統
+- **文件**: `app/lib/constants.js`
+- 添加統一的模型配置：
+  ```javascript
+  export const CURRENT_MODEL_NAME = "gemini-flash-latest"; // 1.5 Flash
+  export const CURRENT_VISION_MODEL_NAME = "gemini-1.5-flash"; // Vision API
+  ```
+- 所有 API 路由統一使用 `CURRENT_MODEL_NAME` 常量
+- 避免硬編碼模型名稱
+
+#### 9.5 更新所有 API 路由
+- **`app/api/chat/route.ts`**: 使用 `CURRENT_MODEL_NAME`，更新註釋
+- **`app/api/vision/route.ts`**: 使用 `CURRENT_VISION_MODEL_NAME`，更新註釋
+- **`app/api/test-google-api/route.ts`**: 使用 `CURRENT_MODEL_NAME`
+- **`app/api/check-quota/route.ts`**: 使用 `CURRENT_MODEL_NAME`，更新配額提示（1,500/天）
+
+#### 9.6 改進錯誤處理
+- **`app/lib/ai-service.js`**: 
+  - 改進錯誤分類（API Key 錯誤、模型錯誤、網路錯誤、配額錯誤）
+  - 識別「配額為 0」的情況（實驗版模型可能沒有免費層配額）
+  - 提供更準確的錯誤訊息和建議
+- **`app/api/chat/route.ts`**: 
+  - 改進配額錯誤檢測
+  - 識別「limit: 0」情況（模型沒有免費層配額）
+
+#### 9.7 創建診斷工具
+- **`app/api/diagnose-api-key/route.ts`**: 新建 API Key 診斷端點
+  - 檢查 API Key 是否存在
+  - 檢查 API Key 格式
+  - 測試 API Key 是否有效
+  - 顯示詳細的診斷結果和建議
+
+#### 9.8 重新生成 API Key
+- 用戶申請了新的 Google Gemini API Key
+- 更新 `.env.local` 文件
+- 更新 Vercel 環境變數（如果已部署）
+- 獲得全新的配額（RPM 15, RPD 1,500）
+
+**相關文件**：
+- `app/lib/constants.js` - 統一模型配置
+- `app/api/chat/route.ts` - 更新模型使用和錯誤處理
+- `app/api/vision/route.ts` - 更新 Vision 模型
+- `app/api/test-google-api/route.ts` - 使用統一配置
+- `app/api/check-quota/route.ts` - 更新配額檢查
+- `app/api/diagnose-api-key/route.ts` - 新建診斷工具
+- `app/lib/ai-service.js` - 改進錯誤處理
+- `docs/API_KEY_DIAGNOSIS_GUIDE.md` - API Key 診斷指南
+- `docs/QUOTA_SHARING_EXPLANATION.md` - 配額共享機制說明
+- `docs/QUOTA_RESET_INVESTIGATION.md` - 配額重置問題調查
+- `docs/UPDATE_API_KEY_CHECKLIST.md` - API Key 更新檢查清單
+- `docs/SIMPLE_API_KEY_TEST.md` - 簡單測試方法
+- `docs/TEST_API_KEY_POWERSHELL.md` - PowerShell 測試指南
+- `test-api-key.ps1` - PowerShell 測試腳本
+
+**技術細節**：
+- 使用相對路徑導入（`../../lib/constants`）而非路徑別名（`@/app/lib/constants`）
+- 統一模型配置便於未來切換
+- 改進的錯誤處理能更準確識別問題類型
+
+**重要發現**：
+1. **配額共享**：同一個 API Key 的所有模型共享配額
+2. **24小時滾動窗口**：配額重置不是日曆日，而是24小時滾動窗口
+3. **實驗版模型**：`gemini-2.0-flash-exp` 可能沒有免費層配額（limit: 0）
+4. **1.5 Flash 配額**：RPM 15, RPD 1,500（與 2.0 Flash 相同）
+
+**Git 提交記錄**：
+- `Migrate to Gemini 1.5 Flash: Update all API routes to use unified model configuration`
+- `Fix import paths: use relative paths instead of @ alias`
+- `Improve error handling: better error classification and messages`
+- `Add API Key diagnosis endpoint for troubleshooting`
+
+---
+
 **最後更新**：2024年12月
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
