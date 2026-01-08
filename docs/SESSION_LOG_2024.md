@@ -524,5 +524,124 @@ npm run dev
 
 ---
 
+### 11. ✅ 修復題目顯示問題：LaTeX 格式、字型和溢出
+
+**日期**：2024年12月
+
+**問題描述**：
+- 更新 Gemini 2.0 Flash 遷移後，題目生成出現顯示問題
+- **字型不同問題**：題目中出現字型不一致的情況
+- **顯示超出界外問題**：題目文本超出容器邊界
+- **LaTeX 格式錯誤**：出現 `\350`、`\38` 等錯誤格式（如圖片中顯示的題目）
+
+**問題分析**：
+
+#### 11.1 LaTeX 格式錯誤
+- **原因**：AI 誤解了 LaTeX 要求，將普通數字（如 350、38）也用 `$` 包裹
+- **表現**：題目中出現 `\350`、`\38` 等錯誤格式
+- **影響**：KaTeX 無法正確渲染，顯示為錯誤的轉義字符
+
+#### 11.2 字型不一致問題
+- **原因**：KaTeX 使用自己的字型（KaTeX_Main），與中文字型不一致
+- **表現**：數學公式和中文文字字型不同
+- **影響**：視覺不協調
+
+#### 11.3 溢出問題
+- **原因**：題目容器缺少正確的換行和溢出處理
+- **表現**：長文本超出容器邊界
+- **影響**：內容被截斷或顯示不完整
+
+**解決方案**：
+
+#### 11.4 修復 LaTeX 渲染邏輯
+
+**文件**：`app/components/PracticeView.tsx`、`app/components/CommonViews.tsx`
+
+**修改內容**：
+- ✅ 添加錯誤格式清理：將 `\350`、`\38` 等錯誤格式轉換為普通數字
+- ✅ 改進 LaTeX 匹配邏輯：只匹配正確的 `$...$` 格式
+- ✅ 添加字型樣式：為 LaTeX 和普通文本分別設置字型
+- ✅ 統一兩個組件中的 `renderMathText` 函數邏輯
+
+**關鍵代碼**：
+```javascript
+// 清理錯誤的反斜杠轉義（單個反斜杠後跟數字，但不是有效的 LaTeX）
+const cleanedBefore = textBefore.replace(/\\([0-9]+)/g, '$1');
+```
+
+#### 11.5 修復溢出問題
+
+**文件**：`app/components/PracticeView.tsx`
+
+**修改內容**：
+- ✅ 添加 `break-words` 和 `overflow-wrap-anywhere` 類
+- ✅ 添加內聯樣式：`wordBreak: 'break-word'`, `overflowWrap: 'break-word'`
+- ✅ 為題目容器添加 `max-w-full` 限制
+- ✅ 為選項按鈕添加溢出處理
+
+**關鍵代碼**：
+```jsx
+<h3 className={`... break-words overflow-wrap-anywhere ...`} 
+    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+  <span className="inline-block max-w-full">
+    {renderMathText(currentQuestion.question)}
+  </span>
+</h3>
+```
+
+#### 11.6 統一字型設置
+
+**文件**：`app/components/PracticeView.tsx`
+
+**修改內容**：
+- ✅ 為整個容器設置統一的字型族
+- ✅ 為 LaTeX 元素設置 KaTeX 字型：`KaTeX_Main, "Times New Roman", serif`
+- ✅ 為普通文本設置繼承字型：`fontFamily: 'inherit'`
+
+#### 11.7 更新 Prompt 要求
+
+**文件**：`app/lib/ai-service.js`
+
+**修改內容**：
+- ✅ 明確說明普通數字不應使用 `$` 包裹
+- ✅ 提供正確和錯誤的示例
+- ✅ 強調只有數學表達式、公式、符號才使用 LaTeX
+- ✅ 更新兩個 Prompt 位置（`generateQuestion` 和 `generateVariationFromMistake`）
+
+**關鍵內容**：
+```
+- CRITICAL: Plain numbers (like 350, 38) should NOT be wrapped in $ signs. 
+  Only use $ for actual mathematical expressions, formulas, or symbols.
+- Example: "陳老師有 350 元" (correct) 
+  NOT "陳老師有 $350$ 元" (wrong for plain numbers)
+```
+
+**相關文件**：
+- `app/components/PracticeView.tsx` - 主要修復（渲染邏輯、樣式、溢出處理）
+- `app/components/CommonViews.tsx` - 同步修復（renderMathText 函數）
+- `app/lib/ai-service.js` - Prompt 優化（兩個位置）
+- `docs/FIX_DISPLAY_ISSUES.md` - 修復文檔
+
+**技術細節**：
+- 使用正則表達式清理錯誤格式：`/\\([0-9]+)/g`
+- 使用 Tailwind CSS 類：`break-words`, `overflow-wrap-anywhere`
+- 使用內聯樣式確保兼容性：`wordBreak`, `overflowWrap`
+- 統一字型設置：系統字型 + KaTeX 字型
+
+**預期效果**：
+- ✅ 普通數字正確顯示（不再出現 `\350`、`\38`）
+- ✅ 數學公式正確渲染（分數、指數等使用 LaTeX）
+- ✅ 字型統一協調（KaTeX 和中文文字字型一致）
+- ✅ 文本不會超出容器邊界（自動換行）
+- ✅ 長文本正確處理（不會截斷）
+
+**Git 提交記錄**：
+- `Fix LaTeX rendering: Clean up incorrect escape sequences and improve formatting`
+- `Fix text overflow: Add word-break and overflow-wrap styles`
+- `Unify font styles: Set consistent fonts for LaTeX and regular text`
+- `Update prompts: Clarify LaTeX usage for plain numbers vs mathematical expressions`
+
+---
+
 **最後更新**：2024年12月
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
