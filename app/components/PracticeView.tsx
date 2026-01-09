@@ -51,16 +51,25 @@ export default function PracticeView({
   const renderMathText = (text) => {
     if (!text) return '';
     
+    // 清理可能的錯誤格式：將單個反斜杠後跟數字的情況轉換為普通文本
+    // 例如：\350 -> 350, \38 -> 38（這些不是 LaTeX，而是錯誤的轉義）
+    let cleanedText = text;
+    
     // 匹配 $...$ 格式的 LaTeX（不匹配 $$...$$）
     const mathRegex = /\$([^$]+)\$/g;
     const parts = [];
     let lastIndex = 0;
     let match;
     
-    while ((match = mathRegex.exec(text)) !== null) {
+    while ((match = mathRegex.exec(cleanedText)) !== null) {
       // 添加 LaTeX 前的文本
       if (match.index > lastIndex) {
-        parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+        const textBefore = cleanedText.substring(lastIndex, match.index);
+        // 清理錯誤的反斜杠轉義（單個反斜杠後跟數字，但不是有效的 LaTeX）
+        const cleanedBefore = textBefore.replace(/\\([0-9]+)/g, '$1');
+        if (cleanedBefore) {
+          parts.push({ type: 'text', content: cleanedBefore });
+        }
       }
       // 添加 LaTeX 數學公式
       parts.push({ type: 'math', content: match[1] });
@@ -68,25 +77,31 @@ export default function PracticeView({
     }
     
     // 添加剩餘文本
-    if (lastIndex < text.length) {
-      parts.push({ type: 'text', content: text.substring(lastIndex) });
+    if (lastIndex < cleanedText.length) {
+      const remainingText = cleanedText.substring(lastIndex);
+      // 清理錯誤的反斜杠轉義
+      const cleanedRemaining = remainingText.replace(/\\([0-9]+)/g, '$1');
+      if (cleanedRemaining) {
+        parts.push({ type: 'text', content: cleanedRemaining });
+      }
     }
     
-    // 如果沒有匹配到 LaTeX，直接返回原文本
+    // 如果沒有匹配到 LaTeX，清理並返回原文本
     if (parts.length === 0) {
-      return text;
+      const cleaned = cleanedText.replace(/\\([0-9]+)/g, '$1');
+      return cleaned;
     }
     
     return parts.map((part, index) => {
       if (part.type === 'math') {
         try {
-          return <InlineMath key={index} math={part.content} />;
+          return <InlineMath key={index} math={part.content} style={{ fontFamily: 'KaTeX_Main, "Times New Roman", serif' }} />;
         } catch (e) {
           console.error('KaTeX render error:', e, part.content);
-          return <span key={index}>${part.content}$</span>;
+          return <span key={index} className="font-mono">${part.content}$</span>;
         }
       }
-      return <span key={index}>{part.content}</span>;
+      return <span key={index} style={{ fontFamily: 'inherit' }}>{part.content}</span>;
     });
   };
 
@@ -359,7 +374,7 @@ export default function PracticeView({
       adhdMode 
         ? 'bg-white border-t-8 border-yellow-400' 
         : 'bg-white border-t-8 border-indigo-500'
-    }`}>
+    }`} style={{ fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"' }}>
       {/* 全屏 Loading Overlay - 鎖定畫面 */}
       {loading && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -441,13 +456,13 @@ export default function PracticeView({
               )}
               
               <div className="text-center">
-                <h3 className={`text-xl font-bold text-slate-800 mb-6 leading-relaxed whitespace-pre-wrap ${adhdMode ? 'text-2xl leading-loose' : ''}`}>
+                <h3 className={`text-xl font-bold text-slate-800 mb-6 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${adhdMode ? 'text-2xl leading-loose' : ''}`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                   {adhdMode ? (
-                    <span className="inline-block">
+                    <span className="inline-block max-w-full">
                       {renderMathText(currentQuestion.question)}
                     </span>
                   ) : (
-                    <span>{renderMathText(currentQuestion.question)}</span>
+                    <span className="inline-block max-w-full">{renderMathText(currentQuestion.question)}</span>
                   )}
                 </h3>
 
@@ -487,7 +502,7 @@ export default function PracticeView({
                                 key={i}
                                 onClick={() => !loading && handleOptionClick(opt)}
                                 disabled={loading}
-                                className={`py-4 px-2 rounded-xl font-bold border-2 transition-all shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                                className={`py-4 px-2 rounded-xl font-bold border-2 transition-all shadow-sm text-sm disabled:opacity-50 disabled:cursor-not-allowed break-words overflow-wrap-anywhere ${
                                   adhdMode 
                                     ? (userAnswer === opt 
                                         ? 'border-yellow-600 bg-yellow-100 text-yellow-900 shadow-md' 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { CURRENT_MODEL_NAME } from '../../lib/constants';
 
 export async function POST(request: Request) {
   try {
@@ -13,31 +14,98 @@ export async function POST(request: Request) {
       }, { status: 500 });
     }
 
-    // 👇 2. 終極修正：使用診斷列表裡確認存在的 "gemini-flash-latest"
-    // 這對應到 1.5 Flash 穩定版，且通常是免費的
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // 👇 使用統一的模型配置（從 constants.js 導入）
+    // 當前使用：gemini-2.0-flash（2.0 Flash 免費版）
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_MODEL_NAME}:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: message }
+    // 🔄 指數退避重試機制
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 秒
+    const backoffFactor = 2;
+    let lastError: any = null;
+    let lastResponse: Response | null = null;
+    let lastData: any = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: message }
+                ]
+              }
             ]
+          }),
+          // 設定超時時間（30秒）
+          signal: AbortSignal.timeout(30000)
+        });
+
+        const data = await response.json();
+
+        // 檢查是否需要重試（僅針對 429 或 503）
+        if (!response.ok && (response.status === 429 || response.status === 503)) {
+          lastError = null;
+          lastResponse = response;
+          lastData = data;
+
+          // 如果還有重試機會
+          if (attempt < maxRetries) {
+            const delay = baseDelay * Math.pow(backoffFactor, attempt);
+            console.warn(`⚠️ Hit ${response.status} (${response.status === 429 ? 'Too Many Requests' : 'Service Unavailable'}), retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+            
+            // 等待退避時間
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue; // 重試
+          } else {
+            // 已達最大重試次數，跳出循環處理錯誤
+            break;
           }
-        ]
-      }),
-      // 設定超時時間（30秒）
-      signal: AbortSignal.timeout(30000)
-    });
+        }
 
-    const data = await response.json();
+        // 成功或非重試錯誤，直接處理
+        lastResponse = response;
+        lastData = data;
+        break;
 
-    if (!response.ok) {
+      } catch (error: any) {
+        lastError = error;
+        
+        // 如果是超時或網路錯誤，且還有重試機會，可以考慮重試
+        // 但這裡我們主要關注 429/503，所以只記錄錯誤
+        if (attempt < maxRetries && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+          const delay = baseDelay * Math.pow(backoffFactor, attempt);
+          console.warn(`⚠️ Network/Timeout error, retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // 其他錯誤或已達最大重試次數，跳出循環
+        break;
+      }
+    }
+
+    // 使用最後一次嘗試的結果
+    // 如果沒有 response，說明所有重試都失敗了（網路錯誤）
+    if (!lastResponse && lastError) {
+      throw lastError; // 讓 catch 塊處理
+    }
+    
+    const response = lastResponse!;
+    const data = lastData;
+
+    // 處理錯誤（包括重試後仍失敗的情況）
+    if (!response || !response.ok) {
+      // 如果沒有 data（可能是網路錯誤），構造錯誤數據
+      if (!data && lastError) {
+        throw lastError; // 讓 catch 塊處理
+      }
+      
       console.error("API Error:", data);
       
       // 特別處理配額超限錯誤（429 或 quota exceeded）
@@ -70,14 +138,24 @@ export async function POST(request: Request) {
       const isDailyLimit = retryAfter && retryAfter > 3600;
       const isMinuteLimit = retryAfter && retryAfter < 60;
       
+      // 檢查是否為配額為 0 的情況（模型沒有免費層配額）
+      const quotaDetails = data.error?.details?.find((d: any) => d['@type'] === 'type.googleapis.com/google.rpc.QuotaFailure');
+      const hasZeroQuota = quotaDetails?.violations?.some((v: any) => 
+        errorMessage.includes(`limit: 0`) || 
+        errorMessage.includes('free_tier') && errorMessage.includes('limit: 0')
+      );
+      
       let quotaTypeMessage = '';
-      if (isDailyLimit) {
-        quotaTypeMessage = '每日配額已達上限（免費層每日 250 個請求）。請明天再試，或考慮升級到付費方案。';
+      if (hasZeroQuota) {
+        // 配額為 0，表示該模型沒有免費層配額
+        quotaTypeMessage = `⚠️ 該模型沒有免費層配額（limit: 0）。\n\n當前使用模型：${CURRENT_MODEL_NAME}\n\n可能原因：\n1. API Key 沒有啟用該模型的配額\n2. 需要升級到付費方案\n\n解決方案：\n1. 檢查 Google AI Studio 確認模型配額設置\n2. 確認已升級到付費方案\n3. 如果問題持續，可以嘗試切換回 gemini-flash-latest（1.5 Flash）`;
+      } else if (isDailyLimit) {
+        quotaTypeMessage = '每日配額已達上限（免費層每日 1,500 個請求）。請明天再試，或考慮升級到付費方案。';
       } else if (isMinuteLimit) {
-        quotaTypeMessage = `每分鐘配額已達上限（免費層每分鐘 20 個請求）。${retryAfter ? `請等待約 ${retryAfter} 秒後再試。` : '請稍後再試。'}`;
+        quotaTypeMessage = `每分鐘配額已達上限（免費層每分鐘 15 個請求）。${retryAfter ? `請等待約 ${retryAfter} 秒後再試。` : '請稍後再試。'}`;
       } else {
         // 無法確定，提供兩種可能
-        quotaTypeMessage = `API 配額已達上限。可能是每分鐘限制（20 個請求）或每日限制（250 個請求）。${retryAfter ? `請等待約 ${Math.ceil(retryAfter / 60)} 分鐘後再試。` : '請稍後再試，或檢查 Google Cloud Console 的使用情況。'}`;
+        quotaTypeMessage = `API 配額已達上限。可能是每分鐘限制（15 個請求）或每日限制（1,500 個請求）。${retryAfter ? `請等待約 ${Math.ceil(retryAfter / 60)} 分鐘後再試。` : '請稍後再試，或檢查 Google Cloud Console 的使用情況。'}`;
       }
       
       return NextResponse.json({ 

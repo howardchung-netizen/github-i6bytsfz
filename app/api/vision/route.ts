@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { CURRENT_VISION_MODEL_NAME } from '../../lib/constants';
 
 export async function POST(request: Request) {
   try {
@@ -11,8 +12,9 @@ export async function POST(request: Request) {
       }, { status: 500 });
     }
 
-    // 使用 Gemini 1.5 Flash（支持 Vision，成本較低）
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 使用統一的 Vision 模型配置（從 constants.js 導入）
+    // 當前使用：gemini-2.0-flash（支持 Vision API，2.0 Flash 免費版）
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_VISION_MODEL_NAME}:generateContent?key=${apiKey}`;
 
     // 移除 Base64 前綴（如果有的話）
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');

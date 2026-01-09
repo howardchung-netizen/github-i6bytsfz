@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { CURRENT_MODEL_NAME } from '../../lib/constants';
 
 /**
  * 測試 Google API 連線的端點
@@ -16,8 +17,8 @@ export async function GET() {
       }, { status: 500 });
     }
 
-    // 測試連線到 Google Gemini API
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // 測試連線到 Google Gemini API（使用統一的模型配置）
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_MODEL_NAME}:generateContent?key=${apiKey}`;
     
     const testMessage = "請回覆：測試成功";
     

@@ -643,5 +643,131 @@ const cleanedBefore = textBefore.replace(/\\([0-9]+)/g, '$1');
 
 ---
 
-**最後更新**：2024年12月
+### 12. ✅ 第 1 週優化項目：為 1 萬用戶規模優化查詢性能
+
+**日期**：2026年1月8日
+
+**背景**：
+- 目標：為 1 萬用戶規模優化 Firestore 查詢性能
+- 當前問題：`fetchUnusedQuestion` 使用客戶端過濾，查詢效率低
+- 需要實施：服務器端過濾、添加 `subject` 欄位、創建 Firebase 索引
+
+**實施內容**：
+
+#### 12.1 添加 `subject` 欄位到儲存邏輯
+
+**文件**：`app/lib/rag-service.js`
+
+**修改內容**：
+- ✅ 更新 `saveGeneratedQuestion` 函數簽名：添加 `subject` 和 `allTopicsList` 參數
+- ✅ 實現 `subject` 自動推斷邏輯：從 `topicId` 和 `allTopicsList` 推斷科目
+- ✅ 確保 `subject` 欄位正確保存到 Firestore
+
+**技術細節**：
+- 從 `allTopicsList` 中查找匹配的 `topicId`，提取 `subject` 欄位
+- 如果無法推斷，使用 `null`（向後兼容）
+- 分類邏輯：年級 > 科目 > 單元 > 子單元
+
+#### 12.2 更新所有調用處傳入 `subject`
+
+**文件**：`app/lib/ai-service.js`
+
+**修改內容**：
+- ✅ 更新 3 處 `saveGeneratedQuestion` 調用：
+  - `generateQuestion` 函數（第 95-97 行）
+  - 批次生成邏輯（第 425-429 行）
+  - 批次生成剩餘題目保存（第 442-446 行）
+- ✅ 傳入 `targetSubject` 和 `allTopicsList` 參數
+
+#### 12.3 實施服務器端過濾
+
+**文件**：`app/lib/rag-service.js`
+
+**修改內容**：
+- ✅ 更新 `fetchUnusedQuestion` 函數實現服務器端過濾
+- ✅ 添加 `where` 條件：
+  - `grade == level`
+  - `subject == subject`（如果提供）
+  - `topic_id == topicId`（如果提供）
+  - `source == "ai_next_api"`
+- ✅ 保留客戶端過濾作為備用（過濾已使用的題目）
+- ✅ 限制查詢結果為 50 題（優化網絡傳輸）
+
+**技術細節**：
+- 使用 Firestore `where` 子句進行服務器端過濾
+- 客戶端過濾用於排除已使用的題目（Firestore 不支持 `NOT IN`）
+- 查詢順序：先服務器端過濾，再客戶端過濾
+
+#### 12.4 創建 Firebase 複合索引
+
+**索引配置**：
+
+**索引 1：`grade_subject_topic_id_source`**
+- 集合 ID：`past_papers`
+- 欄位：
+  - `grade` (遞增)
+  - `subject` (遞增)
+  - `topic_id` (遞增)
+  - `source` (遞增)
+- 查詢範圍：集合
+- 用途：支持按年級、科目、單元、來源查詢
+
+**索引 2：`grade_source_created_at`**
+- 集合 ID：`past_papers`
+- 欄位：
+  - `grade` (遞增)
+  - `source` (遞增)
+  - `created_at` (遞減)
+- 查詢範圍：集合
+- 用途：支持按年級、來源、創建時間排序查詢
+
+**創建指南**：
+- 創建文檔：`docs/FIREBASE_INDEX_SETUP_GUIDE.md`
+- 提供詳細的 Firebase Console 操作步驟
+- 說明索引名稱是自動生成的（不需要手動輸入）
+
+#### 12.5 創建優化計劃和分析文檔
+
+**創建文檔**：
+- ✅ `docs/SCALE_10K_USERS_OPTIMIZATION_PLAN.md` - 詳細優化計劃（405 行）
+- ✅ `docs/FIREBASE_ASSET_ANALYSIS.md` - Firebase 儲存策略分析（530 行）
+- ✅ `docs/BATCH_STRATEGY_ASSESSMENT.md` - 批次生成策略評估（710 行）
+- ✅ `docs/CURRENT_GEN_LOGIC_REPORT.md` - 當前生成邏輯技術報告（647 行）
+- ✅ `docs/QUERY_OPTIMIZATION_TIMELINE.md` - 查詢優化時間線
+- ✅ `docs/FIREBASE_INDEX_SETUP_GUIDE.md` - Firebase 索引設置指南
+- ✅ `docs/OPTIMIZATION_COMPLETION_CHECKLIST.md` - 完成檢查清單
+
+**相關文件**：
+- `app/lib/rag-service.js` - 添加 `subject` 欄位、實施服務器端過濾
+- `app/lib/ai-service.js` - 更新所有調用處傳入 `subject`
+- `docs/SCALE_10K_USERS_OPTIMIZATION_PLAN.md` - 詳細優化計劃
+- `docs/FIREBASE_INDEX_SETUP_GUIDE.md` - 索引設置指南
+- `docs/OPTIMIZATION_COMPLETION_CHECKLIST.md` - 完成檢查清單
+
+**技術細節**：
+- `subject` 欄位：`"math" | "chi" | "eng" | null`
+- 服務器端過濾減少網絡傳輸（從 50-100 KB 降至 < 20 KB）
+- 複合索引支持高效多欄位查詢
+- 查詢性能目標：< 500ms（優化前：1-2 秒）
+
+**預期效果**：
+- ✅ 查詢響應時間減少 60-80%（從 1-2 秒降至 < 500ms）
+- ✅ 網絡傳輸減少 70-80%（從 50-100 KB 降至 < 20 KB）
+- ✅ Firestore 讀取次數減少 70%（從 50 次降至 10-15 次）
+- ✅ 支持 1 萬用戶規模的查詢性能
+
+**Git 提交記錄**：
+- `Add subject field to question storage and implement server-side filtering`
+- `Create Firebase composite indexes for optimized queries`
+- `Add comprehensive optimization plan and analysis documents`
+
+**後續工作**：
+- 等待 Firebase 索引構建完成（1-3 小時）
+- 驗證查詢性能改善
+- 監控 Firestore 使用情況
+- 評估是否需要實施動態限制（中期優化）
+
+---
+
+**最後更新**：2026年1月8日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`

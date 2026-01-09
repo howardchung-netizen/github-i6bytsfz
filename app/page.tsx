@@ -8,7 +8,7 @@ import { Loader2, Sparkles, MoreVertical } from 'lucide-react';
 import { auth } from './lib/firebase';
 import { DB_SERVICE } from './lib/db-service';
 import { AI_SERVICE } from './lib/ai-service';
-import { INITIAL_TOPICS, ADMIN_USER } from './lib/constants';
+import { INITIAL_TOPICS, ADMIN_USER, RPM_LIMIT, MIN_REQUEST_INTERVAL_MS } from './lib/constants';
 
 // UI Components
 import DashboardView from './components/DashboardView';
@@ -90,6 +90,19 @@ export default function App() {
     chi: { used: 0, limit: 20 },
     eng: { used: 0, limit: 20 }
   }); // 每日任務：每科20題
+
+  // --- 啟動時顯示 RPM 配置提醒 ---
+  useEffect(() => {
+    console.log(`🚀 API 速率限制配置：`);
+    console.log(`   - RPM 限制：${RPM_LIMIT} 次/分鐘`);
+    console.log(`   - 最小請求間隔：${MIN_REQUEST_INTERVAL_MS}ms (${(MIN_REQUEST_INTERVAL_MS/1000).toFixed(1)}秒)`);
+    if (RPM_LIMIT === 15) {
+      console.log(`   ⚠️ 當前為測試環境配置（RPM 15）`);
+      console.log(`   💡 切換到正式版時，請在 constants.js 將 RPM_LIMIT 改為 2000`);
+    } else if (RPM_LIMIT === 2000) {
+      console.log(`   ✅ 當前為正式環境配置（RPM 2000）`);
+    }
+  }, []);
 
   // --- Handlers ---
   const goToSelection = () => setView('selection');
@@ -347,14 +360,13 @@ export default function App() {
       
       let q = null; 
       try { 
-          // 速率限制：確保至少間隔 3 秒（如果之前有請求）
+          // 速率限制：根據 RPM_LIMIT 動態計算間隔時間
           const now = Date.now();
           const timeSinceLastRequest = now - lastRequestTime;
-          const minInterval = 3000; // 3 秒間隔
           
-          if (lastRequestTime > 0 && timeSinceLastRequest < minInterval) {
-              const waitTime = minInterval - timeSinceLastRequest;
-              console.log(`⏳ 速率限制：等待 ${waitTime}ms 後再生成第一題`);
+          if (lastRequestTime > 0 && timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+              const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+              console.log(`⏳ 速率限制（RPM ${RPM_LIMIT}）：等待 ${Math.ceil(waitTime/1000)} 秒後再生成第一題`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
           }
           
@@ -401,12 +413,17 @@ export default function App() {
       setUserAnswer(''); 
       setView('practice'); 
 
-      // 暫時禁用預加載功能，避免快速消耗免費層配額
-      // 預加載會在用戶點擊「下一題」時才觸發
+      // Disabled: Using AI_SERVICE batch caching strategy
+      // AI_SERVICE.generateQuestion now fetches 3 questions at a time and caches 2 internally.
+      // Frontend preloading is no longer needed as the service handles preloading automatically.
+      // 
+      // 啟用預加載功能：在背景生成下一題（偷跑模式）
+      // 注意：預加載會遵守 RPM 限制，不會超過速率限制
       // if (count > 1 && !quotaExceeded) {
+      //     // 延遲預加載，確保第一題已顯示給用戶
       //     setTimeout(() => {
       //         preloadNextQuestion(selectedTopicIds);
-      //     }, 4000);
+      //     }, MIN_REQUEST_INTERVAL_MS + 1000); // 間隔時間 + 1秒緩衝
       // }
   };
 
@@ -422,14 +439,13 @@ export default function App() {
       const subject = getSubjectFromTopics(topicIds);
       if (!checkDailyTaskLimit(subject)) return; // 如果已達限制，不預加載
       
-      // 速率限制：確保至少間隔 3.5 秒（免費層每分鐘 20 個請求，保守起見使用 3.5 秒）
+      // 速率限制：根據 RPM_LIMIT 動態計算間隔時間
       const now = Date.now();
       const timeSinceLastRequest = now - lastRequestTime;
-      const minInterval = 3500; // 3.5 秒間隔（更保守）
       
-      if (lastRequestTime > 0 && timeSinceLastRequest < minInterval) {
-          const waitTime = minInterval - timeSinceLastRequest;
-          console.log(`⏳ 速率限制：等待 ${Math.ceil(waitTime/1000)} 秒後再預加載`);
+      if (lastRequestTime > 0 && timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+          const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+          console.log(`⏳ 速率限制（RPM ${RPM_LIMIT}）：等待 ${Math.ceil(waitTime/1000)} 秒後再預加載`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
       }
       
@@ -473,7 +489,10 @@ export default function App() {
   };
 
   const generateNewQuestion = async () => { 
-      // 如果有預加載的題目，直接使用
+      // Note: preloadedQuestion check is kept for backward compatibility.
+      // With AI_SERVICE batch caching, this will rarely be used as questions
+      // are now served from the service-level cache automatically.
+      // 如果有預加載的題目，直接使用（向後兼容，現在主要由 AI_SERVICE 批量緩存處理）
       if (preloadedQuestion) {
           setCurrentQuestion(preloadedQuestion);
           setPreloadedQuestion(null);
@@ -495,14 +514,13 @@ export default function App() {
       setLoading(true); 
       let q = null;
       try { 
-          // 速率限制：確保至少間隔 3.5 秒（免費層每分鐘 20 個請求，保守起見使用 3.5 秒）
+          // 速率限制：根據 RPM_LIMIT 動態計算間隔時間
           const now = Date.now();
           const timeSinceLastRequest = now - lastRequestTime;
-          const minInterval = 3500; // 3.5 秒間隔（更保守）
           
-          if (lastRequestTime > 0 && timeSinceLastRequest < minInterval) {
-              const waitTime = minInterval - timeSinceLastRequest;
-              console.log(`⏳ 速率限制：等待 ${Math.ceil(waitTime/1000)} 秒`);
+          if (lastRequestTime > 0 && timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
+              const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
+              console.log(`⏳ 速率限制（RPM ${RPM_LIMIT}）：等待 ${Math.ceil(waitTime/1000)} 秒`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
           }
           
@@ -547,14 +565,18 @@ export default function App() {
       setCurrentQuestion(q); 
       setFeedback(null); 
       setShowExplanation(false); 
-      setUserAnswer(''); 
+      setUserAnswer('');
 
-      // 暫時禁用預加載功能，避免快速消耗免費層配額
-      // 用戶點擊「下一題」時才會生成新題目
+      // Disabled: Using AI_SERVICE batch caching strategy
+      // AI_SERVICE.generateQuestion now fetches 3 questions at a time and caches 2 internally.
+      // Frontend preloading is no longer needed as the service handles preloading automatically.
+      //
+      // 啟用預加載功能：在背景生成下一題（偷跑模式）
+      // 注意：預加載會遵守 RPM 限制，不會超過速率限制
       // if (sessionStats.current < sessionStats.total && !quotaExceeded) {
       //     setTimeout(() => {
       //         preloadNextQuestion();
-      //     }, 4000);
+      //     }, MIN_REQUEST_INTERVAL_MS + 1000); // 間隔時間 + 1秒緩衝
       // }
   };
 
@@ -567,6 +589,34 @@ export default function App() {
           Math.abs(parseFloat(finalAnswer) - currentQuestion.answer) < 0.1 : 
           finalAnswer.toString().trim() === currentQuestion.answer.toString().trim(); 
       
+      // 計算答題時間
+      const timeSpent = Date.now() - startTime;
+      
+      // 記錄題目使用情況（異步，不阻塞 UI）
+      if (currentQuestion && currentQuestion.id && user && user.id) {
+          // 獲取題目 ID（可能是數字 ID 或 Firestore 文檔 ID）
+          const questionId = typeof currentQuestion.id === 'number' 
+              ? currentQuestion.id.toString() 
+              : currentQuestion.id;
+          
+          DB_SERVICE.recordQuestionUsage(
+              user.id,
+              questionId,
+              isCorrect,
+              timeSpent
+          ).then(success => {
+              if (success) {
+                  console.log(`✅ Usage recorded for Question ID: ${questionId}, isCorrect: ${isCorrect}`);
+              } else {
+                  console.warn(`⚠️ Failed to record usage for Question ID: ${questionId}`);
+              }
+          }).catch(err => {
+              console.error(`❌ Error recording question usage:`, err);
+          });
+      } else {
+          console.warn(`⚠️ Cannot record usage: missing question.id (${currentQuestion?.id}) or user.id (${user?.id})`);
+      }
+      
       if (isCorrect) { 
           setFeedback('correct'); 
           setUser(u => ({...u, xp: (u.xp || 0) + 100}));
@@ -576,7 +626,7 @@ export default function App() {
           logLearningActivity('answer_correct', {
               questionId: currentQuestion.id,
               topic: currentQuestion.topic || sessionTopics[0],
-              timeSpent: Date.now() - startTime
+              timeSpent: timeSpent
           });
       } else { 
           setFeedback('wrong'); 
@@ -591,7 +641,7 @@ export default function App() {
               topic: currentQuestion.topic || sessionTopics[0],
               userAnswer: finalAnswer,
               correctAnswer: currentQuestion.answer,
-              timeSpent: Date.now() - startTime
+              timeSpent: timeSpent
           });
       } 
   };

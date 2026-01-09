@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { CURRENT_MODEL_NAME } from '../../lib/constants';
 
 /**
  * 檢查 Google Gemini API 配額狀態
@@ -16,8 +17,8 @@ export async function GET() {
       }, { status: 500 });
     }
 
-    // 發送一個簡單的測試請求
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // 發送一個簡單的測試請求（使用統一的模型配置）
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_MODEL_NAME}:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -61,7 +62,7 @@ export async function GET() {
           message: '❌ API 配額已達上限',
           suggestion: retryAfter 
             ? `請等待 ${retryAfter} 後再試`
-            : '免費層每日配額為 20 個請求，請等待重置（香港時間下午 4:00）或升級到付費方案',
+            : '免費層每日配額為 1,500 個請求，請等待重置（香港時間下午 4:00）或升級到付費方案',
           timestamp: new Date().toISOString()
         }, { status: 200 });
       }

@@ -1,4 +1,19 @@
-export const CURRENT_MODEL_NAME = "gemini-2.0-flash-exp";
+// Gemini Model Configuration
+// 統一管理模型名稱，方便切換不同版本
+// 當前使用：Gemini 2.0 Flash（免費版，RPM 15, RPD 1,500）
+// 注意：如果遇到 limit: 0 錯誤，表示 API Key 對 2.0 Flash 沒有免費層配額，需要升級到付費方案
+export const CURRENT_MODEL_NAME = "gemini-2.0-flash"; // 主要用於文字生成（2.0 Flash 免費版）
+export const CURRENT_VISION_MODEL_NAME = "gemini-2.0-flash"; // 用於 Vision API（2.0 Flash 支持 Vision）
+
+// RPM (Requests Per Minute) 速率限制配置
+// 當前使用：Gemini 2.0 Flash 免費版（RPM 15）
+export const RPM_LIMIT = 15; // 當前：2.0 Flash 免費版（RPM 15）
+// export const RPM_LIMIT = 2000; // 付費版：如果升級到付費版，取消註釋此行並註釋上一行
+
+// 根據 RPM 計算最小請求間隔（毫秒）
+// 公式：60秒 / RPM = 每次請求間隔（秒）
+// 保守起見，增加 10% 緩衝時間
+export const MIN_REQUEST_INTERVAL_MS = Math.ceil((60 / RPM_LIMIT) * 1000 * 1.1);
 export const APP_ID = 'default-app-id';
 
 export const ADMIN_USER = {

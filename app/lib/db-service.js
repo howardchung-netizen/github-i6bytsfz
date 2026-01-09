@@ -12,7 +12,9 @@ import {
     writeBatch,
     updateDoc,
     getDoc,
-    orderBy
+    orderBy,
+    setDoc,
+    serverTimestamp
 } from "firebase/firestore";
 
 // 👇 2. 這裡是修正重點：Auth 相關函數必須從 'firebase/auth' 引入
@@ -1016,6 +1018,54 @@ export const DB_SERVICE = {
         } catch(e) {
             console.error("Get Paper By ID Error:", e);
             return null;
+        }
+    },
+    
+    /**
+     * Records that a user has attempted a specific question.
+     * Uses a subcollection strategy to avoid Firestore 1MB document limit.
+     * Path: artifacts/{APP_ID}/users/{userId}/question_usage/{questionId}
+     * 
+     * @param {string} userId - The current user's UID
+     * @param {string} questionId - The ID of the question document (from past_papers collection)
+     * @param {boolean} isCorrect - Whether the user got it right
+     * @param {number} timeSpentMs - Time spent in milliseconds (optional, defaults to 0)
+     * @returns {Promise<boolean>} - Returns true if successful, false otherwise
+     */
+    recordQuestionUsage: async (userId, questionId, isCorrect, timeSpentMs = 0) => {
+        try {
+            if (!userId || !questionId) {
+                console.warn("⚠️ recordQuestionUsage: Missing userId or questionId");
+                return false;
+            }
+            
+            // Reference the subcollection: artifacts/{APP_ID}/users/{userId}/question_usage
+            const usageRef = doc(
+                db, 
+                "artifacts", 
+                APP_ID, 
+                "users", 
+                userId, 
+                "question_usage", 
+                questionId
+            );
+            
+            // Use setDoc instead of addDoc to prevent duplicates (idempotent operation)
+            // If the document already exists, it will be overwritten with the latest attempt
+            await setDoc(usageRef, {
+                questionId: questionId,
+                questionRef: `artifacts/${APP_ID}/public/data/past_papers/${questionId}`,
+                usedAt: serverTimestamp(), // Server-side timestamp for consistency
+                isCorrect: isCorrect,
+                timeSpentMs: timeSpentMs || 0,
+                createdAt: new Date().toISOString() // Client-side timestamp as fallback
+            }, { merge: true }); // merge: true allows updating existing records without overwriting other fields
+            
+            console.log(`✅ Recorded question usage: userId=${userId}, questionId=${questionId}, isCorrect=${isCorrect}`);
+            return true;
+        } catch (e) {
+            console.error("❌ Record Question Usage Error:", e);
+            return false;
         }
     }
 }; 
