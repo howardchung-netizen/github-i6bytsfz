@@ -29,6 +29,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [feedbackText, setFeedbackText] = useState('');
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<string[]>([]);
   const [questionCategory, setQuestionCategory] = useState('');
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   
   
   // 圖像上傳相關狀態
