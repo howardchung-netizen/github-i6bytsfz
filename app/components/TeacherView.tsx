@@ -1168,7 +1168,8 @@ export default function TeacherView({ setView, user, topics }) {
                             topicIds: [],
                             questionCount: 10,
                             dueDate: '',
-                            seedQuestionIds: []
+                            seedQuestionIds: [],
+                            grade: selectedClass?.grade || assignmentData.grade || 'P4'
                           });
                         }}
                         className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded-lg transition"
