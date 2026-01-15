@@ -1122,7 +1122,8 @@ export default function TeacherView({ setView, user, topics }) {
                                   topicIds: [],
                                   questionCount: 10,
                                   dueDate: '',
-                                  seedQuestionIds: []
+                                  seedQuestionIds: [],
+                                  grade: selectedClass?.grade || assignmentData.grade || 'P4'
                                 });
                                 setShowCreateAssignment(false);
                               } else {
