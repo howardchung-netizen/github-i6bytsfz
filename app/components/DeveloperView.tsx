@@ -25,6 +25,11 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   
+  // 開發者回饋相關狀態
+  const [feedbackText, setFeedbackText] = useState('');
+  const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<string[]>([]);
+  const [questionCategory, setQuestionCategory] = useState('');
+  
   
   // 圖像上傳相關狀態
   const [imageFiles, setImageFiles] = useState<File[]>([]);
