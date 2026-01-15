@@ -33,6 +33,48 @@ const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty
     return JSON.stringify(keyObj);
 };
 
+// --- JSON 清理和解析輔助函數 ---
+const cleanAndParseJSON = (jsonString) => {
+    try {
+        // 步驟 1：移除 markdown 代碼塊標記
+        let cleanJson = jsonString.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // 步驟 2：嘗試直接解析
+        try {
+            return JSON.parse(cleanJson);
+        } catch (firstError) {
+            // 步驟 3：如果失敗，嘗試提取 JSON 部分（查找第一個 [ 或 { 到最後一個 ] 或 }）
+            const arrayMatch = cleanJson.match(/\[[\s\S]*\]/);
+            const objectMatch = cleanJson.match(/\{[\s\S]*\}/);
+            const jsonMatch = arrayMatch || objectMatch;
+            
+            if (jsonMatch) {
+                cleanJson = jsonMatch[0];
+                try {
+                    return JSON.parse(cleanJson);
+                } catch (secondError) {
+                    // 步驟 4：嘗試修復常見的轉義字符問題
+                    // 修復單獨的反斜線（不在有效轉義序列中的）- 這是一個常見的 AI 生成問題
+                    // 正則表達式：匹配反斜線，但不在 \", \\, \/, \b, \f, \n, \r, \t, \uXXXX 之前
+                    cleanJson = cleanJson.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
+                    try {
+                        return JSON.parse(cleanJson);
+                    } catch (thirdError) {
+                        // 最後嘗試：更激進的清理
+                        // 移除可能的控制字符（保留換行和製表符）
+                        cleanJson = cleanJson.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+                        return JSON.parse(cleanJson);
+                    }
+                }
+            }
+            throw firstError;
+        }
+    } catch (error) {
+        console.error("❌ JSON 清理失敗，原始響應前 500 字符:", jsonString.substring(0, 500));
+        throw error;
+    }
+};
+
 // --- Fallback Local Brain ---
 const LOCAL_BRAIN = {
   generateQuestion: (level, difficulty, selectedTopics, allTopicsList) => {
@@ -281,8 +323,7 @@ export const AI_SERVICE = {
         try {
             // 如果後端回傳的是字串，嘗試解析
             if (data.response && typeof data.response === 'string') {
-                const cleanJson = data.response.replace(/```json/g, '').replace(/```/g, '').trim();
-                const parsed = JSON.parse(cleanJson);
+                const parsed = cleanAndParseJSON(data.response);
                 
                 // 檢查是否為陣列
                 if (Array.isArray(parsed)) {
@@ -529,8 +570,8 @@ export const AI_SERVICE = {
     }
   },
   
-  // 基於錯題生成「舉一反三」的新題目
-  generateVariationFromMistake: async (mistakeData, level, allTopicsList) => {
+  // 基於錯題生成「舉一反三」的新題目（支持 feedback 參數）
+  generateVariationFromMistake: async (mistakeData, level, allTopicsList, feedbackText = null) => {
     // 從錯題中提取信息
     const originalQuestion = mistakeData.question || '';
     const originalAnswer = mistakeData.answer || '';
@@ -561,8 +602,8 @@ export const AI_SERVICE = {
     // 建構 Prompt - 基於錯題生成新題目
     const promptText = `
         Role: Professional HK Primary ${targetSubject === 'math' ? 'Math' : targetSubject === 'chi' ? 'Chinese' : 'English'} Teacher.
-        Task: Create a NEW variation question based on the student's mistake. This is a "舉一反三" (Learn by Analogy) exercise.
-        
+        Task: Create a NEW variation question based on the original question. This is a "舉一反三" (Learn by Analogy) exercise.
+        ${feedbackText ? `\n        IMPORTANT FEEDBACK: Please incorporate the following feedback when generating the improved question:\n        "${feedbackText}"\n        The improved question should address or implement the suggestions in this feedback.\n` : ''}
         Original Question: "${originalQuestion}"
         Correct Answer: "${originalAnswer}"
         Category/Topic: ${category} / ${topic}
@@ -572,6 +613,7 @@ export const AI_SERVICE = {
         1. Maintain the SAME difficulty level and core concept as the original question.
         2. Change the numbers, names, context, and scenario completely.
         3. Keep the same mathematical/logical structure (e.g., if it's a division problem, make it a division problem with different numbers).
+        ${feedbackText ? '4. CRITICAL: Apply the feedback provided above to improve the question quality, formatting, or approach.' : ''}
         4. Output strict JSON only.
         5. IMPORTANT: Ensure all strings are valid JSON. Escape all backslashes.
         ${isMathSubject && isMCQ ? '6. For Math MCQ questions, you MUST create a multiple-choice question with exactly 8 options: 1 correct answer and 7 plausible distractors (wrong answers that are mathematically reasonable).\n   CRITICAL: All options must be UNIQUE. Do NOT include duplicate values (e.g., "$72" and "$72.00" are the same - only include one). Normalize all numeric options to the same format.' : isMCQ ? '6. For MCQ questions, include 4 options: 1 correct answer and 3 plausible distractors.\n   CRITICAL: All options must be UNIQUE. Do NOT include duplicate values.' : '6. Create a clear question that tests the same concept.'}
@@ -637,10 +679,13 @@ export const AI_SERVICE = {
         // 如果後端回傳的是字串，嘗試解析
         if (data.response && typeof data.response === 'string') {
              try {
-                const cleanJson = data.response.replace(/```json/g, '').replace(/```/g, '').trim();
-                aiResult = JSON.parse(cleanJson);
+                aiResult = cleanAndParseJSON(data.response);
              } catch (e) {
                  console.warn("JSON Parse from API text failed, using raw data if possible", e);
+                 // 如果解析失敗，嘗試使用原始數據（如果有）
+                 if (data.data) {
+                     aiResult = data.data;
+                 }
              }
         } else if (data.data) {
              aiResult = data.data;

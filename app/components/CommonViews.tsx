@@ -63,12 +63,56 @@ const renderMathText = (text) => {
 
 export const TopicSelectionView = ({ user, setView, startPracticeSession, topics, setLoading }) => {
   const [selected, setSelected] = useState([]);
+  const [questionCount, setQuestionCount] = useState(20); // 默認 20 題
   const availableTopics = topics.filter(t => t.grade === user.level);
   const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  // 處理題目數量變化
+  const handleCountChange = (e) => {
+    const value = parseInt(e.target.value) || 1;
+    if (value < 1) {
+      setQuestionCount(1);
+    } else if (value > 100) {
+      setQuestionCount(100);
+    } else {
+      setQuestionCount(value);
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow p-6 max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 font-sans">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-slate-800"><Sparkles className="text-indigo-500"/> 選擇練習單元 ({user.level})</h2>
+        
+        {/* 題目數量選擇 */}
+        <div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+          <label className="block text-sm font-bold text-indigo-900 mb-2">
+            題目數量
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={questionCount}
+              onChange={handleCountChange}
+              className="w-20 px-3 py-2 border border-indigo-300 rounded-lg text-center font-bold text-indigo-900 focus:outline-none focus:border-indigo-500 bg-white"
+            />
+            <span className="text-sm text-indigo-700 font-medium">
+              ({questionCount}/100)
+            </span>
+            <div className="flex-1">
+              <input
+                type="range"
+                min="1"
+                max="100"
+                value={questionCount}
+                onChange={(e) => setQuestionCount(parseInt(e.target.value))}
+                className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {availableTopics.length > 0 ? availableTopics.map(t => (
                 <button key={t.id} onClick={() => toggle(t.id)} className={`p-4 rounded-xl border-2 text-left transition-all ${selected.includes(t.id) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-indigo-200'}`}>
@@ -87,13 +131,13 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
                 // 先設置 loading 狀態並切換到 practice view，顯示「題目生成中」畫面
                 if (setLoading) setLoading(true);
                 setView('practice');
-                // 然後開始生成題目
-                await startPracticeSession(selected);
+                // 然後開始生成題目，傳入選擇的題目數量
+                await startPracticeSession(selected, questionCount);
               }} 
               disabled={selected.length === 0} 
               className="flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              開始練習 ({selected.length})
+              開始練習 ({questionCount}/100)
             </button>
         </div>
     </div>

@@ -1,17 +1,24 @@
 "use client";
-import React, { useRef, useEffect } from 'react';
-import { Loader2, CloudLightning, BrainCircuit, Accessibility, Volume2, Home, CheckCircle, XCircle, RefreshCw, HelpCircle, ArrowRight, BookOpen } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Loader2, CloudLightning, BrainCircuit, Accessibility, Volume2, Home, CheckCircle, XCircle, RefreshCw, HelpCircle, ArrowRight, BookOpen, Save, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { AI_SERVICE } from '../lib/ai-service';
 import { highlightKeywords, speakTextForADHD, isSpeechSynthesisSupported } from '../lib/adhd-utils';
+import { DB_SERVICE } from '../lib/db-service';
+import { RAG_SERVICE } from '../lib/rag-service';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
 export default function PracticeView({ 
   user, currentQuestion, userAnswer, setUserAnswer, checkAnswer, feedback, setFeedback, 
   handleNext, setView, showExplanation, setShowExplanation, sessionProgress, loading, 
-  adhdMode 
+  adhdMode, topics
 }) {
+  
+  // 邏輯補充相關狀態（僅開發者可見）
+  const isDeveloper = user && user.email === 'admin@test.com';
+  const [feedbackText, setFeedbackText] = useState('');
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   
   // ADHD 模式：自動播放語音
   useEffect(() => {
@@ -31,6 +38,13 @@ export default function PracticeView({
       };
     }
   }, [adhdMode, currentQuestion?.id, loading, feedback]);
+  
+  // 當題目變化時，清空回饋輸入
+  useEffect(() => {
+    if (currentQuestion) {
+      setFeedbackText('');
+    }
+  }, [currentQuestion?.id]);
 
   const handleSpeak = () => { 
       if(currentQuestion) {
@@ -45,6 +59,104 @@ export default function PracticeView({
   const handleOptionClick = (opt) => {
       if (feedback) return;
       setUserAnswer(opt);
+  };
+  
+  // 保存邏輯補充回饋（僅開發者）
+  const handleSaveFeedback = async () => {
+      if (!isDeveloper) {
+          alert('❌ 只有開發者帳號可以使用此功能');
+          return;
+      }
+      
+      if (!feedbackText.trim()) {
+          alert('請輸入回饋內容');
+          return;
+      }
+      
+      if (!currentQuestion) {
+          alert('沒有當前題目');
+          return;
+      }
+      
+      setIsSavingFeedback(true);
+      try {
+          // 推斷科目
+          const questionId = typeof currentQuestion.id === 'number' 
+              ? currentQuestion.id.toString() 
+              : currentQuestion.id;
+          const topicId = currentQuestion.topic_id || null;
+          const category = currentQuestion.category || currentQuestion.topic || '其他';
+          const subject = currentQuestion.subject || 'math';
+          
+          // 推斷題型
+          const questionType = [];
+          if (currentQuestion.type === 'mcq' || currentQuestion.options) {
+              questionType.push('選擇題');
+          } else {
+              questionType.push('文字題');
+          }
+          if (currentQuestion.type === 'geometry' || currentQuestion.shape) {
+              questionType.push('幾何題');
+          }
+          
+          // 保存回饋
+          const feedbackData = {
+              questionId: questionId,
+              questionType: questionType.length > 0 ? questionType : ['其他'],
+              category: category,
+              subject: subject,
+              feedback: feedbackText.trim(),
+              createdBy: user.email
+          };
+          
+          const feedbackId = await DB_SERVICE.saveDeveloperFeedback(feedbackData);
+          
+          if (feedbackId) {
+              // 根據回饋生成改進題目
+              try {
+                  const improvedQuestion = await AI_SERVICE.generateVariationFromMistake(
+                      {
+                          question: currentQuestion.question,
+                          answer: currentQuestion.answer,
+                          category: category,
+                          topic: currentQuestion.topic || category,
+                          options: currentQuestion.options
+                      },
+                      user?.level || 'P4',
+                      topics || [],
+                      feedbackText.trim() // 傳遞回饋文本
+                  );
+                  
+                  if (improvedQuestion) {
+                      // 儲存改進題目到資料庫
+                      const topicIdForSave = topicId || (topics && topics.length > 0 ? topics[0].id : null);
+                      await RAG_SERVICE.saveGeneratedQuestion(
+                          improvedQuestion,
+                          topicIdForSave,
+                          user?.level || 'P4',
+                          subject,
+                          topics || []
+                      );
+                      alert('✅ 回饋已保存！改進題目已生成並儲存到資料庫。');
+                  } else {
+                      alert('✅ 回饋已保存！但改進題目生成失敗。');
+                  }
+              } catch (improveError) {
+                  console.error('生成改進題目失敗:', improveError);
+                  alert('✅ 回饋已保存！但改進題目生成失敗：' + (improveError.message || '未知錯誤'));
+              }
+              
+              // 清空輸入
+              setFeedbackText('');
+          } else {
+              alert('❌ 保存失敗，請檢查連線');
+          }
+      } catch (e) {
+          console.error("Save Feedback Error:", e);
+          alert('保存失敗：' + (e.message || '未知錯誤'));
+      } finally {
+          setIsSavingFeedback(false);
+      }
   };
 
   // 渲染包含 LaTeX 的文本
@@ -490,6 +602,43 @@ export default function PracticeView({
                 )}
               </div>
             </div>
+            
+            {/* 邏輯補充（僅開發者可見） */}
+            {isDeveloper && (
+                <div className="mb-4 max-w-xl mx-auto">
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5">
+                        <div className="flex items-center justify-between mb-1.5">
+                            <h4 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                <Sparkles size={12} className="text-indigo-600" />
+                                邏輯補充
+                            </h4>
+                        </div>
+                        <textarea
+                            value={feedbackText}
+                            onChange={(e) => setFeedbackText(e.target.value)}
+                            placeholder="例如：注意單位換算，答案格式應為小數..."
+                            className="w-full h-16 bg-white border border-indigo-300 rounded-md p-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 resize-none"
+                        />
+                        <button
+                            onClick={handleSaveFeedback}
+                            disabled={isSavingFeedback || !feedbackText.trim()}
+                            className="mt-1.5 w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-bold py-1.5 px-3 rounded-md transition flex items-center justify-center gap-1.5 text-xs"
+                        >
+                            {isSavingFeedback ? (
+                                <>
+                                    <RefreshCw size={12} className="animate-spin" />
+                                    保存中...
+                                </>
+                            ) : (
+                                <>
+                                    <Save size={12} />
+                                    保存回饋
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
           
             {/* Answer Section */}
             <div className="flex flex-col items-center gap-4 max-w-sm mx-auto">

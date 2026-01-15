@@ -30,7 +30,8 @@ export default function TeacherView({ setView, user, topics }) {
     topicIds: [],
     questionCount: 10,
     dueDate: '',
-    seedQuestionIds: [] // 新增：選擇的種子題目 ID
+    seedQuestionIds: [], // 新增：選擇的種子題目 ID
+    grade: 'P4' // 新增：年級，默認值為 P4
   });
   
   // 作業種子題目選擇頁面狀態

@@ -9,6 +9,7 @@ import { auth } from './lib/firebase';
 import { DB_SERVICE } from './lib/db-service';
 import { AI_SERVICE } from './lib/ai-service';
 import { INITIAL_TOPICS, ADMIN_USER, RPM_LIMIT, MIN_REQUEST_INTERVAL_MS } from './lib/constants';
+import { calculateAbilityScores, formatScoresForRadar } from './lib/ability-scoring';
 
 // UI Components
 import DashboardView from './components/DashboardView';
@@ -71,16 +72,17 @@ export default function App() {
   const [mistakes, setMistakes] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Stats (Mock data for now, ideally fetch from DB)
+  // Stats (初始值為 50/100，從數據庫載入或使用默認值)
   const [stats, setStats] = useState({
-    math: [{ subject: '運算', A: 80, fullMark: 100 }, { subject: '幾何', A: 65, fullMark: 100 }, { subject: '邏輯', A: 90, fullMark: 100 }, { subject: '應用題', A: 50, fullMark: 100 }, { subject: '數據', A: 70, fullMark: 100 }],
-    chi: [{ subject: '閱讀', A: 75, fullMark: 100 }, { subject: '寫作', A: 60, fullMark: 100 }, { subject: '成語', A: 85, fullMark: 100 }, { subject: '文法', A: 70, fullMark: 100 }, { subject: '修辭', A: 65, fullMark: 100 }],
-    eng: [{ subject: 'Grammar', A: 70, fullMark: 100 }, { subject: 'Vocab', A: 80, fullMark: 100 }, { subject: 'Reading', A: 65, fullMark: 100 }, { subject: 'Listening', A: 85, fullMark: 100 }, { subject: 'Speaking', A: 60, fullMark: 100 }]
+    math: [{ subject: '運算', A: 50, fullMark: 100 }, { subject: '幾何', A: 50, fullMark: 100 }, { subject: '邏輯', A: 50, fullMark: 100 }, { subject: '應用題', A: 50, fullMark: 100 }, { subject: '數據', A: 50, fullMark: 100 }],
+    chi: [{ subject: '閱讀', A: 50, fullMark: 100 }, { subject: '寫作', A: 50, fullMark: 100 }, { subject: '成語', A: 50, fullMark: 100 }, { subject: '文法', A: 50, fullMark: 100 }, { subject: '修辭', A: 50, fullMark: 100 }],
+    eng: [{ subject: 'Grammar', A: 50, fullMark: 100 }, { subject: 'Vocab', A: 50, fullMark: 100 }, { subject: 'Reading', A: 50, fullMark: 100 }, { subject: 'Listening', A: 50, fullMark: 100 }, { subject: 'Speaking', A: 50, fullMark: 100 }]
   });
   
   const [sessionStats, setSessionStats] = useState({ total: 20, current: 0, correct: 0 });
   const [sessionMistakes, setSessionMistakes] = useState([]);
   const [sessionTopics, setSessionTopics] = useState([]);
+  const [sessionQuestions, setSessionQuestions] = useState([]); // 追蹤試卷中的所有題目和答題結果
   const [preloadedQuestion, setPreloadedQuestion] = useState(null); // 預加載的下一題
   const [quotaExceeded, setQuotaExceeded] = useState(false); // 配額超限標記
   const [quotaRetryAfter, setQuotaRetryAfter] = useState(null); // 配額重試時間（秒）
@@ -350,6 +352,7 @@ export default function App() {
 
       setSessionStats({ total: count, current: 1, correct: 0 }); 
       setSessionMistakes([]); 
+      setSessionQuestions([]); // 重置試卷題目追蹤
       setSessionTopics(selectedTopicIds);
       // 注意：loading 狀態應該在調用此函數之前就已經設置為 true（在 DailyTaskView 或 TopicSelectionView 中）
       // 這裡確保 loading 狀態是 true
@@ -617,6 +620,15 @@ export default function App() {
           console.warn(`⚠️ Cannot record usage: missing question.id (${currentQuestion?.id}) or user.id (${user?.id})`);
       }
       
+      // 記錄題目答題結果到 sessionQuestions
+      const questionResult = {
+        ...currentQuestion,
+        isCorrect: isCorrect,
+        userAnswer: finalAnswer,
+        timeSpent: timeSpent
+      };
+      setSessionQuestions(prev => [...prev, questionResult]);
+      
       if (isCorrect) { 
           setFeedback('correct'); 
           setUser(u => ({...u, xp: (u.xp || 0) + 100}));
@@ -646,7 +658,7 @@ export default function App() {
       } 
   };
 
-  const handleNext = () => { 
+  const handleNext = async () => { 
       if (sessionStats.current < sessionStats.total) { 
           setSessionStats(s => ({...s, current: s.current + 1})); 
           generateNewQuestion();
@@ -657,6 +669,39 @@ export default function App() {
               correctAnswers: sessionStats.correct,
               mistakes: sessionMistakes.length
           });
+          
+          // 計算並更新能力分數
+          if (sessionQuestions.length > 0 && user && user.id) {
+              try {
+                  // 判斷科目
+                  const subject = sessionTopics.length > 0 
+                      ? getSubjectFromTopics(sessionTopics) 
+                      : (sessionQuestions[0]?.subject || 'math');
+                  
+                  // 獲取當前能力分數
+                  const currentScores = {};
+                  const currentStats = stats[subject] || [];
+                  currentStats.forEach(item => {
+                      currentScores[item.subject] = item.A;
+                  });
+                  
+                  // 計算新的能力分數（傳入 topics 以支持單元/子單元映射）
+                  const newScores = calculateAbilityScores(sessionQuestions, subject, currentScores, topics);
+                  
+                  // 更新 stats
+                  const newStats = { ...stats };
+                  newStats[subject] = formatScoresForRadar(newScores, subject);
+                  setStats(newStats);
+                  
+                  // 保存到數據庫
+                  await DB_SERVICE.saveAbilityScores(user.id, subject, newScores);
+                  
+                  console.log(`✅ 能力分數已更新：${subject}`, newScores);
+              } catch (error) {
+                  console.error('❌ 更新能力分數失敗:', error);
+              }
+          }
+          
           setView('summary'); 
       } 
   };
@@ -739,7 +784,7 @@ export default function App() {
              {view === 'mistakes' && <MistakesView setView={setView} mistakes={mistakes} retryQuestion={retryQuestion} />}
              {view === 'parent' && <ParentView setView={setView} user={user} />}
              {view === 'teacher' && <TeacherView setView={setView} user={user} topics={topics} />}
-             {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} />}
+             {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} topics={topics} />}
              {view === 'summary' && <SummaryView sessionStats={sessionStats} restartSelection={goToSelection} setView={setView} />}
              
              {/* Floating Action Button */}

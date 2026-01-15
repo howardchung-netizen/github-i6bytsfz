@@ -341,10 +341,21 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
               <ResponsiveContainer width="100%" height="100%">
                   <RadarChart cx="50%" cy="50%" outerRadius="75%" data={getActiveData()}>
                       <PolarGrid stroke="#e2e8f0" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} />
+                      <PolarAngleAxis 
+                          dataKey="subject" 
+                          tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }}
+                          tickFormatter={(value, index) => {
+                              const data = getActiveData();
+                              const item = data[index];
+                              return `${value}\n(${item.A}/100)`;
+                          }}
+                      />
                       <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                       <Radar name="能力值" dataKey="A" stroke={chartColor.stroke} fill={chartColor.fill} fillOpacity={0.4} />
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
+                      <Tooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                          formatter={(value) => `${value}/100`}
+                      />
                   </RadarChart>
               </ResponsiveContainer>
           </div>

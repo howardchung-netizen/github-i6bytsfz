@@ -25,23 +25,6 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   
-  // 回饋相關狀態
-  const [feedbackText, setFeedbackText] = useState('');
-  const [selectedQuestionTypes, setSelectedQuestionTypes] = useState([]); // 多標籤選擇
-  const [questionCategory, setQuestionCategory] = useState(''); // 主分類
-  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
-  
-  // 題型選項（多標籤）
-  const questionTypeOptions = [
-    '應用題', '計算題', '幾何題', '選擇題', '文字題', 
-    '圖形題', '邏輯題', '數據題', '混合題'
-  ];
-  
-  // 分類選項
-  const categoryOptions = [
-    '加法', '減法', '乘法', '除法', '分數', '小數', 
-    '百分數', '周界', '面積', '體積', '時間', '金錢', '其他'
-  ];
   
   // 圖像上傳相關狀態
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -621,95 +604,6 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                          {generatedResult ? generatedResult : "// AI 生成結果將顯示於此..."}
                      </div>
 
-                     {/* 邏輯補充回饋區域（僅開發者可見） */}
-                     {user && user.email === 'admin@test.com' && (
-                         <div className="bg-indigo-900/50 border-2 border-indigo-500 rounded-lg p-4 mt-4">
-                             <h4 className="font-bold text-white mb-3 flex items-center gap-2">
-                                 <Sparkles size={16} className="text-yellow-400" />
-                                 邏輯補充（開發者回饋）
-                             </h4>
-                             <p className="text-xs text-indigo-200 mb-3">
-                                 輸入回饋後，AI 在生成類似題目時會參考此回饋，提升題目質量。
-                             </p>
-
-                             {/* 題型選擇（多選） */}
-                             <div className="mb-3">
-                                 <label className="block text-xs font-semibold text-indigo-200 mb-2">
-                                     題型分類（可多選）*：
-                                 </label>
-                                 <div className="flex flex-wrap gap-2">
-                                     {questionTypeOptions.map(type => (
-                                         <button
-                                             key={type}
-                                             type="button"
-                                             onClick={() => toggleQuestionType(type)}
-                                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                                                 selectedQuestionTypes.includes(type)
-                                                     ? 'bg-indigo-600 text-white border-2 border-indigo-400'
-                                                     : 'bg-slate-700 text-slate-300 border-2 border-slate-600 hover:bg-slate-600'
-                                             }`}
-                                         >
-                                             {type}
-                                         </button>
-                                     ))}
-                                 </div>
-                                 {selectedQuestionTypes.length > 0 && (
-                                     <p className="text-xs text-indigo-300 mt-2">
-                                         已選擇：{selectedQuestionTypes.join('、')}
-                                     </p>
-                                 )}
-                             </div>
-
-                             {/* 分類選擇（單選） */}
-                             <div className="mb-3">
-                                 <label className="block text-xs font-semibold text-indigo-200 mb-2">
-                                     主分類 *：
-                                 </label>
-                                 <select
-                                     value={questionCategory}
-                                     onChange={(e) => setQuestionCategory(e.target.value)}
-                                     className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400"
-                                 >
-                                     <option value="">請選擇分類</option>
-                                     {categoryOptions.map(cat => (
-                                         <option key={cat} value={cat}>{cat}</option>
-                                     ))}
-                                 </select>
-                             </div>
-
-                             {/* 回饋輸入 */}
-                             <div className="mb-3">
-                                 <label className="block text-xs font-semibold text-indigo-200 mb-2">
-                                     回饋內容 *：
-                                 </label>
-                                 <textarea
-                                     value={feedbackText}
-                                     onChange={(e) => setFeedbackText(e.target.value)}
-                                     placeholder="例如：這類題目應該注意單位換算，答案格式應為小數..."
-                                     className="w-full h-24 bg-slate-800 border border-slate-600 rounded-lg p-3 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400 resize-none"
-                                 />
-                             </div>
-
-                             {/* 保存按鈕 */}
-                             <button
-                                 onClick={handleSaveFeedback}
-                                 disabled={isSavingFeedback || !feedbackText.trim() || selectedQuestionTypes.length === 0 || !questionCategory}
-                                 className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-bold py-2 rounded-lg transition flex items-center justify-center gap-2"
-                             >
-                                 {isSavingFeedback ? (
-                                     <>
-                                         <RefreshCw size={16} className="animate-spin" />
-                                         保存中...
-                                     </>
-                                 ) : (
-                                     <>
-                                         <Save size={16} />
-                                         保存回饋
-                                     </>
-                                 )}
-                             </button>
-                         </div>
-                     )}
                  </div>
             </div>
         )}

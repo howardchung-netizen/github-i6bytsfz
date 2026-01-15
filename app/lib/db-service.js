@@ -1067,5 +1067,157 @@ export const DB_SERVICE = {
             console.error("❌ Record Question Usage Error:", e);
             return false;
         }
+    },
+    
+    /**
+     * 保存能力分數
+     * @param {string} userId - 用戶 ID
+     * @param {string} subject - 科目：'math' | 'chi' | 'eng'
+     * @param {Object} scores - 能力分數對象，例如：{ 運算: 50, 幾何: 60, ... }
+     */
+    saveAbilityScores: async (userId, subject, scores) => {
+        try {
+            if (!userId || !subject || !scores) {
+                console.warn("⚠️ Missing parameters for saveAbilityScores");
+                return false;
+            }
+            
+            const scoresRef = doc(db, "artifacts", APP_ID, "users", userId, "ability_scores", subject);
+            await setDoc(scoresRef, {
+                subject: subject,
+                scores: scores,
+                updatedAt: serverTimestamp(),
+                createdAt: serverTimestamp()
+            }, { merge: true });
+            
+            console.log(`✅ Saved ability scores: userId=${userId}, subject=${subject}`, scores);
+            return true;
+        } catch (e) {
+            console.error("❌ Save Ability Scores Error:", e);
+            return false;
+        }
+    },
+    
+    /**
+     * 載入能力分數
+     * @param {string} userId - 用戶 ID
+     * @param {string} subject - 科目：'math' | 'chi' | 'eng'
+     * @returns {Object|null} 能力分數對象，如果不存在則返回 null
+     */
+    loadAbilityScores: async (userId, subject) => {
+        try {
+            if (!userId || !subject) {
+                return null;
+            }
+            
+            const scoresRef = doc(db, "artifacts", APP_ID, "users", userId, "ability_scores", subject);
+            const scoresSnap = await getDoc(scoresRef);
+            
+            if (scoresSnap.exists()) {
+                const data = scoresSnap.data();
+                return data.scores || null;
+            }
+            
+            return null;
+        } catch (e) {
+            console.error("❌ Load Ability Scores Error:", e);
+            return null;
+        }
+    },
+
+    // ========== 審計系統 ==========
+
+    /**
+     * 根據 ID 獲取題目
+     * @param {string} questionId - 題目 ID
+     * @returns {Promise<Object|null>} 題目對象，如果不存在則返回 null
+     */
+    fetchQuestionById: async (questionId) => {
+        try {
+            if (!questionId) {
+                return null;
+            }
+            
+            const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", questionId);
+            const questionSnap = await getDoc(questionRef);
+            
+            if (questionSnap.exists()) {
+                return { id: questionSnap.id, ...questionSnap.data() };
+            }
+            
+            return null;
+        } catch (e) {
+            console.error("❌ Fetch Question By ID Error:", e);
+            return null;
+        }
+    },
+
+    /**
+     * 更新題目審計狀態
+     * @param {string} questionId - 題目 ID
+     * @param {Object} auditResult - 審計結果對象
+     * @param {string} auditorModel - 使用的審計模型名稱
+     * @returns {Promise<boolean>} 是否成功
+     */
+    updateQuestionAuditStatus: async (questionId, auditResult, auditorModel) => {
+        try {
+            if (!questionId || !auditResult) {
+                console.error("❌ Update Audit Status: Missing parameters");
+                return false;
+            }
+            
+            const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", questionId);
+            await updateDoc(questionRef, {
+                audit_status: auditResult.status || 'flagged',
+                audit_report: JSON.stringify(auditResult),
+                auditor_model_used: auditorModel,
+                audit_timestamp: new Date().toISOString(),
+                audit_issues: auditResult.issues || [],
+                audit_score: auditResult.score || null
+            });
+            
+            console.log(`✅ 已更新題目 ${questionId} 的審計狀態：${auditResult.status} (${auditResult.score}分)`);
+            return true;
+        } catch (e) {
+            console.error("❌ Update Audit Status Error:", e);
+            return false;
+        }
+    },
+
+    /**
+     * 獲取題目的邏輯補充（從題目本身或從 developer_feedback 關聯獲取）
+     * @param {Object} question - 題目對象
+     * @returns {Promise<string|null>} 邏輯補充文本，如果不存在則返回 null
+     */
+    getLogicSupplementForQuestion: async (question) => {
+        try {
+            // 優先從題目本身獲取
+            if (question.logic_supplement) {
+                return question.logic_supplement;
+            }
+
+            // 如果題目沒有，嘗試從 developer_feedback 中匹配
+            const feedbacks = await DB_SERVICE.getActiveFeedback(
+                question.type ? [question.type] : [],
+                question.subject,
+                question.category || question.topic
+            );
+
+            // 返回最相關的回饋（選擇最新的）
+            if (feedbacks.length > 0) {
+                // 按創建時間排序，返回最新的
+                const sortedFeedbacks = feedbacks.sort((a, b) => {
+                    const timeA = new Date(a.createdAt || 0).getTime();
+                    const timeB = new Date(b.createdAt || 0).getTime();
+                    return timeB - timeA;
+                });
+                return sortedFeedbacks[0].feedback;
+            }
+
+            return null;
+        } catch (e) {
+            console.error("❌ Get Logic Supplement Error:", e);
+            return null;
+        }
     }
 }; 

@@ -769,5 +769,530 @@ const cleanedBefore = textBefore.replace(/\\([0-9]+)/g, '$1');
 
 ---
 
+### 13. ✅ 修復構建錯誤和改進 JSON 解析
+
+**日期**：2026年1月8日
+
+#### 13.1 修復 Vercel 構建錯誤
+
+**問題**：Vercel 構建失敗，TypeScript 類型錯誤
+```
+Type error: Property 'grade' does not exist on type '{ title: string; description: string; topicIds: any[]; questionCount: number; dueDate: string; seedQuestionIds: any[]; }'.
+```
+
+**解決方案**：
+- 在 `app/components/TeacherView.tsx` 的 `assignmentData` 狀態中添加 `grade: 'P4'` 屬性
+- 確保類型定義完整，所有使用的屬性都有定義
+
+**相關文件**：
+- `app/components/TeacherView.tsx` - 添加 `grade` 屬性到 `assignmentData` 狀態
+
+#### 13.2 改進 JSON 解析錯誤處理
+
+**問題**：AI 生成的 JSON 包含無效的轉義字符，導致解析失敗
+```
+Failed to parse AI response: Bad escaped character in JSON at position 342
+```
+
+**解決方案**：
+- 創建 `cleanAndParseJSON` 函數，實現多層次 JSON 清理和修復
+- 步驟 1：移除 markdown 代碼塊標記
+- 步驟 2：嘗試直接解析
+- 步驟 3：提取 JSON 部分（匹配第一個 `[` 或 `{` 到最後一個 `]` 或 `}`）
+- 步驟 4：修復常見的轉義字符問題（單獨的反斜線）
+- 步驟 5：移除控制字符（更激進的清理）
+
+**相關文件**：
+- `app/lib/ai-service.js` - 添加 `cleanAndParseJSON` 函數
+- `app/lib/ai-service.js` - 在 `generateQuestion` 和 `generateVariationFromMistake` 中使用該函數
+
+**技術細節**：
+```javascript
+const cleanAndParseJSON = (jsonString) => {
+    // 多層次清理和修復邏輯
+    // 1. 移除 markdown 代碼塊標記
+    // 2. 嘗試直接解析
+    // 3. 提取 JSON 部分
+    // 4. 修復轉義字符問題
+    // 5. 移除控制字符
+};
+```
+
+**預期效果**：
+- ✅ 處理大部分「Bad escaped character in JSON」錯誤
+- ✅ 提高 JSON 解析成功率
+- ✅ 更好的錯誤恢復機制
+
+---
+
+### 14. ✅ 邏輯補充功能重構
+
+**日期**：2026年1月8日
+
+#### 14.1 將邏輯補充功能移動到做題介面
+
+**功能描述**：將「邏輯補充（開發者回饋）」功能從開發者管理介面移動到做題介面
+
+**需求**：
+- 開發者帳號（`admin@test.com`）在做題時可以看到邏輯補充輸入欄
+- 不論是「每日任務」還是「開始 AI 試卷」，所有做題目旁邊都有邏輯補充輸入欄
+- 輸入回饋後，AI 會根據回饋生成改進題目
+- 改進後的題目儲存在資料庫
+
+**實現內容**：
+
+**1. 在 PracticeView 中添加邏輯補充輸入欄**
+- 僅開發者可見（檢查 `user.email === 'admin@test.com'`）
+- 位置：題目和答案之間
+- 包含：標題、說明文字、文本輸入框、保存按鈕
+- 當題目變化時自動清空輸入
+
+**2. 實現保存回饋功能**
+- 推斷科目、題型、分類
+- 保存回饋到資料庫（`developer_feedback` 集合）
+- 調用 `generateVariationFromMistake` 生成改進題目
+- 將改進題目儲存到資料庫（`past_papers` 集合）
+
+**3. 修改 generateVariationFromMistake 支持 feedback**
+- 添加 `feedbackText` 參數（可選）
+- 在 prompt 中添加 feedback 說明
+- 在 Requirements 中添加應用 feedback 的要求
+
+**4. 從 DeveloperView 移除邏輯補充功能**
+- 移除 UI 部分
+- 移除相關狀態和函數
+
+**相關文件**：
+- `app/components/PracticeView.tsx` - 添加邏輯補充輸入欄和處理函數
+- `app/lib/ai-service.js` - 修改 `generateVariationFromMistake` 支持 feedback
+- `app/components/DeveloperView.tsx` - 移除邏輯補充功能
+- `app/page.tsx` - 傳遞 `topics` prop 到 PracticeView
+
+**工作流程**：
+1. 開發者輸入回饋 → 點擊「保存回饋」
+2. 保存回饋到資料庫（`developer_feedback` 集合）
+3. 調用 `generateVariationFromMistake` 生成改進題目（傳入 feedback）
+4. 將改進題目儲存到資料庫（`past_papers` 集合）
+5. 顯示成功訊息
+
+**技術細節**：
+```javascript
+// PracticeView.tsx
+const handleSaveFeedback = async () => {
+    // 1. 保存回饋
+    const feedbackId = await DB_SERVICE.saveDeveloperFeedback(feedbackData);
+    
+    // 2. 生成改進題目
+    const improvedQuestion = await AI_SERVICE.generateVariationFromMistake(
+        { question, answer, category, topic, options },
+        user.level,
+        topics,
+        feedbackText.trim() // 傳遞 feedback
+    );
+    
+    // 3. 儲存改進題目
+    await RAG_SERVICE.saveGeneratedQuestion(
+        improvedQuestion,
+        topicId,
+        user.level,
+        subject,
+        topics
+    );
+};
+```
+
+**UI 設計**：
+- 位置：題目下方、答案上方
+- 樣式：淺藍色背景（`bg-indigo-50`）、邊框（`border-indigo-200`）
+- 圖標：Sparkles 圖標
+- 輸入框：多行文本輸入（`h-24`）
+- 按鈕：保存按鈕（帶載入狀態）
+
+**權限控制**：
+- 僅開發者帳號可見（`user.email === 'admin@test.com'`）
+- 普通用戶看不到此功能
+
+**後續改進**：
+- 可考慮添加「預覽改進題目」功能
+- 可考慮添加「編輯回饋」功能
+- 可考慮添加「查看已保存回饋歷史」功能
+
+---
+
+### 15. ✅ 添加題目數量選擇功能
+
+**日期**：2026年1月8日
+
+#### 15.1 在單元選擇介面添加題目數量選擇
+
+**功能描述**：在「開始 AI 試卷」後的單元選擇介面中添加題目數量選擇功能
+
+**需求**：
+- 可選擇題卷總題目數量
+- 默認值：20 題
+- 下限：1 題
+- 上限：100 題
+- 顯示格式：`(20/100)` 這樣的格式
+
+**實現內容**：
+
+**1. 添加題目數量選擇區域**
+- 位置：標題下方、單元選擇上方
+- 樣式：淺藍色背景區塊（`bg-indigo-50`）
+- 包含標題「題目數量」
+
+**2. 三種輸入方式**
+- **數字輸入框**：可直接輸入 1-100 的數字
+- **文本顯示**：顯示 `(20/100)` 格式，實時更新
+- **滑桿**：可拖動選擇 1-100
+
+**3. 輸入驗證**
+- 自動限制在 1-100 範圍內
+- 如果輸入小於 1，自動設為 1
+- 如果輸入大於 100，自動設為 100
+
+**4. 按鈕更新**
+- 按鈕文本從「開始練習 ({selected.length})」更新為「開始練習 ({questionCount}/100)」
+- 傳遞 `questionCount` 到 `startPracticeSession` 函數
+
+**相關文件**：
+- `app/components/CommonViews.tsx` - `TopicSelectionView` 組件（第 64-141 行）
+
+**UI 設計**：
+```tsx
+// 題目數量選擇區域
+<div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+  <label>題目數量</label>
+  <div className="flex items-center gap-3">
+    <input type="number" min="1" max="100" value={questionCount} />
+    <span>({questionCount}/100)</span>
+    <input type="range" min="1" max="100" value={questionCount} />
+  </div>
+</div>
+```
+
+**技術細節**：
+- 使用 `useState` 管理 `questionCount` 狀態（默認值 20）
+- `handleCountChange` 函數處理數字輸入驗證
+- 滑桿直接綁定 `onChange` 事件更新狀態
+- `startPracticeSession(selected, questionCount)` 傳遞題目數量
+
+**用戶體驗**：
+- 默認 20 題，符合大多數用戶需求
+- 支持快速調整（數字輸入、滑桿拖動）
+- 清晰顯示當前選擇和上限（(20/100)）
+- 視覺上與整體設計風格一致
+
+---
+
+### 16. ✅ 實現能力評分系統
+
+**日期**：2026年1月8日
+
+#### 16.1 能力雷達圖評分功能
+
+**功能描述**：實現完整的能力評分系統，支持數學、中文、英文三科，每項能力總分100，初始值50/100
+
+**需求**：
+- 每項能力總分100，初始值50/100
+- 在各能力名稱底部顯示能力分數，格式為 (50/100)
+- 制定每項能力的評分邏輯
+- 對應評分邏輯的題目，在每次完成整份試卷後作出能力評分調整
+
+**實現內容**：
+
+**1. 能力維度定義**
+- **數學科**：運算、幾何、邏輯、應用題、數據
+- **中文科**：閱讀、寫作、成語、文法、修辭
+- **英文科**：Grammar、Vocab、Reading、Listening、Speaking
+
+**2. 評分邏輯**
+- 答對：+2 分（根據難度係數調整：簡單 1x，中等 1.5x，困難 2x）
+- 答錯：-1 分（根據難度係數調整）
+- 分數範圍：0-100 分
+- 初始值：所有能力 50/100
+
+**3. 題目分類系統**
+- **優先級 1**：單元/子單元映射（最準確）
+- **優先級 2**：文本分析（後備方案）
+- 支持通過題目的 `topic_id` 查找對應的單元和子單元信息
+
+**4. 單元/子單元映射系統**
+- 創建 `app/lib/ability-mapping.js` 映射配置系統
+- 支持數學、中文、英文三科的映射配置
+- 提供 `getAbilityFromUnit()` 函數用於映射查詢
+- 提供 `addUnitMapping()` 函數用於日後擴展
+- 支持模糊匹配和精確匹配
+
+**5. 完成試卷後自動更新**
+- 在 `checkAnswer` 中記錄每題的答題結果到 `sessionQuestions`
+- 在 `handleNext` 中，完成試卷時自動計算並更新能力分數
+- 自動判斷科目並更新對應的能力分數
+- 保存能力分數到數據庫
+
+**6. 數據庫存儲**
+- 路徑：`artifacts/{APP_ID}/users/{userId}/ability_scores/{subject}`
+- 文檔結構：包含 `subject`、`scores` 對象、`updatedAt` 時間戳
+- 提供 `saveAbilityScores()` 和 `loadAbilityScores()` 函數
+
+**7. UI 顯示**
+- 在 `DashboardView` 中，能力名稱下方顯示 `(50/100)` 格式
+- Tooltip 也顯示分數格式
+- 支持切換數學、中文、英文三科查看
+
+**相關文件**：
+- `app/lib/ability-scoring.js` - 能力評分計算邏輯
+- `app/lib/ability-mapping.js` - 單元/子單元映射配置系統（新建）
+- `app/lib/db-service.js` - 添加 `saveAbilityScores` 和 `loadAbilityScores` 函數
+- `app/components/DashboardView.tsx` - 顯示分數格式 (50/100)
+- `app/page.tsx` - 添加能力評分計算和更新邏輯
+- `docs/ABILITY_SCORING_LOGIC.md` - 詳細評分邏輯文檔（新建）
+
+**技術細節**：
+```javascript
+// 題目分類流程
+1. 檢查題目的 topic_id，查找對應的單元信息
+2. 嘗試單元/子單元映射（優先使用子單元）
+3. 如果映射失敗，使用文本分析
+4. 如果所有方法都失敗，使用默認能力維度
+
+// 評分計算
+const newScores = calculateAbilityScores(
+  sessionQuestions, 
+  subject, 
+  currentScores, 
+  topics  // 支持單元映射
+);
+```
+
+**映射配置示例**：
+```javascript
+// 數學科
+'除法' → '運算'
+'周界' → '幾何'
+'三位數除法' → '運算'  // 子單元映射
+
+// 中文科
+'閱讀理解' → '閱讀'
+'作文' → '寫作'
+'成語' → '成語'
+
+// 英文科
+'Grammar' → 'Grammar'
+'vocabulary' → 'Vocab'
+'Reading' → 'Reading'
+```
+
+**日後擴展**：
+- 可以通過編輯 `ability-mapping.js` 添加新的映射關係
+- 可以通過 `addUnitMapping()` API 函數動態添加映射
+- 支持批量導入映射關係（可擴展為管理介面）
+
+**預期效果**：
+- ✅ 每項能力初始值為 50/100
+- ✅ 完成試卷後自動更新能力分數
+- ✅ 根據題目的單元/子單元精確分類
+- ✅ 支持數學、中文、英文三科
+- ✅ 分數顯示格式為 (50/100)
+- ✅ 分數保存到數據庫，持久化存儲
+
+---
+
+### 17. ✅ 實施背景審計員系統（AI-as-a-Judge）
+
+**日期**：2026年1月8日
+
+#### 17.1 系統概述
+
+**功能描述**：實現背景審計員系統，用 AI 自動驗證生成的題目質量，確保題目符合 `logic_supplement` 中的特定邏輯和指令。
+
+**架構策略**：
+- **階段 1**：手動觸發（已完成）- 先驗證提示詞質量，再考慮自動化
+- **階段 2**：自動化（待實施）- 等種子題目上傳完成後再實施
+
+#### 17.2 雙模型架構
+
+**Creator 模型**：`gemini-2.0-flash`
+- 用途：快速生成題目
+- 特點：快速、便宜
+
+**Auditor 模型**：`gemini-2.5-pro`
+- 用途：審查題目質量
+- 特點：推理能力更強，適合審計任務
+- 驗證狀態：✅ 已驗證可用（2025年1月8日）
+
+#### 17.3 實施內容
+
+**1. 驗證腳本**
+- 文件：`scripts/verify-thinking-model.js`
+- 功能：驗證 API Key 和模型可用性
+- 結果：成功驗證 `gemini-2.5-pro` 可用
+
+**2. 數據庫服務擴展**
+- 文件：`app/lib/db-service.js`
+- 新增函數：
+  - `fetchQuestionById(questionId)` - 根據 ID 獲取題目
+  - `updateQuestionAuditStatus(questionId, auditResult, auditorModel)` - 更新審計狀態
+  - `getLogicSupplementForQuestion(question)` - 獲取邏輯補充（從題目或 developer_feedback）
+
+**3. 審計服務**
+- 文件：`app/lib/auditor-service.js`（新建）
+- 核心功能：
+  - `buildAuditorPrompt()` - 構建審計提示詞（針對 Pro 模型優化）
+  - `parseAuditResult()` - 解析審計結果
+  - `auditQuestion()` - 執行審計
+
+**提示詞優化**：
+- 針對 Pro 模型（非 Thinking 模型）優化
+- 包含明確的推理指令：模擬學生解題過程
+- 檢查邏輯補充遵守度、題目正確性、格式規範、難度適配
+
+**4. 手動觸發 API 端點**
+- 文件：`app/api/audit/single/route.ts`（新建）
+- 功能：手動觸發單個題目的審計
+- 配置：
+  - `maxDuration = 60` 秒（防止 Vercel 超時）
+  - `dynamic = 'force-dynamic'`
+  - 每次只處理一個題目
+
+**API 使用方式**：
+- POST: `/api/audit/single` (body: `{ "questionId": "xxx" }`)
+- GET: `/api/audit/single?questionId=xxx`
+
+**5. 模型配置**
+- 文件：`app/lib/constants.js`
+- 更新：`AUDITOR_MODEL_NAME = "gemini-2.5-pro"`
+
+#### 17.4 審計標準
+
+**檢查項目**：
+1. **邏輯補充遵守度**（最重要）
+   - 題目是否嚴格遵守 `logic_supplement` 中的要求
+   - 是否有任何違反或忽略的情況
+
+2. **題目正確性**
+   - 模擬學生解題過程驗證答案
+   - 檢查邏輯漏洞、計算錯誤、歧義
+
+3. **格式和規範**
+   - 是否符合科目和年級的格式要求
+   - LaTeX 格式（數學題）
+   - 選項唯一性（MCQ）
+
+4. **難度適配**
+   - 難度是否適合目標年級
+
+**評分標準**：
+- 90-100 分：優秀，完全符合要求
+- 70-89 分：良好，有輕微問題但不影響使用
+- 50-69 分：一般，有明顯問題需要改進
+- 0-49 分：不合格，需要重新生成
+
+**審計狀態**：
+- `unchecked` - 未審計
+- `verified` - 通過審計
+- `flagged` - 標記為有問題
+
+#### 17.5 數據庫字段
+
+在 `past_papers` 集合中，每個題目文檔包含：
+- `audit_status`: 'unchecked' | 'verified' | 'flagged'
+- `audit_report`: JSON 字符串（詳細審計報告）
+- `auditor_model_used`: 使用的審計模型名稱
+- `audit_timestamp`: 審計時間戳
+- `audit_issues`: 問題列表
+- `audit_score`: 評分（0-100）
+- `logic_supplement`: 邏輯補充指令
+
+#### 17.6 設計文檔
+
+**已創建文檔**：
+- `docs/AUDITOR_SYSTEM_DESIGN.md` - 完整系統設計文檔
+- `docs/AUDITOR_SYSTEM_QUICK_START.md` - 快速開始指南
+- `docs/AUDITOR_SYSTEM_IMPLEMENTATION_GUIDE.md` - 詳細實施指南
+- `docs/STEP_BY_STEP_TUTORIAL.md` - 逐步教學
+
+#### 17.7 待辦事項
+
+**⚠️ 重要：測試待完成**
+
+**測試條件**：
+- 等待種子題目上傳完成後再進行測試
+
+**測試項目**：
+1. 測試手動觸發端點：`/api/audit/single?questionId=xxx`
+2. 驗證提示詞質量：檢查審計結果是否準確
+3. 檢查邏輯補充遵守度：確認系統能正確檢查 `logic_supplement`
+4. 驗證評分邏輯：確認評分是否合理
+5. 測試錯誤處理：超時、API Key 錯誤、題目不存在等情況
+
+**後續實施**（測試通過後）：
+- 創建自動化背景工作循環
+- 配置 Vercel Cron Jobs
+- 添加審計統計和監控面板
+
+---
+
 **最後更新**：2026年1月8日
+**項目路徑**：`C:\ai totur\github-i6bytsfz`
+
+---
+
+### 18. ✅ 整合 To-Do List 與功能架構總覽
+
+**日期**：2026年1月15日
+
+#### 18.1 目標
+
+**功能描述**：整合 to-do list、已完成的功能架構（可供技術分析），以及未完成事項與後續建議。
+
+#### 18.2 產出文檔
+
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md` - 已完成功能架構、流程、資料結構
+
+#### 18.3 內容重點
+
+- **已完成架構**：前端視圖、API 路由、服務層、主要業務流程、資料庫結構
+- **整合 To-Do**：待測審計系統、家長/教師視圖、訂閱權限、ADHD 模式、報表/統計等
+- **後續建議**：分為近期/中期/長期三階段
+
+---
+
+**最後更新**：2026年1月15日
+**項目路徑**：`C:\ai totur\github-i6bytsfz`
+
+---
+
+### 19. ✅ Docs 文檔整合與精簡
+
+**日期**：2026年1月15日
+
+#### 19.1 目標
+
+**功能描述**：合併重複文檔、精簡 docs 文件數量、保留核心內容。
+
+#### 19.2 新增整合文檔
+
+- `docs/AUDITOR_SYSTEM.md`
+- `docs/AI_GENERATION_AND_APP_ARCH.md`
+- `docs/OPS_API_AND_QUOTA.md`
+- `docs/DEPLOYMENT_AND_TESTING.md`
+- `docs/OPTIMIZATION_AND_SCALE.md`
+- `docs/PAYMENT_STRIPE.md`
+- `docs/MIGRATION_NOTES.md`
+- `docs/VISION_API.md`
+- `docs/FIREBASE_SETUP.md`
+- `docs/TROUBLESHOOTING_AND_FIXES.md`
+- `docs/DOCS_INDEX.md`
+
+#### 19.3 保留主要文檔
+
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md`
+- `docs/ABILITY_SCORING_LOGIC.md`
+- `docs/SEED_QUESTION_FORMAT_GUIDE.md`
+- `docs/SESSION_LOG_2024.md`
+
+---
+
+**最後更新**：2026年1月15日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
