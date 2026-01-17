@@ -24,6 +24,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [newClassGrade, setNewClassGrade] = useState('P4');
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [studentEmail, setStudentEmail] = useState('');
+  const [classSearch, setClassSearch] = useState('');
   const [isGeneratingMock, setIsGeneratingMock] = useState(false);
   
   // 派卷狀態
@@ -70,6 +71,7 @@ export default function TeacherView({ setView, user, topics }) {
   
   // 已發送試卷列表
   const [sentPapers, setSentPapers] = useState([]);
+  const [assignmentSearch, setAssignmentSearch] = useState('');
   const [isLoadingSentPapers, setIsLoadingSentPapers] = useState(false);
   const [selectedSentPaper, setSelectedSentPaper] = useState(null); // 選中的試卷詳情
   
@@ -797,7 +799,16 @@ export default function TeacherView({ setView, user, topics }) {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="font-bold text-slate-700">選擇班級：</span>
-            {classes.map((cls) => (
+            <input
+              type="text"
+              value={classSearch}
+              onChange={(e) => setClassSearch(e.target.value)}
+              placeholder="搜尋班級名稱"
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            />
+            {classes
+              .filter((cls) => (cls.className || cls.name || '').toLowerCase().includes(classSearch.toLowerCase()))
+              .map((cls) => (
               <button
                 key={cls.id}
                 onClick={() => setSelectedClass(cls)}
@@ -1714,6 +1725,13 @@ export default function TeacherView({ setView, user, topics }) {
               <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <FileText size={20} className="text-indigo-600"/> 已發送試卷
               </h4>
+            <input
+              type="text"
+              value={assignmentSearch}
+              onChange={(e) => setAssignmentSearch(e.target.value)}
+              placeholder="搜尋試卷標題"
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            />
               <button
                 onClick={async () => {
                   setIsLoadingSentPapers(true);
@@ -1749,7 +1767,9 @@ export default function TeacherView({ setView, user, topics }) {
               </div>
             ) : (
               <div className="border border-slate-200 rounded-lg divide-y divide-slate-200">
-                {sentPapers.map((paper) => (
+                {sentPapers
+                  .filter((paper) => (paper.title || '').toLowerCase().includes(assignmentSearch.toLowerCase()))
+                  .map((paper) => (
                   <div
                     key={paper.id}
                     onClick={() => setSelectedSentPaper(paper)}
