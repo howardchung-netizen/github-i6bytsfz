@@ -18,6 +18,7 @@ export default function ParentView({ setView, user }) {
   const [childSearch, setChildSearch] = useState('');
   const [reportSearch, setReportSearch] = useState('');
   const [reportSort, setReportSort] = useState('date_desc');
+  const [dailyStatsRange, setDailyStatsRange] = useState([]);
 
   useEffect(() => {
     loadChildren();
@@ -165,21 +166,47 @@ export default function ParentView({ setView, user }) {
   }, [childStats]);
 
   // 準備圖表數據
-  const chartData = childStats?.dailyActivity ? Object.entries(childStats.dailyActivity)
-    .map(([date, data]: [string, any]) => ({
-      dateString: date, // 保留原始日期字符串用於排序
-      date: new Date(date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
-      questions: data?.questions || 0,
-      correct: data?.correct || 0,
-      wrong: data?.wrong || 0,
-      timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
-    }))
-    .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime())
-    .slice(-trendRangeDays) : [];
+  const chartData = dailyStatsRange.length > 0
+    ? dailyStatsRange.map((item: any) => ({
+        dateString: item.date,
+        date: new Date(item.date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
+        questions: item.totalQuestions || 0,
+        correct: item.correctAnswers || 0,
+        wrong: item.wrongAnswers || 0,
+        timeMinutes: Math.round((item.timeSpentMs || 0) / 60000)
+      }))
+    : (childStats?.dailyActivity ? Object.entries(childStats.dailyActivity)
+        .map(([date, data]: [string, any]) => ({
+          dateString: date, // 保留原始日期字符串用於排序
+          date: new Date(date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
+          questions: data?.questions || 0,
+          correct: data?.correct || 0,
+          wrong: data?.wrong || 0,
+          timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
+        }))
+        .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime())
+        .slice(-trendRangeDays) : []);
 
   const accuracyRate = childStats && childStats.totalQuestions > 0
     ? Math.round((childStats.correctAnswers / childStats.totalQuestions) * 100)
     : 0;
+
+  useEffect(() => {
+    const loadDailyStats = async () => {
+      if (!selectedChild?.uid) {
+        setDailyStatsRange([]);
+        return;
+      }
+      try {
+        const stats = await DB_SERVICE.getUserDailyStatsRange(selectedChild.uid, trendRangeDays);
+        setDailyStatsRange(stats || []);
+      } catch (e) {
+        console.error("Load daily stats error:", e);
+        setDailyStatsRange([]);
+      }
+    };
+    loadDailyStats();
+  }, [selectedChild, trendRangeDays]);
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 animate-in fade-in duration-500 font-sans">

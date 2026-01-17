@@ -8,6 +8,7 @@ export default function StudentView({ setView, user }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trendRangeDays, setTrendRangeDays] = useState(30);
+  const [dailyStatsRange, setDailyStatsRange] = useState([]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -25,12 +26,38 @@ export default function StudentView({ setView, user }) {
     loadStats();
   }, [user, trendRangeDays]);
 
+  useEffect(() => {
+    const loadDailyStats = async () => {
+      if (!user?.id && !user?.uid) {
+        setDailyStatsRange([]);
+        return;
+      }
+      try {
+        const data = await DB_SERVICE.getUserDailyStatsRange(user.uid || user.id, trendRangeDays);
+        setDailyStatsRange(data || []);
+      } catch (e) {
+        console.error("Load daily stats error:", e);
+        setDailyStatsRange([]);
+      }
+    };
+    loadDailyStats();
+  }, [user, trendRangeDays]);
+
   const accuracyRate = useMemo(() => {
     if (!stats || stats.totalQuestions === 0) return 0;
     return Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
   }, [stats]);
 
   const chartData = useMemo(() => {
+    if (dailyStatsRange.length > 0) {
+      return dailyStatsRange.map((item: any) => ({
+        date: item.date,
+        questions: item.totalQuestions || 0,
+        correct: item.correctAnswers || 0,
+        wrong: item.wrongAnswers || 0,
+        timeMinutes: Math.round((item.timeSpentMs || 0) / 60000)
+      }));
+    }
     if (!stats?.dailyActivity) return [];
     const daily = stats.dailyActivity as Record<string, { questions?: number; correct?: number; wrong?: number; timeSpent?: number }>;
     return Object.entries(daily)
@@ -42,7 +69,7 @@ export default function StudentView({ setView, user }) {
         timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
       }))
       .sort((a, b) => (a.date > b.date ? 1 : -1));
-  }, [stats]);
+  }, [dailyStatsRange, stats]);
 
   const subjectDistribution = useMemo(() => {
     if (!stats?.subjects) return [];

@@ -1158,6 +1158,49 @@ export const DB_SERVICE = {
             return false;
         }
     },
+
+    getUserDailyStatsRange: async (userId, days = 30) => {
+        try {
+            if (!userId) return [];
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            const startKey = startDate.toISOString().slice(0, 10);
+            const q = query(
+                collection(db, "artifacts", APP_ID, "users", userId, "daily_stats"),
+                where("date", ">=", startKey),
+                orderBy("date", "asc")
+            );
+            const snap = await getDocs(q);
+            const stats = [];
+            snap.forEach(d => stats.push({ id: d.id, ...d.data() }));
+            return stats;
+        } catch (e) {
+            console.error("Get User Daily Stats Error:", e);
+            return [];
+        }
+    },
+
+    cleanupUserDailyStats: async (userId, keepDays = 365) => {
+        try {
+            if (!userId) return false;
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - keepDays);
+            const cutoffKey = cutoff.toISOString().slice(0, 10);
+            const q = query(
+                collection(db, "artifacts", APP_ID, "users", userId, "daily_stats"),
+                where("date", "<", cutoffKey)
+            );
+            const snap = await getDocs(q);
+            if (snap.empty) return true;
+            const batch = writeBatch(db);
+            snap.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            return true;
+        } catch (e) {
+            console.error("Cleanup User Daily Stats Error:", e);
+            return false;
+        }
+    },
     
     /**
      * 保存能力分數
