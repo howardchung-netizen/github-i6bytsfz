@@ -15,6 +15,9 @@ export default function ParentView({ setView, user }) {
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [isGeneratingMock, setIsGeneratingMock] = useState(false);
   const [trendRangeDays, setTrendRangeDays] = useState(14);
+  const [childSearch, setChildSearch] = useState('');
+  const [reportSearch, setReportSearch] = useState('');
+  const [reportSort, setReportSort] = useState('date_desc');
 
   useEffect(() => {
     loadChildren();
@@ -168,10 +171,11 @@ export default function ParentView({ setView, user }) {
       date: new Date(date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
       questions: data?.questions || 0,
       correct: data?.correct || 0,
-      wrong: data?.wrong || 0
+      wrong: data?.wrong || 0,
+      timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
     }))
     .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime())
-    .slice(-14) : [];
+    .slice(-trendRangeDays) : [];
 
   const accuracyRate = childStats && childStats.totalQuestions > 0
     ? Math.round((childStats.correctAnswers / childStats.totalQuestions) * 100)
@@ -249,27 +253,48 @@ export default function ParentView({ setView, user }) {
       {/* 學生選擇 */}
       {children.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-bold text-slate-700">選擇學生：</span>
-            {children.map((child) => (
-              <button
-                key={child.id}
-                onClick={() => setSelectedChild(child)}
-                className={`px-4 py-2 rounded-lg font-bold transition ${
-                  selectedChild?.id === child.id
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {child.name} ({child.level})
-              </button>
-            ))}
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="font-bold text-slate-700">選擇學生：</span>
+              <input
+                type="text"
+                value={childSearch}
+                onChange={(e) => setChildSearch(e.target.value)}
+                placeholder="搜尋學生姓名"
+                className="border rounded-lg px-3 py-1.5 text-sm"
+              />
+            </div>
             <button
               onClick={() => setShowLinkForm(true)}
-              className="ml-auto px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-bold hover:bg-indigo-200 transition flex items-center gap-2"
+              className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-bold hover:bg-indigo-200 transition flex items-center gap-2"
             >
               <Plus size={18} /> 新增學生
             </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {children
+              .filter((child) => (child.name || '').toLowerCase().includes(childSearch.toLowerCase()))
+              .map((child) => (
+                <button
+                  key={child.id}
+                  onClick={() => setSelectedChild(child)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition text-left ${
+                    selectedChild?.id === child.id
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <img
+                    src={child.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${child.name}`}
+                    alt={child.name}
+                    className="w-12 h-12 rounded-full border border-slate-200"
+                  />
+                  <div>
+                    <div className="font-bold text-slate-800">{child.name}</div>
+                    <div className="text-xs text-slate-500">年級：{child.level || '未設定'}</div>
+                  </div>
+                </button>
+              ))}
           </div>
         </div>
       )}
@@ -372,6 +397,25 @@ export default function ParentView({ setView, user }) {
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Clock size={20} /> 每日學習時長（分鐘）
+            </h3>
+            {chartData.length === 0 ? (
+              <p className="text-slate-500">暫無學習資料</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="timeMinutes" stroke="#6366f1" strokeWidth={2} name="分鐘" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
               <PieIcon size={20} /> 錯題分類分佈
             </h3>
             {mistakeDistribution.length === 0 ? (
@@ -392,10 +436,29 @@ export default function ParentView({ setView, user }) {
 
           {/* AI 報告 */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 gap-2">
               <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <Sparkles size={20} /> AI 學習報告
               </h3>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={reportSearch}
+                  onChange={(e) => setReportSearch(e.target.value)}
+                  placeholder="搜尋報告內容"
+                  className="border rounded-lg px-3 py-1.5 text-sm"
+                />
+                <select
+                  value={reportSort}
+                  onChange={(e) => setReportSort(e.target.value)}
+                  className="border rounded-lg px-2 py-1.5 text-sm"
+                >
+                  <option value="date_desc">日期新 → 舊</option>
+                  <option value="date_asc">日期舊 → 新</option>
+                  <option value="days_desc">天數多 → 少</option>
+                  <option value="days_asc">天數少 → 多</option>
+                </select>
+              </div>
               <button
                 onClick={generateReport}
                 disabled={loading}
@@ -413,7 +476,21 @@ export default function ParentView({ setView, user }) {
               </div>
             ) : (
               <div className="space-y-4">
-                {reports.map((report) => (
+                {reports
+                  .filter((report) => {
+                    const text = `${report.summary || ''} ${report.recommendations?.join(' ') || ''}`;
+                    return text.toLowerCase().includes(reportSearch.toLowerCase());
+                  })
+                  .sort((a, b) => {
+                    const timeA = new Date(a.generatedAt || 0).getTime();
+                    const timeB = new Date(b.generatedAt || 0).getTime();
+                    if (reportSort === 'date_desc') return timeB - timeA;
+                    if (reportSort === 'date_asc') return timeA - timeB;
+                    if (reportSort === 'days_desc') return (b.periodDays || 0) - (a.periodDays || 0);
+                    if (reportSort === 'days_asc') return (a.periodDays || 0) - (b.periodDays || 0);
+                    return 0;
+                  })
+                  .map((report) => (
                   <div key={report.id} className="border-2 border-indigo-100 bg-indigo-50 rounded-xl p-6">
                     <div className="flex justify-between items-start mb-4">
                       <div>
