@@ -752,6 +752,19 @@ export default function TeacherView({ setView, user, topics }) {
       .sort((a, b) => (a.date > b.date ? 1 : -1));
   }, [classStats]);
 
+  const mistakeDistribution = useMemo(() => {
+    if (!classStats?.students) return [];
+    const map = {};
+    classStats.students.forEach((student) => {
+      const mistakes = student.stats?.mistakes || [];
+      mistakes.forEach((m) => {
+        const key = m.category || m.topic || '未分類';
+        map[key] = (map[key] || 0) + 1;
+      });
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [classStats]);
+
   const filteredStudentRanking = useMemo(() => {
     if (rankingSubject === 'all') return studentRanking;
     return studentRanking.filter((student) => {
@@ -1524,6 +1537,30 @@ export default function TeacherView({ setView, user, topics }) {
                     </ResponsiveContainer>
                   )}
                 </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 className="text-xl font-bold text-slate-800 mb-4">錯題分類分佈</h3>
+                {mistakeDistribution.length === 0 ? (
+                  <p className="text-slate-500">暫無錯題資料</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie
+                        data={mistakeDistribution}
+                        dataKey="value"
+                        nameKey="name"
+                        outerRadius={110}
+                        label
+                      >
+                        {mistakeDistribution.map((_, index) => (
+                          <Cell key={`mistake-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
 
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
