@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Users, Plus, Search, BarChart3, FileText, Send, Settings, Home, BookOpen, Award, TrendingUp, Upload, Save, RefreshCw, Sparkles } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
 import { createMockClassWithStudents } from '../lib/mock-data-generator';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -15,6 +15,8 @@ export default function TeacherView({ setView, user, topics }) {
   const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation', 'paper-preview', 'assignment-seed-selection'
   const [institutionStats, setInstitutionStats] = useState(null);
   const [isLoadingInstitutionStats, setIsLoadingInstitutionStats] = useState(false);
+  const [assignmentCompletionStats, setAssignmentCompletionStats] = useState([]);
+  const [isLoadingAssignmentStats, setIsLoadingAssignmentStats] = useState(false);
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -137,6 +139,12 @@ export default function TeacherView({ setView, user, topics }) {
     loadInstitutionStats();
   }, [activeTab, classes]);
 
+  useEffect(() => {
+    if (activeTab === 'analytics' && selectedClass) {
+      loadAssignmentStats(selectedClass.id);
+    }
+  }, [activeTab, selectedClass]);
+
   // 載入已發送試卷列表
   useEffect(() => {
     const loadSentPapers = async () => {
@@ -213,6 +221,19 @@ export default function TeacherView({ setView, user, topics }) {
       console.error("Load class stats error:", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAssignmentStats = async (classId) => {
+    setIsLoadingAssignmentStats(true);
+    try {
+      const stats = await DB_SERVICE.getAssignmentCompletionStats(classId);
+      setAssignmentCompletionStats(stats);
+    } catch (e) {
+      console.error("Load assignment stats error:", e);
+      setAssignmentCompletionStats([]);
+    } finally {
+      setIsLoadingAssignmentStats(false);
     }
   };
 
@@ -668,6 +689,26 @@ export default function TeacherView({ setView, user, topics }) {
         questions: student.stats?.totalQuestions || 0
       };
     });
+  }, [classStats]);
+
+  const classDailyTimeData = useMemo(() => {
+    if (!classStats?.students) return [];
+    const dailyMap = {};
+    classStats.students.forEach((student) => {
+      const daily = student.stats?.dailyActivity || {};
+      Object.entries(daily).forEach(([date, payload]) => {
+        if (!dailyMap[date]) {
+          dailyMap[date] = { date, timeSpent: 0 };
+        }
+        dailyMap[date].timeSpent += payload.timeSpent || 0;
+      });
+    });
+    return Object.values(dailyMap)
+      .map((entry) => ({
+        ...entry,
+        timeMinutes: Math.round((entry.timeSpent || 0) / 60000)
+      }))
+      .sort((a, b) => (a.date > b.date ? 1 : -1));
   }, [classStats]);
 
   return (
@@ -1343,6 +1384,43 @@ export default function TeacherView({ setView, user, topics }) {
                   </ResponsiveContainer>
                 </div>
               )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">作業完成率</h3>
+                  {isLoadingAssignmentStats ? (
+                    <p className="text-slate-500">載入中...</p>
+                  ) : assignmentCompletionStats.length === 0 ? (
+                    <p className="text-slate-500">暫無作業資料</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={assignmentCompletionStats}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="title" tick={{ fontSize: 10 }} />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="completionRate" fill="#10b981" name="完成率 (%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">每日總學習時長（分鐘）</h3>
+                  {classDailyTimeData.length === 0 ? (
+                    <p className="text-slate-500">暫無學習時長資料</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={260}>
+                      <LineChart data={classDailyTimeData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="timeMinutes" stroke="#6366f1" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
 
               {/* 個別學生進度 */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">

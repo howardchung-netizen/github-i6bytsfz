@@ -499,11 +499,12 @@ export const DB_SERVICE = {
                 if (data.timestamp) {
                     const date = data.timestamp.split('T')[0];
                     if (!stats.dailyActivity[date]) {
-                        stats.dailyActivity[date] = { questions: 0, correct: 0, wrong: 0 };
+                        stats.dailyActivity[date] = { questions: 0, correct: 0, wrong: 0, timeSpent: 0 };
                     }
                     if (data.action === 'generate_question') stats.dailyActivity[date].questions++;
                     if (data.action === 'answer_correct') stats.dailyActivity[date].correct++;
                     if (data.action === 'answer_wrong') stats.dailyActivity[date].wrong++;
+                    if (data.timeSpent) stats.dailyActivity[date].timeSpent += data.timeSpent;
                 }
             });
             
@@ -622,6 +623,39 @@ export const DB_SERVICE = {
             return assignments;
         } catch(e) {
             console.error("Get Assignments Error:", e);
+            return [];
+        }
+    },
+
+    getAssignmentCompletionStats: async (classId) => {
+        try {
+            const q = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "notifications"),
+                where("classId", "==", classId),
+                where("type", "==", "assignment")
+            );
+            const snap = await getDocs(q);
+            const statsMap = {};
+            snap.forEach(d => {
+                const data = d.data();
+                const assignmentId = data.assignmentId || 'unknown';
+                if (!statsMap[assignmentId]) {
+                    statsMap[assignmentId] = {
+                        assignmentId,
+                        title: data.title || '未命名作業',
+                        total: 0,
+                        completed: 0
+                    };
+                }
+                statsMap[assignmentId].total += 1;
+                if (data.read) statsMap[assignmentId].completed += 1;
+            });
+            return Object.values(statsMap).map((item) => ({
+                ...item,
+                completionRate: item.total > 0 ? Math.round((item.completed / item.total) * 100) : 0
+            }));
+        } catch (e) {
+            console.error("Get Assignment Completion Stats Error:", e);
             return [];
         }
     },
