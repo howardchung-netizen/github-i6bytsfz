@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
-import { Settings, Home, Upload, Save, FileJson, RefreshCw, Sparkles, Database, Trash2, Plus, MessageSquare } from 'lucide-react';
+import { Settings, Home, Upload, Save, FileJson, RefreshCw, Sparkles, Database, Trash2, Plus, MessageSquare, Bell } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
 
 // 👇 注意這裡 props 接收了 setTopics
@@ -30,6 +30,10 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<string[]>([]);
   const [questionCategory, setQuestionCategory] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+
+  // 教學者回饋通知欄
+  const [pendingTeacherFeedbackCount, setPendingTeacherFeedbackCount] = useState(0);
+  const [isLoadingTeacherFeedbackCount, setIsLoadingTeacherFeedbackCount] = useState(false);
   
   
   // 圖像上傳相關狀態
@@ -361,6 +365,25 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       }
   };
 
+  const isAdminReviewer = user && user.email === 'admin@test.com';
+
+  const loadPendingTeacherFeedbackCount = async () => {
+      if (!isFirebaseReady || !isAdminReviewer) return;
+      setIsLoadingTeacherFeedbackCount(true);
+      try {
+          const feedbacks = await DB_SERVICE.getPendingTeacherFeedback();
+          setPendingTeacherFeedbackCount(feedbacks.length || 0);
+      } catch (e) {
+          console.error("Load Pending Teacher Feedback Count Error:", e);
+      } finally {
+          setIsLoadingTeacherFeedbackCount(false);
+      }
+  };
+
+  useEffect(() => {
+      loadPendingTeacherFeedbackCount();
+  }, [isFirebaseReady, isAdminReviewer]);
+
   return (
     <div className="max-w-6xl mx-auto bg-slate-50 min-h-screen font-sans text-slate-800">
       <div className="bg-indigo-900 text-white p-4 flex justify-between items-center shadow-md">
@@ -369,7 +392,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
             <h1 className="font-bold text-lg">數學科管理 (Math Subject)</h1>
         </div>
         <div className="flex items-center gap-2">
-            {user && user.email === 'admin@test.com' && (
+            {isAdminReviewer && (
                 <button 
                     onClick={() => setView('feedback-review')} 
                     className="text-white/80 hover:text-white text-xs bg-purple-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1"
@@ -377,6 +400,11 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                 >
                     <MessageSquare size={14} />
                     回饋審核
+                    {pendingTeacherFeedbackCount > 0 && (
+                        <span className="ml-1 text-[10px] bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">
+                            {pendingTeacherFeedbackCount}
+                        </span>
+                    )}
                 </button>
             )}
             <button onClick={() => setView('chinese-developer')} className="text-white/80 hover:text-white text-xs bg-rose-600 px-3 py-1.5 rounded-lg transition">
@@ -392,6 +420,28 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       </div>
 
       <div className="p-6">
+        {isAdminReviewer && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-amber-800 text-sm font-semibold">
+                    <Bell size={16} />
+                    教學者回饋通知欄：{isLoadingTeacherFeedbackCount ? '載入中...' : `待審核 ${pendingTeacherFeedbackCount} 筆`}
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={loadPendingTeacherFeedbackCount}
+                        className="text-xs bg-white border border-amber-200 text-amber-800 px-2 py-1 rounded hover:bg-amber-100 transition"
+                    >
+                        重新整理
+                    </button>
+                    <button
+                        onClick={() => setView('feedback-review')}
+                        className="text-xs bg-amber-600 text-white px-3 py-1 rounded hover:bg-amber-700 transition"
+                    >
+                        前往審核
+                    </button>
+                </div>
+            </div>
+        )}
         <div className="flex gap-4 mb-6 border-b border-slate-200">
             <button onClick={() => setActiveTab('syllabus')} className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'syllabus' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 1. 課程單元管理
