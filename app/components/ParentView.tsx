@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { UserCog, Clock, BookOpen, TrendingUp, Award, AlertCircle, Users, Plus, Search, BarChart3, Calendar, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { UserCog, Clock, BookOpen, TrendingUp, Award, AlertCircle, Users, Plus, Search, BarChart3, Calendar, Sparkles, PieChart as PieIcon } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
 import { createMockStudent } from '../lib/mock-data-generator';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
 export default function ParentView({ setView, user }) {
   const [children, setChildren] = useState([]);
@@ -14,6 +14,7 @@ export default function ParentView({ setView, user }) {
   const [reports, setReports] = useState([]);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [isGeneratingMock, setIsGeneratingMock] = useState(false);
+  const [trendRangeDays, setTrendRangeDays] = useState(14);
 
   useEffect(() => {
     loadChildren();
@@ -21,10 +22,10 @@ export default function ParentView({ setView, user }) {
 
   useEffect(() => {
     if (selectedChild) {
-      loadChildStats(selectedChild.uid);
+      loadChildStats(selectedChild.uid, trendRangeDays);
       loadReports(selectedChild.uid);
     }
-  }, [selectedChild]);
+  }, [selectedChild, trendRangeDays]);
 
   const loadChildren = async () => {
     if (user.role === 'parent' && user.id) {
@@ -44,10 +45,10 @@ export default function ParentView({ setView, user }) {
     }
   };
 
-  const loadChildStats = async (studentUid) => {
+  const loadChildStats = async (studentUid, days = trendRangeDays) => {
     setLoading(true);
     try {
-      const stats = await DB_SERVICE.getStudentLearningStats(studentUid, 30);
+      const stats = await DB_SERVICE.getStudentLearningStats(studentUid, days);
       setChildStats(stats);
     } catch (e) {
       console.error("Load child stats error:", e);
@@ -149,6 +150,16 @@ export default function ParentView({ setView, user }) {
       setLoading(false);
     }
   };
+
+  const mistakeDistribution = useMemo(() => {
+    if (!childStats?.mistakes) return [];
+    const map = {};
+    childStats.mistakes.forEach((m) => {
+      const key = m.category || m.topic || '未分類';
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [childStats]);
 
   // 準備圖表數據
   const chartData = childStats?.dailyActivity ? Object.entries(childStats.dailyActivity)
@@ -331,9 +342,20 @@ export default function ParentView({ setView, user }) {
           {/* 學習趨勢圖 */}
           {chartData.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <TrendingUp size={20} /> 學習趨勢（最近14天）
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <TrendingUp size={20} /> 學習趨勢（最近 {trendRangeDays} 天）
+                </h3>
+                <select
+                  value={trendRangeDays}
+                  onChange={(e) => setTrendRangeDays(Number(e.target.value))}
+                  className="border rounded-lg px-2 py-1 text-sm"
+                >
+                  <option value={7}>近 7 天</option>
+                  <option value={14}>近 14 天</option>
+                  <option value={30}>近 30 天</option>
+                </select>
+              </div>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -347,6 +369,26 @@ export default function ParentView({ setView, user }) {
               </ResponsiveContainer>
             </div>
           )}
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <PieIcon size={20} /> 錯題分類分佈
+            </h3>
+            {mistakeDistribution.length === 0 ? (
+              <p className="text-slate-500">暫無錯題資料</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={mistakeDistribution} dataKey="value" nameKey="name" outerRadius={110} label>
+                    {mistakeDistribution.map((_, index) => (
+                      <Cell key={`mistake-${index}`} fill={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
 
           {/* AI 報告 */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
