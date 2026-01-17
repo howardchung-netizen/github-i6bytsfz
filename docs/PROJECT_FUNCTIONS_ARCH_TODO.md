@@ -136,15 +136,15 @@
 
 **A. 開發者後台總覽**
 - 設計稿
-  - 指標卡片區（下載率、訂閱、DAU/WAU/MAU、題庫/生成量）
+  - 指標卡片區（註冊率：網站造訪→註冊、App 內註冊率、訂閱、DAU/WAU/MAU、題庫/生成量）
   - 趨勢折線（訂閱、生成量、錯誤率）
-  - 分佈圖（角色比例、平台比例）
+  - 分佈圖（角色比例、平台比例：Web/平板）
 - 資料結構
-  - `metrics_daily`：date, dau, wau, mau, new_users, subs_new, subs_cancel, gen_count, gen_fail_count
-  - `metrics_monthly`：month, subs_active, churn_rate, revenue_est
+  - `metrics_daily`：date, dau, wau, mau, new_users, visit_count, web_signup_count, app_signup_count, web_signup_rate, app_signup_rate, gen_count, gen_fail_count
+  - `metrics_monthly`：month, subs_active, churn_rate, revenue_est, subs_new, subs_cancel
   - `metrics_error`：date, api_error_rate, audit_fail_rate, vision_fail_rate
 - 實作任務
-  - 後台 API：聚合統計/快取
+  - 後台 API：聚合統計/快取（區分 Web/平板）
   - 前端 Dashboard：卡片 + 圖表
   - 基本權限（僅 admin）
 
@@ -159,7 +159,7 @@
   - `student_stats`：userId, subject, accuracy, timeSpent, weakSkills[]
 - 實作任務
   - 聚合計算任務（每日/每週）
-  - 班級與作業查詢 API
+  - 班級與作業查詢 API（同機構合併視圖）
   - 權限：同機構老師可見
 
 **C. 家長後台（個人/子女）**
@@ -180,7 +180,7 @@
   - 能力雷達變化
   - 作答時間分佈
 - 資料結構
-  - `user_progress`：userId, subject, weeklyStats, dailyStats
+  - `user_progress`：userId, subject, weeklyStats, dailyStats (dailyMinutes)
   - `ability_history`：userId, subject, scores[], updatedAt[]
 - 實作任務
   - 個人進度 API
@@ -196,6 +196,10 @@
 - 實作任務
   - 日誌彙總任務
   - 監控看板（管理員）
+
+**訂閱系統備註**
+- 目前訂閱來源為 Stripe（`/api/payment`）但尚未開通
+- 建議新增 `subscriptions` 集合以便統計與報表（不影響現有編碼，可先寫入 mock/placeholder）
 - **註冊介面整理**：頭像品質、美化介面
 - **學校資料 + 自動升班**：每年 7/1 自動升班
 - **帳號權限細緻分類**：角色/權限矩陣與資料存取規則
