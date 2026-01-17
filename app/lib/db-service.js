@@ -14,7 +14,8 @@ import {
     getDoc,
     orderBy,
     setDoc,
-    serverTimestamp
+    serverTimestamp,
+    increment
 } from "firebase/firestore";
 
 // 👇 2. 這裡是修正重點：Auth 相關函數必須從 'firebase/auth' 引入
@@ -1137,6 +1138,18 @@ export const DB_SERVICE = {
                 timeSpentMs: timeSpentMs || 0,
                 createdAt: new Date().toISOString() // Client-side timestamp as fallback
             }, { merge: true }); // merge: true allows updating existing records without overwriting other fields
+
+            const dateKey = new Date().toISOString().slice(0, 10);
+            const dailyRef = doc(db, "artifacts", APP_ID, "users", userId, "daily_stats", dateKey);
+            await setDoc(dailyRef, {
+                date: dateKey,
+                totalQuestions: increment(1),
+                correctAnswers: increment(isCorrect ? 1 : 0),
+                wrongAnswers: increment(isCorrect ? 0 : 1),
+                timeSpentMs: increment(timeSpentMs || 0),
+                updatedAt: serverTimestamp(),
+                createdAt: serverTimestamp()
+            }, { merge: true });
             
             console.log(`✅ Recorded question usage: userId=${userId}, questionId=${questionId}, isCorrect=${isCorrect}`);
             return true;

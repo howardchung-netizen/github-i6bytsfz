@@ -63,6 +63,12 @@ export default function StudentView({ setView, user }) {
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [stats]);
 
+  const weakCategories = useMemo(() => {
+    return [...mistakeDistribution]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 3);
+  }, [mistakeDistribution]);
+
   if (loading) {
     return (
       <div className="text-center py-20">
@@ -194,7 +200,30 @@ export default function StudentView({ setView, user }) {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-        <h3 className="text-xl font-bold text-slate-800 mb-4">錯題清單（最近）</h3>
+        <h3 className="text-xl font-bold text-slate-800 mb-4">弱項分類（前 3）</h3>
+        {weakCategories.length === 0 ? (
+          <p className="text-slate-500">暫無錯題資料</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {weakCategories.map((item) => (
+              <span key={item.name} className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                {item.name} ({item.value})
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-slate-800">錯題清單（最近）</h3>
+          <button
+            onClick={() => setView('mistakes')}
+            className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition"
+          >
+            前往錯題本
+          </button>
+        </div>
         {stats.mistakes.length === 0 ? (
           <p className="text-slate-500">暫無錯題資料</p>
         ) : (
