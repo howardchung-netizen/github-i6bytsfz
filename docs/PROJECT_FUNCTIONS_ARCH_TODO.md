@@ -143,6 +143,9 @@
   - `metrics_daily`：date, dau, wau, mau, new_users, visit_count, web_signup_count, app_signup_count, web_signup_rate, app_signup_rate, gen_count, gen_fail_count
   - `metrics_monthly`：month, subs_active, churn_rate, revenue_est, subs_new, subs_cancel
   - `metrics_error`：date, api_error_rate, audit_fail_rate, vision_fail_rate
+- 補充：來源判斷
+  - 裝置分類：登入時使用 userAgent 判斷（Web / 平板）
+  - 造訪數來源：新增 `visit_logs`（Firebase）
 - 實作任務
   - 後台 API：聚合統計/快取（區分 Web/平板）
   - 前端 Dashboard：卡片 + 圖表
