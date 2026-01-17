@@ -32,13 +32,14 @@ export default function StudentView({ setView, user }) {
 
   const chartData = useMemo(() => {
     if (!stats?.dailyActivity) return [];
-    return Object.entries(stats.dailyActivity)
+    const daily = stats.dailyActivity as Record<string, { questions?: number; correct?: number; wrong?: number; timeSpent?: number }>;
+    return Object.entries(daily)
       .map(([date, data]) => ({
         date,
-        questions: data.questions || 0,
-        correct: data.correct || 0,
-        wrong: data.wrong || 0,
-        timeMinutes: Math.round((data.timeSpent || 0) / 60000)
+        questions: data?.questions || 0,
+        correct: data?.correct || 0,
+        wrong: data?.wrong || 0,
+        timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
       }))
       .sort((a, b) => (a.date > b.date ? 1 : -1));
   }, [stats]);
