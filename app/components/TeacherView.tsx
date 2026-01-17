@@ -691,6 +691,25 @@ export default function TeacherView({ setView, user, topics }) {
     });
   }, [classStats]);
 
+  const studentRanking = useMemo(() => {
+    if (!classStats?.students) return [];
+    return classStats.students
+      .map((student) => {
+        const totalQuestions = student.stats?.totalQuestions || 0;
+        const correctAnswers = student.stats?.correctAnswers || 0;
+        const accuracy = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+        const avgTimeMs = totalQuestions > 0 ? Math.round((student.stats?.totalTimeSpent || 0) / totalQuestions) : 0;
+        return {
+          name: student.name,
+          level: student.level,
+          totalQuestions,
+          accuracy,
+          avgTimeMs
+        };
+      })
+      .sort((a, b) => b.accuracy - a.accuracy);
+  }, [classStats]);
+
   const classDailyTimeData = useMemo(() => {
     if (!classStats?.students) return [];
     const dailyMap = {};
@@ -1420,6 +1439,70 @@ export default function TeacherView({ setView, user, topics }) {
                     </ResponsiveContainer>
                   )}
                 </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 className="text-xl font-bold text-slate-800 mb-4">作業完成率明細</h3>
+                {isLoadingAssignmentStats ? (
+                  <p className="text-slate-500">載入中...</p>
+                ) : assignmentCompletionStats.length === 0 ? (
+                  <p className="text-slate-500">暫無作業資料</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b">
+                          <th className="py-2 pr-4">作業</th>
+                          <th className="py-2 pr-4">完成率</th>
+                          <th className="py-2 pr-4">已完成</th>
+                          <th className="py-2">總人數</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assignmentCompletionStats.map((item) => (
+                          <tr key={item.assignmentId} className="border-b last:border-b-0">
+                            <td className="py-2 pr-4 font-semibold text-slate-700">{item.title}</td>
+                            <td className="py-2 pr-4 text-emerald-600 font-bold">{item.completionRate}%</td>
+                            <td className="py-2 pr-4">{item.completed}</td>
+                            <td className="py-2">{item.total}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 className="text-xl font-bold text-slate-800 mb-4">學生排行（正確率）</h3>
+                {studentRanking.length === 0 ? (
+                  <p className="text-slate-500">暫無學生資料</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b">
+                          <th className="py-2 pr-4">學生</th>
+                          <th className="py-2 pr-4">年級</th>
+                          <th className="py-2 pr-4">正確率</th>
+                          <th className="py-2 pr-4">總題數</th>
+                          <th className="py-2">平均用時</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentRanking.map((student, index) => (
+                          <tr key={`${student.name}-${index}`} className="border-b last:border-b-0">
+                            <td className="py-2 pr-4 font-semibold text-slate-700">{student.name}</td>
+                            <td className="py-2 pr-4">{student.level || '-'}</td>
+                            <td className="py-2 pr-4 text-indigo-600 font-bold">{student.accuracy}%</td>
+                            <td className="py-2 pr-4">{student.totalQuestions}</td>
+                            <td className="py-2">{Math.round(student.avgTimeMs / 1000)} 秒</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* 個別學生進度 */}
