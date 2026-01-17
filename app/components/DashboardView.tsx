@@ -5,10 +5,10 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
 import { 
-  Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown, Bell, FileText
+  Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown, Bell, FileText, BarChart3
 } from 'lucide-react';
 
-export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, goToPracticeSelection, goToExamSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } }, goToProfile }) {
+export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, goToPracticeSelection, goToExamSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } }, goToProfile, goToStudent }) {
   // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
   const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
@@ -136,6 +136,11 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
             <button onClick={handleLogout} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
                 登出
             </button>
+            {(user.role === 'student' || !user.role) && (
+              <button onClick={goToStudent} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer flex items-center gap-1">
+                <BarChart3 size={12} /> 學習數據
+              </button>
+            )}
             {(user.role === 'parent' || user.role === 'admin') && (
               <button onClick={goToParent} className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer">
                 家長監控

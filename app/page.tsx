@@ -23,6 +23,7 @@ import DailyTaskView from './components/DailyTaskView';
 import TeacherView from './components/TeacherView';
 import { TopicSelectionView, MistakesView, SummaryView, ProfileView } from './components/CommonViews';
 import ParentView from './components/ParentView';
+import StudentView from './components/StudentView';
 import FeedbackReviewView from './components/FeedbackReviewView';
 
 // Error Boundary for Runtime Safety
@@ -118,6 +119,7 @@ export default function App() {
   const goToMistakes = () => setView('mistakes');
   const goToParent = () => setView('parent');
   const goToTeacher = () => setView('teacher');
+  const goToStudent = () => setView('student');
   const goToSubscription = () => setView('subscription');
   const goToDailyTask = (subject) => setView(`daily-task-${subject}`);
   const toggleAdhdMode = () => setAdhdMode(!adhdMode);
@@ -823,7 +825,7 @@ export default function App() {
         {isLoggedIn && view !== 'register' && (
           <div className="max-w-6xl mx-auto p-4 md:p-6">
              {/* Main Views */}
-             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} goToPracticeSelection={goToPracticeSelection} goToExamSelection={goToExamSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} goToProfile={goToProfile} />}
+             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} goToPracticeSelection={goToPracticeSelection} goToExamSelection={goToExamSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} goToProfile={goToProfile} goToStudent={goToStudent} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} user={user} />}
              {view === 'feedback-review' && <FeedbackReviewView setView={setView} user={user} isFirebaseReady={isFirebaseReady} />}
              {view === 'chinese-developer' && <ChineseDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
@@ -835,6 +837,7 @@ export default function App() {
              {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} setLoading={setLoading} sessionMode={sessionMode} />}
              {view === 'mistakes' && <MistakesView setView={setView} mistakes={mistakes} retryQuestion={retryQuestion} />}
              {view === 'parent' && <ParentView setView={setView} user={user} />}
+             {view === 'student' && <StudentView setView={setView} user={user} />}
              {view === 'teacher' && <TeacherView setView={setView} user={user} topics={topics} />}
              {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} topics={topics} examMode={sessionMode === 'exam'} />}
              {view === 'summary' && <SummaryView sessionStats={sessionStats} sessionQuestions={sessionQuestions} examMode={sessionMode === 'exam'} restartSelection={() => goToSelection(sessionMode)} setView={setView} />}
