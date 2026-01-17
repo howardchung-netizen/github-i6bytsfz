@@ -193,6 +193,30 @@ export default function StudentView({ setView, user }) {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <h3 className="text-xl font-bold text-slate-800 mb-4">錯題清單（最近）</h3>
+        {stats.mistakes.length === 0 ? (
+          <p className="text-slate-500">暫無錯題資料</p>
+        ) : (
+          <div className="space-y-3">
+            {stats.mistakes.slice(0, 8).map((m, idx) => (
+              <div key={m.id || idx} className="border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                  <span className="bg-slate-100 px-2 py-0.5 rounded">{m.category || m.topic || '未分類'}</span>
+                  {m.subject && <span>{m.subject}</span>}
+                </div>
+                <div className="text-sm text-slate-800 font-semibold">
+                  {m.question || '（題目內容未儲存）'}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  正確答案：{m.answer || '-'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
         <h3 className="text-xl font-bold text-slate-800 mb-4">錯題分類分佈</h3>
         {mistakeDistribution.length === 0 ? (
           <p className="text-slate-500">暫無錯題資料</p>
