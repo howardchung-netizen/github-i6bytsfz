@@ -131,6 +131,71 @@
     - 審計通過率/標記率
     - 成本估算（每日/每科）
 - **老師/家長/學生資料檢視格式**：增添學習數據、時間紀錄、作答時間
+
+### 2.2.1 後台報表拆解（設計稿 / 資料結構 / 實作任務）
+
+**A. 開發者後台總覽**
+- 設計稿
+  - 指標卡片區（下載率、訂閱、DAU/WAU/MAU、題庫/生成量）
+  - 趨勢折線（訂閱、生成量、錯誤率）
+  - 分佈圖（角色比例、平台比例）
+- 資料結構
+  - `metrics_daily`：date, dau, wau, mau, new_users, subs_new, subs_cancel, gen_count, gen_fail_count
+  - `metrics_monthly`：month, subs_active, churn_rate, revenue_est
+  - `metrics_error`：date, api_error_rate, audit_fail_rate, vision_fail_rate
+- 實作任務
+  - 後台 API：聚合統計/快取
+  - 前端 Dashboard：卡片 + 圖表
+  - 基本權限（僅 admin）
+
+**B. 老師後台（班級與作業）**
+- 設計稿
+  - 班級概覽 + 作業完成率
+  - 學生表格（正確率/時間/弱項）
+  - 題型/單元命中率圖表
+- 資料結構
+  - `class_stats`：classId, activeRate, avgAccuracy, avgTime
+  - `assignment_stats`：assignmentId, completionRate, avgScore, avgTime
+  - `student_stats`：userId, subject, accuracy, timeSpent, weakSkills[]
+- 實作任務
+  - 聚合計算任務（每日/每週）
+  - 班級與作業查詢 API
+  - 權限：同機構老師可見
+
+**C. 家長後台（個人/子女）**
+- 設計稿
+  - 日/週學習時長、連續天數
+  - 進步趨勢、弱項雷達
+- 資料結構
+  - `parent_reports`：parentId, childId, dailyMinutes[], streak
+  - `learning_trends`：userId, subject, accuracyTrend[], timeTrend[]
+- 實作任務
+  - 子女綁定資料查詢
+  - 報表 API
+  - 權限：家長僅可見已綁定子女
+
+**D. 學生後台（個人）**
+- 設計稿
+  - 今日/本週進度卡片
+  - 能力雷達變化
+  - 作答時間分佈
+- 資料結構
+  - `user_progress`：userId, subject, weeklyStats, dailyStats
+  - `ability_history`：userId, subject, scores[], updatedAt[]
+- 實作任務
+  - 個人進度 API
+  - 視覺化呈現（雷達+趨勢）
+
+**E. 營運監控（建議新增）**
+- 設計稿
+  - API 配額卡片 + 成本預估
+  - 失敗率與審計狀態圖
+- 資料結構
+  - `api_usage`：date, model, tokens, cost
+  - `audit_metrics`：date, verified, flagged, error
+- 實作任務
+  - 日誌彙總任務
+  - 監控看板（管理員）
 - **註冊介面整理**：頭像品質、美化介面
 - **學校資料 + 自動升班**：每年 7/1 自動升班
 - **帳號權限細緻分類**：角色/權限矩陣與資料存取規則
