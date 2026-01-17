@@ -75,6 +75,15 @@ const cleanAndParseJSON = (jsonString) => {
     }
 };
 
+const formatFeedbackInstruction = (fb) => {
+    const base = String(fb?.instruction || fb?.feedback || '').trim();
+    if (!base) return '';
+    const typeLabel = fb?.questionType?.length ? fb.questionType.join('、') : '通用';
+    const categoryLabel = fb?.category || '通用';
+    const sourceLabel = fb?.source === 'approved_teacher' ? '教學者' : '開發者';
+    return `【${sourceLabel}｜題型：${typeLabel}｜分類：${categoryLabel}】${base}`;
+};
+
 // --- Fallback Local Brain ---
 const LOCAL_BRAIN = {
   generateQuestion: (level, difficulty, selectedTopics, allTopicsList) => {
@@ -246,7 +255,7 @@ export const AI_SERVICE = {
         5. Output strict JSON only (no markdown, no code blocks).
         6. IMPORTANT: Ensure all strings are valid JSON. Escape all backslashes.
         ${isMathSubject ? `7. For Math questions, each question MUST be a multiple-choice question (MCQ) with exactly 8 options: 1 correct answer and 7 plausible distractors (wrong answers that are mathematically reasonable).\n   CRITICAL: All options within each question must be UNIQUE. Do NOT include duplicate values (e.g., "$72" and "$72.00" are the same - only include one). Normalize all numeric options to the same format (either all with decimals or all without, but be consistent).` : `7. If creating multiple-choice questions, each question must include 4 options: 1 correct answer and 3 plausible distractors.\n   CRITICAL: All options within each question must be UNIQUE. Do NOT include duplicate values.`}
-        ${relevantFeedback.length > 0 ? `\n\n開發者回饋（請嚴格遵守）：\n${relevantFeedback.map((fb, idx) => `${idx + 1}. [題型：${fb.questionType?.join('、') || '通用'}，分類：${fb.category || '通用'}] ${fb.feedback}`).join('\n')}\n\n請在生成題目時參考以上回饋，確保題目質量符合要求。` : ''}
+        ${relevantFeedback.length > 0 ? `\n\n生題指令（請嚴格遵守）：\n${relevantFeedback.map((fb, idx) => `${idx + 1}. ${formatFeedbackInstruction(fb)}`).filter(Boolean).join('\n')}\n\n請在生成題目時遵守以上指令，確保題目質量符合要求。` : ''}
         
         🔢 CHAIN OF THOUGHT (CoT) REQUIREMENT - CRITICAL:
         You MUST think step-by-step for ALL mathematical calculations and problem-solving:

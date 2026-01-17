@@ -27,6 +27,13 @@ import {
 
 import { APP_ID, SAMPLE_PAST_PAPERS } from './constants';
 
+const buildInstructionFromFeedback = (text = '') => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    if (/^(請|不要|必須|禁止)/.test(trimmed)) return trimmed;
+    return `請${trimmed}`;
+};
+
 export const DB_SERVICE = {
     addTopic: async (topicData) => { 
         try {
@@ -897,7 +904,8 @@ export const DB_SERVICE = {
                     status: 'active',
                     approvedBy: approvedBy,
                     approvedAt: new Date().toISOString(),
-                    originalFeedbackId: feedbackId
+                    originalFeedbackId: feedbackId,
+                    instruction: buildInstructionFromFeedback(feedbackData.feedback)
                 }
             );
 
