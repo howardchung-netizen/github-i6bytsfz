@@ -8,7 +8,7 @@ import {
   Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown, Bell, FileText
 } from 'lucide-react';
 
-export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, goToPracticeSelection, goToExamSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } } }) {
+export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, goToPracticeSelection, goToExamSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } }, goToProfile }) {
   // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
   const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
@@ -169,9 +169,14 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
 
         {/* 用戶信息區域 */}
         <div className="flex items-center gap-4 mt-6 relative z-0">
-          <div className="w-20 h-20 rounded-full border-4 border-white/30 overflow-hidden bg-white hover:scale-105 transition shadow-lg flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => goToProfile && goToProfile()}
+            className="w-20 h-20 rounded-full border-4 border-white/30 overflow-hidden bg-white hover:scale-105 transition shadow-lg flex-shrink-0"
+            aria-label="開啟個人檔案"
+          >
               <img src={user.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.name}`} alt="avatar" className="w-full h-full" />
-          </div>
+          </button>
           <div className="flex-1">
              <h2 className="text-2xl font-bold mb-2 tracking-tight">Hi, {user.name}! 👋</h2>
              <div className="flex flex-wrap items-center gap-3">

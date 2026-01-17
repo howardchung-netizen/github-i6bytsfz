@@ -185,6 +185,10 @@ export default function App() {
       }
   };
 
+  const goToProfile = () => {
+      setUser(u => ({ ...u, isEditingProfile: true }));
+  };
+
   // --- 配額超限自動恢復 ---
   useEffect(() => {
       if (quotaExceeded && quotaRetryAfter) {
@@ -780,7 +784,7 @@ export default function App() {
         {isLoggedIn && view !== 'register' && (
           <div className="max-w-6xl mx-auto p-4 md:p-6">
              {/* Main Views */}
-             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} goToPracticeSelection={goToPracticeSelection} goToExamSelection={goToExamSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
+             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} goToPracticeSelection={goToPracticeSelection} goToExamSelection={goToExamSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} goToProfile={goToProfile} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} user={user} />}
              {view === 'feedback-review' && <FeedbackReviewView setView={setView} user={user} isFirebaseReady={isFirebaseReady} />}
              {view === 'chinese-developer' && <ChineseDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
