@@ -13,6 +13,8 @@ export default function TeacherView({ setView, user, topics }) {
   const [classStats, setClassStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('classes'); // 'classes', 'assignments', 'analytics', 'seeds', 'paper-creation', 'paper-preview', 'assignment-seed-selection'
+  const [institutionStats, setInstitutionStats] = useState(null);
+  const [isLoadingInstitutionStats, setIsLoadingInstitutionStats] = useState(false);
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -93,6 +95,47 @@ export default function TeacherView({ setView, user, topics }) {
       loadClasses();
     }
   }, [user]);
+
+  useEffect(() => {
+    const loadInstitutionStats = async () => {
+      if (activeTab !== 'analytics' || classes.length === 0) return;
+      setIsLoadingInstitutionStats(true);
+      try {
+        const statsList = await Promise.all(
+          classes.map(async (cls) => {
+            const stats = await DB_SERVICE.getClassStats(cls.id);
+            return stats ? { className: cls.name || cls.className || cls.id, stats } : null;
+          })
+        );
+        const validStats = statsList.filter(Boolean);
+        const totalStudents = validStats.reduce((sum, item) => sum + (item.stats.totalStudents || 0), 0);
+        const totalQuestions = validStats.reduce((sum, item) => {
+          return sum + item.stats.students.reduce((s, st) => s + (st.stats?.totalQuestions || 0), 0);
+        }, 0);
+        const totalCorrect = validStats.reduce((sum, item) => {
+          return sum + item.stats.students.reduce((s, st) => s + (st.stats?.correctAnswers || 0), 0);
+        }, 0);
+        const avgAccuracy = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+        const classChart = validStats.map((item) => ({
+          name: item.className,
+          students: item.stats.totalStudents || 0
+        }));
+        setInstitutionStats({
+          classCount: validStats.length,
+          totalStudents,
+          totalQuestions,
+          avgAccuracy,
+          classChart
+        });
+      } catch (e) {
+        console.error("Load Institution Stats Error:", e);
+        setInstitutionStats(null);
+      } finally {
+        setIsLoadingInstitutionStats(false);
+      }
+    };
+    loadInstitutionStats();
+  }, [activeTab, classes]);
 
   // 載入已發送試卷列表
   useEffect(() => {
@@ -1190,6 +1233,47 @@ export default function TeacherView({ setView, user, topics }) {
         </>
       ) : activeTab === 'analytics' ? (
         <>
+          {isLoadingInstitutionStats && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 text-slate-500">
+              載入機構總覽中...
+            </div>
+          )}
+          {!isLoadingInstitutionStats && institutionStats && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-slate-800">機構總覽（同機構班級）</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500">班級數</div>
+                  <div className="text-2xl font-bold">{institutionStats.classCount}</div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500">總學生數</div>
+                  <div className="text-2xl font-bold">{institutionStats.totalStudents}</div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500">總題數</div>
+                  <div className="text-2xl font-bold">{institutionStats.totalQuestions}</div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="text-xs text-slate-500">平均正確率</div>
+                  <div className="text-2xl font-bold">{institutionStats.avgAccuracy}%</div>
+                </div>
+              </div>
+              <div className="mt-4 h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={institutionStats.classChart || []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="students" fill="#6366f1" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
           {selectedClass && classStats ? (
             <div className="space-y-6">
               {/* 總覽統計 */}
