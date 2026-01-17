@@ -19,6 +19,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [isLoadingAssignmentStats, setIsLoadingAssignmentStats] = useState(false);
   const [rankingSubject, setRankingSubject] = useState('all');
   const [rankingDays, setRankingDays] = useState(14);
+  const [rankingSort, setRankingSort] = useState('accuracy_desc');
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -77,6 +78,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [sentPapers, setSentPapers] = useState([]);
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [assignmentSort, setAssignmentSort] = useState('sent_desc');
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState('all');
   const [isLoadingSentPapers, setIsLoadingSentPapers] = useState(false);
   const [selectedSentPaper, setSelectedSentPaper] = useState(null); // 選中的試卷詳情
   
@@ -757,6 +759,18 @@ export default function TeacherView({ setView, user, topics }) {
       return subjects[rankingSubject] > 0;
     });
   }, [studentRanking, rankingSubject]);
+
+  const sortedStudentRanking = useMemo(() => {
+    return [...filteredStudentRanking].sort((a, b) => {
+      if (rankingSort === 'accuracy_desc') return b.accuracy - a.accuracy;
+      if (rankingSort === 'accuracy_asc') return a.accuracy - b.accuracy;
+      if (rankingSort === 'time_desc') return b.avgTimeMs - a.avgTimeMs;
+      if (rankingSort === 'time_asc') return a.avgTimeMs - b.avgTimeMs;
+      if (rankingSort === 'questions_desc') return b.totalQuestions - a.totalQuestions;
+      if (rankingSort === 'questions_asc') return a.totalQuestions - b.totalQuestions;
+      return 0;
+    });
+  }, [filteredStudentRanking, rankingSort]);
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500 font-sans">
@@ -1581,9 +1595,21 @@ export default function TeacherView({ setView, user, topics }) {
                       <option value={14}>近 14 天</option>
                       <option value={30}>近 30 天</option>
                     </select>
+                    <select
+                      value={rankingSort}
+                      onChange={(e) => setRankingSort(e.target.value)}
+                      className="border rounded-lg px-2 py-1 text-sm"
+                    >
+                      <option value="accuracy_desc">正確率高 → 低</option>
+                      <option value="accuracy_asc">正確率低 → 高</option>
+                      <option value="time_desc">用時長 → 短</option>
+                      <option value="time_asc">用時短 → 長</option>
+                      <option value="questions_desc">題數多 → 少</option>
+                      <option value="questions_asc">題數少 → 多</option>
+                    </select>
                   </div>
                 </div>
-                {filteredStudentRanking.length === 0 ? (
+                {sortedStudentRanking.length === 0 ? (
                   <p className="text-slate-500">暫無學生資料</p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1598,7 +1624,7 @@ export default function TeacherView({ setView, user, topics }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredStudentRanking.map((student, index) => (
+                        {sortedStudentRanking.map((student, index) => (
                           <tr key={`${student.name}-${index}`} className="border-b last:border-b-0">
                             <td className="py-2 pr-4 font-semibold text-slate-700">{student.name}</td>
                             <td className="py-2 pr-4">{student.level || '-'}</td>
@@ -1839,6 +1865,16 @@ export default function TeacherView({ setView, user, topics }) {
               <option value="count_desc">題數多 → 少</option>
               <option value="count_asc">題數少 → 多</option>
             </select>
+            <select
+              value={assignmentStatusFilter}
+              onChange={(e) => setAssignmentStatusFilter(e.target.value)}
+              className="border rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="all">全部狀態</option>
+              <option value="overdue">逾期</option>
+              <option value="dueSoon">即將到期</option>
+              <option value="active">正常</option>
+            </select>
               <button
                 onClick={async () => {
                   setIsLoadingSentPapers(true);
@@ -1876,6 +1912,16 @@ export default function TeacherView({ setView, user, topics }) {
               <div className="border border-slate-200 rounded-lg divide-y divide-slate-200">
                 {sentPapers
                   .filter((paper) => (paper.title || '').toLowerCase().includes(assignmentSearch.toLowerCase()))
+                  .filter((paper) => {
+                    if (assignmentStatusFilter === 'all') return true;
+                    if (!paper.dueDate) return assignmentStatusFilter === 'active';
+                    const now = Date.now();
+                    const dueTime = new Date(paper.dueDate).getTime();
+                    const diffDays = Math.ceil((dueTime - now) / (1000 * 60 * 60 * 24));
+                    if (assignmentStatusFilter === 'overdue') return diffDays < 0;
+                    if (assignmentStatusFilter === 'dueSoon') return diffDays >= 0 && diffDays <= 3;
+                    return diffDays > 3;
+                  })
                   .sort((a, b) => {
                     const timeA = new Date(a.sentAt || a.createdAt || 0).getTime();
                     const timeB = new Date(b.sentAt || b.createdAt || 0).getTime();
@@ -1907,9 +1953,26 @@ export default function TeacherView({ setView, user, topics }) {
                               {paper.grade}
                             </span>
                           )}
-                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">
-                            已發送
-                          </span>
+                          {paper.dueDate ? (
+                            (() => {
+                              const diffDays = Math.ceil((new Date(paper.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                              if (diffDays < 0) {
+                                return (
+                                  <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">逾期</span>
+                                );
+                              }
+                              if (diffDays <= 3) {
+                                return (
+                                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">即將到期</span>
+                                );
+                              }
+                              return (
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">正常</span>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">已發送</span>
+                          )}
                         </div>
                         {paper.description && (
                           <p className="text-sm text-slate-600 mb-1 line-clamp-1">
