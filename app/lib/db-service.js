@@ -35,6 +35,24 @@ const buildInstructionFromFeedback = (text = '') => {
 };
 
 export const DB_SERVICE = {
+    logVisit: async ({ path = '/', platform = 'web', sessionId = '' }) => {
+        try {
+            const docRef = await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "visit_logs"),
+                {
+                    path,
+                    platform,
+                    sessionId,
+                    createdAt: new Date().toISOString(),
+                    createdAtServer: serverTimestamp()
+                }
+            );
+            return docRef.id;
+        } catch (e) {
+            console.error("Log Visit Error:", e);
+            return null;
+        }
+    },
     addTopic: async (topicData) => { 
         try {
             const docRef = await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"), topicData);

@@ -30,6 +30,13 @@ export default function RegisterView({ setView, setUser }) {
 
     const refreshAvatars = () => { setAvatarVersion(v => v + 1); setSelectedAvatar(null); };
 
+    const getPlatformFromUserAgent = () => {
+        if (typeof navigator === 'undefined') return 'web';
+        const ua = navigator.userAgent || '';
+        const isTablet = /iPad|Tablet|Android(?!.*Mobile)/i.test(ua);
+        return isTablet ? 'tablet' : 'web';
+    };
+
     const handleRegister = async () => { 
         setErrorMessage(""); 
         if (!formData.name || !formData.email || !formData.password || !selectedAvatar) { 
@@ -53,7 +60,8 @@ export default function RegisterView({ setView, setUser }) {
             level: formData.grade,
             role: formData.role || 'student',
             institutionName: formData.role === 'teacher' ? formData.institutionName.trim() : '', // 只有教學者需要
-            isPremium: false // 預設為免費用戶
+            isPremium: false, // 預設為免費用戶
+            platform: getPlatformFromUserAgent()
         }; 
         const userId = await DB_SERVICE.registerUser(profileData, formData.password); 
         

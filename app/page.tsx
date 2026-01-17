@@ -185,6 +185,39 @@ export default function App() {
       }
   };
 
+  const getPlatformFromUserAgent = () => {
+      if (typeof navigator === 'undefined') return 'web';
+      const ua = navigator.userAgent || '';
+      const isTablet = /iPad|Tablet|Android(?!.*Mobile)/i.test(ua);
+      return isTablet ? 'tablet' : 'web';
+  };
+
+  const getVisitSessionId = () => {
+      if (typeof sessionStorage === 'undefined') return `visit_${Date.now()}`;
+      let id = sessionStorage.getItem('visit_session_id');
+      if (!id) {
+          id = `visit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          sessionStorage.setItem('visit_session_id', id);
+      }
+      return id;
+  };
+
+  const logVisitOnce = (viewName) => {
+      if (typeof sessionStorage !== 'undefined') {
+          const logged = sessionStorage.getItem('visit_logged');
+          if (logged) return;
+          sessionStorage.setItem('visit_logged', '1');
+      }
+      const path = typeof window !== 'undefined'
+          ? `${window.location.pathname}#${viewName || 'unknown'}`
+          : viewName || '/';
+      DB_SERVICE.logVisit({
+          path,
+          platform: getPlatformFromUserAgent(),
+          sessionId: getVisitSessionId()
+      });
+  };
+
   const goToProfile = () => {
       setUser(u => ({ ...u, isEditingProfile: true }));
   };
@@ -258,6 +291,12 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+      if (!isLoggedIn && view === 'register') {
+          logVisitOnce(view);
+      }
+  }, [isLoggedIn, view]);
 
   // 3. 載入單元與種子資料
   useEffect(() => { 
