@@ -25,6 +25,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [studentEmail, setStudentEmail] = useState('');
   const [classSearch, setClassSearch] = useState('');
+  const [classSort, setClassSort] = useState('students_desc');
   const [isGeneratingMock, setIsGeneratingMock] = useState(false);
   
   // 派卷狀態
@@ -72,6 +73,7 @@ export default function TeacherView({ setView, user, topics }) {
   // 已發送試卷列表
   const [sentPapers, setSentPapers] = useState([]);
   const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [assignmentSort, setAssignmentSort] = useState('sent_desc');
   const [isLoadingSentPapers, setIsLoadingSentPapers] = useState(false);
   const [selectedSentPaper, setSelectedSentPaper] = useState(null); // 選中的試卷詳情
   
@@ -806,8 +808,25 @@ export default function TeacherView({ setView, user, topics }) {
               placeholder="搜尋班級名稱"
               className="border rounded-lg px-3 py-1.5 text-sm"
             />
+            <select
+              value={classSort}
+              onChange={(e) => setClassSort(e.target.value)}
+              className="border rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="students_desc">人數多 → 少</option>
+              <option value="students_asc">人數少 → 多</option>
+              <option value="grade_desc">年級高 → 低</option>
+              <option value="grade_asc">年級低 → 高</option>
+            </select>
             {classes
               .filter((cls) => (cls.className || cls.name || '').toLowerCase().includes(classSearch.toLowerCase()))
+              .sort((a, b) => {
+                if (classSort === 'students_desc') return (b.students?.length || 0) - (a.students?.length || 0);
+                if (classSort === 'students_asc') return (a.students?.length || 0) - (b.students?.length || 0);
+                if (classSort === 'grade_desc') return (b.grade || '').localeCompare(a.grade || '');
+                if (classSort === 'grade_asc') return (a.grade || '').localeCompare(b.grade || '');
+                return 0;
+              })
               .map((cls) => (
               <button
                 key={cls.id}
@@ -1732,6 +1751,16 @@ export default function TeacherView({ setView, user, topics }) {
               placeholder="搜尋試卷標題"
               className="border rounded-lg px-3 py-1.5 text-sm"
             />
+            <select
+              value={assignmentSort}
+              onChange={(e) => setAssignmentSort(e.target.value)}
+              className="border rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="sent_desc">日期新 → 舊</option>
+              <option value="sent_asc">日期舊 → 新</option>
+              <option value="count_desc">題數多 → 少</option>
+              <option value="count_asc">題數少 → 多</option>
+            </select>
               <button
                 onClick={async () => {
                   setIsLoadingSentPapers(true);
@@ -1769,6 +1798,17 @@ export default function TeacherView({ setView, user, topics }) {
               <div className="border border-slate-200 rounded-lg divide-y divide-slate-200">
                 {sentPapers
                   .filter((paper) => (paper.title || '').toLowerCase().includes(assignmentSearch.toLowerCase()))
+                  .sort((a, b) => {
+                    const timeA = new Date(a.sentAt || a.createdAt || 0).getTime();
+                    const timeB = new Date(b.sentAt || b.createdAt || 0).getTime();
+                    const countA = a.questionCount || a.questions?.length || 0;
+                    const countB = b.questionCount || b.questions?.length || 0;
+                    if (assignmentSort === 'sent_desc') return timeB - timeA;
+                    if (assignmentSort === 'sent_asc') return timeA - timeB;
+                    if (assignmentSort === 'count_desc') return countB - countA;
+                    if (assignmentSort === 'count_asc') return countA - countB;
+                    return 0;
+                  })
                   .map((paper) => (
                   <div
                     key={paper.id}
@@ -1789,6 +1829,9 @@ export default function TeacherView({ setView, user, topics }) {
                               {paper.grade}
                             </span>
                           )}
+                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">
+                            已發送
+                          </span>
                         </div>
                         {paper.description && (
                           <p className="text-sm text-slate-600 mb-1 line-clamp-1">
