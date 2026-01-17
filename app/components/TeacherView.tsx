@@ -714,14 +714,14 @@ export default function TeacherView({ setView, user, topics }) {
 
   const classDailyTimeData = useMemo(() => {
     if (!classStats?.students) return [];
-    const dailyMap = {};
+    const dailyMap: Record<string, { date: string; timeSpent: number }> = {};
     classStats.students.forEach((student) => {
-      const daily = student.stats?.dailyActivity || {};
+      const daily = (student.stats?.dailyActivity || {}) as Record<string, { timeSpent?: number }>;
       Object.entries(daily).forEach(([date, payload]) => {
         if (!dailyMap[date]) {
           dailyMap[date] = { date, timeSpent: 0 };
         }
-        dailyMap[date].timeSpent += payload.timeSpent || 0;
+        dailyMap[date].timeSpent += payload?.timeSpent || 0;
       });
     });
     return Object.values(dailyMap)
