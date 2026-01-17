@@ -34,6 +34,8 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   // 教學者回饋通知欄
   const [pendingTeacherFeedbackCount, setPendingTeacherFeedbackCount] = useState(0);
   const [isLoadingTeacherFeedbackCount, setIsLoadingTeacherFeedbackCount] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   
   
   // 圖像上傳相關狀態
@@ -384,6 +386,30 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       loadPendingTeacherFeedbackCount();
   }, [isFirebaseReady, isAdminReviewer]);
 
+  const loadAnalytics = async () => {
+      setIsLoadingAnalytics(true);
+      try {
+          const res = await fetch('/api/metrics');
+          const data = await res.json();
+          if (data?.success) {
+              setAnalyticsData(data.data);
+          } else {
+              setAnalyticsData(null);
+          }
+      } catch (e) {
+          console.error("Load Analytics Error:", e);
+          setAnalyticsData(null);
+      } finally {
+          setIsLoadingAnalytics(false);
+      }
+  };
+
+  useEffect(() => {
+      if (activeTab === 'analytics' && isAdminReviewer) {
+          loadAnalytics();
+      }
+  }, [activeTab, isAdminReviewer]);
+
   return (
     <div className="max-w-6xl mx-auto bg-slate-50 min-h-screen font-sans text-slate-800">
       <div className="bg-indigo-900 text-white p-4 flex justify-between items-center shadow-md">
@@ -469,6 +495,14 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                     3. 教學者試題管理
                 </button>
             )}
+            {isAdminReviewer && (
+                <button
+                    onClick={() => setActiveTab('analytics')}
+                    className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'analytics' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    4. 後台總覽
+                </button>
+            )}
         </div>
 
         {activeTab === 'syllabus' && (
@@ -526,6 +560,64 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                         {topics.filter(t => t.grade === newTopic.grade && t.subject === 'math').length === 0 && <div className="text-center text-slate-400 py-10">此年級尚無數學單元</div>}
                     </div>
                 </div>
+            </div>
+        )}
+
+        {activeTab === 'analytics' && isAdminReviewer && (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-800">開發者後台總覽</h3>
+                    <button
+                        onClick={loadAnalytics}
+                        disabled={isLoadingAnalytics}
+                        className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-60 transition"
+                    >
+                        重新整理
+                    </button>
+                </div>
+
+                {isLoadingAnalytics && (
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500">
+                        載入中...
+                    </div>
+                )}
+
+                {!isLoadingAnalytics && !analyticsData && (
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500">
+                        暫無數據，請稍後再試。
+                    </div>
+                )}
+
+                {!isLoadingAnalytics && analyticsData && (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                <div className="text-xs text-slate-500">造訪數</div>
+                                <div className="text-2xl font-bold">{analyticsData.visits?.total || 0}</div>
+                                <div className="text-xs text-slate-500">Web {analyticsData.visits?.web || 0} / 平板 {analyticsData.visits?.tablet || 0}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                <div className="text-xs text-slate-500">註冊率（Web / 平板）</div>
+                                <div className="text-2xl font-bold">
+                                    {(analyticsData.signups?.web_rate || 0) * 100}%
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                    Web {analyticsData.signups?.web || 0} / 平板 {analyticsData.signups?.app || 0}
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                <div className="text-xs text-slate-500">DAU / WAU / MAU</div>
+                                <div className="text-2xl font-bold">
+                                    {analyticsData.active_users?.dau || 0} / {analyticsData.active_users?.wau || 0} / {analyticsData.active_users?.mau || 0}
+                                </div>
+                                <div className="text-xs text-slate-500">近 30 日</div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
+                            生成量：{analyticsData.generation?.gen_count || 0}（失敗 {analyticsData.generation?.gen_fail_count || 0}）
+                        </div>
+                    </>
+                )}
             </div>
         )}
 
