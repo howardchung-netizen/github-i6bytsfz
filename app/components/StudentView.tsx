@@ -7,13 +7,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 export default function StudentView({ setView, user }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trendRangeDays, setTrendRangeDays] = useState(30);
 
   useEffect(() => {
     const loadStats = async () => {
       if (!user?.id && !user?.uid) return;
       setLoading(true);
       try {
-        const data = await DB_SERVICE.getStudentLearningStats(user.uid || user.id, 30);
+        const data = await DB_SERVICE.getStudentLearningStats(user.uid || user.id, trendRangeDays);
         setStats(data);
       } catch (e) {
         console.error("Load student stats error:", e);
@@ -22,7 +23,7 @@ export default function StudentView({ setView, user }) {
       }
     };
     loadStats();
-  }, [user]);
+  }, [user, trendRangeDays]);
 
   const accuracyRate = useMemo(() => {
     if (!stats || stats.totalQuestions === 0) return 0;
@@ -40,6 +41,15 @@ export default function StudentView({ setView, user }) {
         timeMinutes: Math.round((data.timeSpent || 0) / 60000)
       }))
       .sort((a, b) => (a.date > b.date ? 1 : -1));
+  }, [stats]);
+
+  const subjectDistribution = useMemo(() => {
+    if (!stats?.subjects) return [];
+    return [
+      { name: '數學', value: stats.subjects.math || 0 },
+      { name: '中文', value: stats.subjects.chi || 0 },
+      { name: '英文', value: stats.subjects.eng || 0 }
+    ];
   }, [stats]);
 
   const mistakeDistribution = useMemo(() => {
@@ -118,7 +128,18 @@ export default function StudentView({ setView, user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h3 className="text-xl font-bold text-slate-800 mb-4">學習趨勢（近 30 天）</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-slate-800">學習趨勢（近 {trendRangeDays} 天）</h3>
+            <select
+              value={trendRangeDays}
+              onChange={(e) => setTrendRangeDays(Number(e.target.value))}
+              className="border rounded-lg px-2 py-1 text-sm"
+            >
+              <option value={7}>近 7 天</option>
+              <option value={14}>近 14 天</option>
+              <option value={30}>近 30 天</option>
+            </select>
+          </div>
           {chartData.length === 0 ? (
             <p className="text-slate-500">暫無學習資料</p>
           ) : (
@@ -151,6 +172,24 @@ export default function StudentView({ setView, user }) {
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <h3 className="text-xl font-bold text-slate-800 mb-4">科目分佈</h3>
+        {subjectDistribution.length === 0 ? (
+          <p className="text-slate-500">暫無科目資料</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={subjectDistribution} dataKey="value" nameKey="name" outerRadius={110} label>
+                {subjectDistribution.map((_, index) => (
+                  <Cell key={`subject-${index}`} fill={['#6366f1', '#fb7185', '#f59e0b'][index % 3]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
