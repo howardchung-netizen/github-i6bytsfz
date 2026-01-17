@@ -160,7 +160,10 @@ export default function PracticeView({
   };
 
   // 渲染包含 LaTeX 的文本
-  const renderMathText = (text, options = {}) => {
+  const renderMathText = (
+    text: string,
+    options: { highlight?: boolean; lang?: string } = {}
+  ) => {
     if (!text) return '';
     const { highlight = false, lang = 'zh-HK' } = options;
     
