@@ -2,6 +2,39 @@
 
 ## 📋 今天完成的主要工作
 
+### 20. ✅ 教師後台篩選與排行強化
+**功能**：
+- 班級列表新增搜尋、排序與快速切換
+- 已發送試卷新增搜尋與排序
+- 作業完成率新增高/中/低狀態標籤
+- 學生排行新增科目/時間範圍篩選
+- 班級統計支援可調整天數範圍
+
+**相關文件**：
+- `app/components/TeacherView.tsx` - 班級/作業篩選、排行篩選、狀態標籤
+- `app/lib/db-service.js` - `getClassStats` 支援天數參數
+
+---
+
+### 19. ✅ 後台數據與老師中控台強化（含 Vercel 錯誤修復）
+**功能**：
+- 新增 `visit_logs` 寫入與平台辨識（Web/平板）
+- 新增 `/api/metrics` 聚合指標（造訪/註冊率/DAU/WAU/MAU/生成量）
+- 開發者後台新增「後台總覽」分頁（KPI、趨勢圖、分佈圖）
+- 老師中控台新增機構總覽、作業完成率、每日學習時長圖表
+- 班級與已發送試卷新增搜尋篩選
+- 修正 Vercel build：`timeSpent` 型別推斷錯誤
+
+**相關文件**：
+- `app/lib/db-service.js` - `visit_logs` 寫入、作業完成率統計、學習時長彙整
+- `app/page.tsx` - 註冊頁造訪紀錄與平台辨識
+- `app/components/RegisterView.tsx` - 註冊時寫入 `platform`
+- `app/api/metrics/route.ts` - 指標聚合 API
+- `app/components/DeveloperView.tsx` - 後台總覽分頁與圖表
+- `app/components/TeacherView.tsx` - 機構總覽/圖表/搜尋與型別修復
+
+---
+
 ### 18. ✅ 試卷模式流程調整與成績表強化
 **功能**：
 - 首頁新增「練習題目」按鈕並將「開始 AI 試卷」置中
