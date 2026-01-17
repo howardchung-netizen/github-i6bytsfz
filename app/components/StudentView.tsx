@@ -81,8 +81,8 @@ export default function StudentView({ setView, user }) {
   }, [stats]);
 
   const mistakeDistribution = useMemo(() => {
-    if (!stats?.mistakes) return [];
-    const map = {};
+    if (!stats?.mistakes) return [] as { name: string; value: number }[];
+    const map: Record<string, number> = {};
     stats.mistakes.forEach((m) => {
       const key = m.category || m.topic || '未分類';
       map[key] = (map[key] || 0) + 1;
@@ -92,7 +92,7 @@ export default function StudentView({ setView, user }) {
 
   const weakCategories = useMemo(() => {
     return [...mistakeDistribution]
-      .sort((a, b) => b.value - a.value)
+      .sort((a, b) => (b.value || 0) - (a.value || 0))
       .slice(0, 3);
   }, [mistakeDistribution]);
 
