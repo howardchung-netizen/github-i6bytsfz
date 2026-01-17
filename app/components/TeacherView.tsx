@@ -17,6 +17,8 @@ export default function TeacherView({ setView, user, topics }) {
   const [isLoadingInstitutionStats, setIsLoadingInstitutionStats] = useState(false);
   const [assignmentCompletionStats, setAssignmentCompletionStats] = useState([]);
   const [isLoadingAssignmentStats, setIsLoadingAssignmentStats] = useState(false);
+  const [rankingSubject, setRankingSubject] = useState('all');
+  const [rankingDays, setRankingDays] = useState(14);
   
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
@@ -26,6 +28,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [studentEmail, setStudentEmail] = useState('');
   const [classSearch, setClassSearch] = useState('');
   const [classSort, setClassSort] = useState('students_desc');
+  const [classQuickSelect, setClassQuickSelect] = useState('all');
   const [isGeneratingMock, setIsGeneratingMock] = useState(false);
   
   // 派卷狀態
@@ -185,6 +188,18 @@ export default function TeacherView({ setView, user, topics }) {
   }, [selectedClass]);
 
   useEffect(() => {
+    if (selectedClass?.id) {
+      setClassQuickSelect(selectedClass.id);
+    }
+  }, [selectedClass]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics' && selectedClass) {
+      loadClassStats(selectedClass.id);
+    }
+  }, [rankingDays, activeTab, selectedClass]);
+
+  useEffect(() => {
     if (user.role === 'teacher' || user.role === 'admin') {
       loadSeedQuestions();
       loadPaperCount();
@@ -216,10 +231,10 @@ export default function TeacherView({ setView, user, topics }) {
     }
   };
 
-  const loadClassStats = async (classId) => {
+  const loadClassStats = async (classId, days = rankingDays) => {
     setLoading(true);
     try {
-      const stats = await DB_SERVICE.getClassStats(classId);
+      const stats = await DB_SERVICE.getClassStats(classId, days);
       setClassStats(stats);
     } catch (e) {
       console.error("Load class stats error:", e);
@@ -708,7 +723,8 @@ export default function TeacherView({ setView, user, topics }) {
           level: student.level,
           totalQuestions,
           accuracy,
-          avgTimeMs
+          avgTimeMs,
+          subjects: student.stats?.subjects || {}
         };
       })
       .sort((a, b) => b.accuracy - a.accuracy);
@@ -733,6 +749,14 @@ export default function TeacherView({ setView, user, topics }) {
       }))
       .sort((a, b) => (a.date > b.date ? 1 : -1));
   }, [classStats]);
+
+  const filteredStudentRanking = useMemo(() => {
+    if (rankingSubject === 'all') return studentRanking;
+    return studentRanking.filter((student) => {
+      const subjects = student.subjects || {};
+      return subjects[rankingSubject] > 0;
+    });
+  }, [studentRanking, rankingSubject]);
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500 font-sans">
@@ -817,6 +841,23 @@ export default function TeacherView({ setView, user, topics }) {
               <option value="students_asc">人數少 → 多</option>
               <option value="grade_desc">年級高 → 低</option>
               <option value="grade_asc">年級低 → 高</option>
+            </select>
+            <select
+              value={classQuickSelect}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setClassQuickSelect(nextId);
+                const match = classes.find((cls) => cls.id === nextId);
+                if (match) setSelectedClass(match);
+              }}
+              className="border rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="all">快速切換班級</option>
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.className || cls.name || cls.id}
+                </option>
+              ))}
             </select>
             {classes
               .filter((cls) => (cls.className || cls.name || '').toLowerCase().includes(classSearch.toLowerCase()))
@@ -1484,6 +1525,7 @@ export default function TeacherView({ setView, user, topics }) {
                         <tr className="text-left text-slate-500 border-b">
                           <th className="py-2 pr-4">作業</th>
                           <th className="py-2 pr-4">完成率</th>
+                          <th className="py-2 pr-4">狀態</th>
                           <th className="py-2 pr-4">已完成</th>
                           <th className="py-2">總人數</th>
                         </tr>
@@ -1493,6 +1535,19 @@ export default function TeacherView({ setView, user, topics }) {
                           <tr key={item.assignmentId} className="border-b last:border-b-0">
                             <td className="py-2 pr-4 font-semibold text-slate-700">{item.title}</td>
                             <td className="py-2 pr-4 text-emerald-600 font-bold">{item.completionRate}%</td>
+                            <td className="py-2 pr-4">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                  item.completionRate >= 80
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : item.completionRate >= 50
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-red-100 text-red-600'
+                                }`}
+                              >
+                                {item.completionRate >= 80 ? '高' : item.completionRate >= 50 ? '中' : '低'}
+                              </span>
+                            </td>
                             <td className="py-2 pr-4">{item.completed}</td>
                             <td className="py-2">{item.total}</td>
                           </tr>
@@ -1504,8 +1559,31 @@ export default function TeacherView({ setView, user, topics }) {
               </div>
 
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">學生排行（正確率）</h3>
-                {studentRanking.length === 0 ? (
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-slate-800">學生排行（正確率）</h3>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={rankingSubject}
+                      onChange={(e) => setRankingSubject(e.target.value)}
+                      className="border rounded-lg px-2 py-1 text-sm"
+                    >
+                      <option value="all">所有科目</option>
+                      <option value="math">數學</option>
+                      <option value="chi">中文</option>
+                      <option value="eng">英文</option>
+                    </select>
+                    <select
+                      value={rankingDays}
+                      onChange={(e) => setRankingDays(Number(e.target.value))}
+                      className="border rounded-lg px-2 py-1 text-sm"
+                    >
+                      <option value={7}>近 7 天</option>
+                      <option value={14}>近 14 天</option>
+                      <option value={30}>近 30 天</option>
+                    </select>
+                  </div>
+                </div>
+                {filteredStudentRanking.length === 0 ? (
                   <p className="text-slate-500">暫無學生資料</p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1520,7 +1598,7 @@ export default function TeacherView({ setView, user, topics }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {studentRanking.map((student, index) => (
+                        {filteredStudentRanking.map((student, index) => (
                           <tr key={`${student.name}-${index}`} className="border-b last:border-b-0">
                             <td className="py-2 pr-4 font-semibold text-slate-700">{student.name}</td>
                             <td className="py-2 pr-4">{student.level || '-'}</td>

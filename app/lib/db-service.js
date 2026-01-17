@@ -737,7 +737,7 @@ export const DB_SERVICE = {
         }
     },
     
-    getClassStats: async (classId) => {
+    getClassStats: async (classId, days = 14) => {
         try {
             const classDoc = await getDoc(doc(db, "artifacts", APP_ID, "public", "data", "classes", classId));
             if (!classDoc.exists()) return null;
@@ -750,7 +750,7 @@ export const DB_SERVICE = {
             
             // ??每個學??統???
             for (const student of classData.students) {
-                const studentStats = await DB_SERVICE.getStudentLearningStats(student.uid, 14); // ??14 ?
+                const studentStats = await DB_SERVICE.getStudentLearningStats(student.uid, days);
                 stats.students.push({
                     ...student,
                     stats: studentStats
