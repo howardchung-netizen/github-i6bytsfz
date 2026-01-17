@@ -12,7 +12,7 @@ import 'katex/dist/katex.min.css';
 export default function PracticeView({ 
   user, currentQuestion, userAnswer, setUserAnswer, checkAnswer, feedback, setFeedback, 
   handleNext, setView, showExplanation, setShowExplanation, sessionProgress, loading, 
-  adhdMode, topics
+  adhdMode, topics, examMode = false
 }) {
   
   // 邏輯補充相關狀態（僅開發者可見）
@@ -160,8 +160,9 @@ export default function PracticeView({
   };
 
   // 渲染包含 LaTeX 的文本
-  const renderMathText = (text) => {
+  const renderMathText = (text, options = {}) => {
     if (!text) return '';
+    const { highlight = false, lang = 'zh-HK' } = options;
     
     // 清理可能的錯誤格式：將單個反斜杠後跟數字的情況轉換為普通文本
     // 例如：\350 -> 350, \38 -> 38（這些不是 LaTeX，而是錯誤的轉義）
@@ -201,6 +202,9 @@ export default function PracticeView({
     // 如果沒有匹配到 LaTeX，清理並返回原文本
     if (parts.length === 0) {
       const cleaned = cleanedText.replace(/\\([0-9]+)/g, '$1');
+      if (highlight) {
+        return highlightKeywords(cleaned, lang);
+      }
       return cleaned;
     }
     
@@ -212,6 +216,13 @@ export default function PracticeView({
           console.error('KaTeX render error:', e, part.content);
           return <span key={index} className="font-mono">${part.content}$</span>;
         }
+      }
+      if (highlight) {
+        return (
+          <span key={index} style={{ fontFamily: 'inherit' }}>
+            {highlightKeywords(part.content, lang)}
+          </span>
+        );
       }
       return <span key={index} style={{ fontFamily: 'inherit' }}>{part.content}</span>;
     });
@@ -571,7 +582,7 @@ export default function PracticeView({
                 <h3 className={`text-xl font-bold text-slate-800 mb-6 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${adhdMode ? 'text-2xl leading-loose' : ''}`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                   {adhdMode ? (
                     <span className="inline-block max-w-full">
-                      {renderMathText(currentQuestion.question)}
+                      {renderMathText(currentQuestion.question, { highlight: true, lang: currentQuestion.lang || 'zh-HK' })}
                     </span>
                   ) : (
                     <span className="inline-block max-w-full">{renderMathText(currentQuestion.question)}</span>
@@ -661,7 +672,7 @@ export default function PracticeView({
                                         : 'border-slate-200 hover:border-indigo-300 text-slate-600 hover:bg-slate-50')
                                 }`}
                               >
-                                  <span>{renderMathText(opt)}</span>
+                                  <span>{renderMathText(opt, { highlight: adhdMode, lang: currentQuestion.lang || 'zh-HK' })}</span>
                               </button>
                           ))}
                       </div>
@@ -720,6 +731,22 @@ export default function PracticeView({
                           {sessionProgress.current === sessionProgress.total ? '查看成績單' : '下一題'} <ArrowRight size={20} />
                       </button>
                     </div>
+                  ) : examMode ? (
+                    <div className="space-y-4">
+                      <div className="flex justify-center text-red-500 mb-2"><XCircle size={56} /></div>
+                      <h4 className="text-2xl font-black text-red-700">已完成作答</h4>
+                      <button 
+                        onClick={() => !loading && handleNext()} 
+                        disabled={loading} 
+                        className={`mt-4 text-white px-8 py-3 rounded-xl font-bold shadow-lg transition w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          adhdMode 
+                            ? 'bg-red-600 hover:bg-red-700 border-2 border-red-800' 
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                      >
+                          {sessionProgress.current === sessionProgress.total ? '查看成績單' : '下一題'} <ArrowRight size={20} />
+                      </button>
+                    </div>
                   ) : (
                     <div className="space-y-3">
                       {!showExplanation ? (
@@ -772,14 +799,14 @@ export default function PracticeView({
                           }`}>
                               {adhdMode ? (
                                 <span className="inline-block">
-                                  {renderMathText(currentQuestion.explanation || '')}
+                                  {renderMathText(currentQuestion.explanation || '', { highlight: true, lang: currentQuestion.lang || 'zh-HK' })}
                                 </span>
                               ) : (
                                 <span>{renderMathText(currentQuestion.explanation || '')}</span>
                               )}
                           </div>
                           <div className="mt-4 pt-4 border-t border-red-100">
-                            <p className="text-sm font-bold text-slate-500 mb-4 text-center">正確答案: <span className="text-green-600 text-lg">{renderMathText(String(currentQuestion.answer || ''))}{currentQuestion.unit}</span></p>
+                            <p className="text-sm font-bold text-slate-500 mb-4 text-center">正確答案: <span className="text-green-600 text-lg">{renderMathText(String(currentQuestion.answer || ''), { highlight: adhdMode, lang: currentQuestion.lang || 'zh-HK' })}{currentQuestion.unit}</span></p>
                             <button 
                               onClick={() => !loading && handleNext()} 
                               disabled={loading} 

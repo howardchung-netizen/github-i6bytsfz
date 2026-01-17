@@ -24,7 +24,7 @@ export default function DailyTaskView({ subject, dailyTasks, setView, startPract
     if (setLoading) setLoading(true);
     setView('practice');
     // 傳入空數組和 subject 參數，讓 AI 自動偵測/隨機生成該科目的題目
-    await startPracticeSession([], 10, subject);
+    await startPracticeSession([], 10, subject, 'practice');
   };
 
   return (

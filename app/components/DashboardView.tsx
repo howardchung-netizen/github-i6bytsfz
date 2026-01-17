@@ -8,7 +8,7 @@ import {
   Calculator, Award, AlertCircle, RefreshCw, User, LogOut, Sparkles, BookOpen, Settings, Accessibility, Edit3, Languages, BookType, Crown, Bell, FileText
 } from 'lucide-react';
 
-export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } } }) {
+export default function DashboardView({ user, setUser, stats, mistakes, goToSelection, goToPracticeSelection, goToExamSelection, adhdMode, toggleAdhdMode, goToDeveloper, goToMistakes, goToParent, goToTeacher, goToSubscription, goToDailyTask, handleLogout, dailyTasks = { math: { used: 0, limit: 20 }, chi: { used: 0, limit: 20 }, eng: { used: 0, limit: 20 } } }) {
   // 👇 修改判定：只要是 Admin 角色或是該 Email 都算管理員
   const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
   const [activeTab, setActiveTab] = useState('math');
@@ -204,12 +204,16 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
         </div>
         
         {/* 功能按鈕區 */}
-        <div className="mt-6 flex gap-4 relative z-10">
-          <button onClick={goToSelection} className="flex-1 bg-white text-indigo-700 font-bold py-4 px-6 rounded-xl shadow-lg hover:bg-indigo-50 transition flex items-center justify-center gap-2 transform active:scale-95 group">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+          <button onClick={goToPracticeSelection || goToSelection} className="bg-white text-indigo-700 font-bold py-4 px-6 rounded-xl shadow-lg hover:bg-indigo-50 transition flex items-center justify-center gap-2 transform active:scale-95 group">
+              <div className="bg-indigo-100 p-2 rounded-full group-hover:bg-indigo-200 transition"><Sparkles size={20} className="text-indigo-600"/></div>
+              練習題目
+          </button>
+          <button onClick={goToExamSelection || goToSelection} className="bg-white text-indigo-700 font-bold py-4 px-6 rounded-xl shadow-lg hover:bg-indigo-50 transition flex items-center justify-center gap-2 transform active:scale-95 group">
               <div className="bg-indigo-100 p-2 rounded-full group-hover:bg-indigo-200 transition"><Sparkles size={20} className="text-indigo-600"/></div>
               開始 AI 試卷
           </button>
-          <button onClick={goToMistakes} className="flex-1 bg-indigo-800/40 text-white font-bold py-4 px-6 rounded-xl border border-indigo-400/30 hover:bg-indigo-800/60 transition flex items-center justify-center gap-2 backdrop-blur-md">
+          <button onClick={goToMistakes} className="bg-indigo-800/40 text-white font-bold py-4 px-6 rounded-xl border border-indigo-400/30 hover:bg-indigo-800/60 transition flex items-center justify-center gap-2 backdrop-blur-md">
               <BookOpen size={20} /> 錯題本 ({mistakes.length})
           </button>
         </div>

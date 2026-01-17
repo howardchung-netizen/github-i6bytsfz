@@ -61,7 +61,7 @@ const renderMathText = (text) => {
   });
 };
 
-export const TopicSelectionView = ({ user, setView, startPracticeSession, topics, setLoading }) => {
+export const TopicSelectionView = ({ user, setView, startPracticeSession, topics, setLoading, sessionMode = 'practice' }) => {
   const [selected, setSelected] = useState([]);
   const [questionCount, setQuestionCount] = useState(20); // 默認 20 題
   const availableTopics = topics.filter(t => t.grade === user.level);
@@ -131,13 +131,13 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
                 // 先設置 loading 狀態並切換到 practice view，顯示「題目生成中」畫面
                 if (setLoading) setLoading(true);
                 setView('practice');
-                // 然後開始生成題目，傳入選擇的題目數量
-                await startPracticeSession(selected, questionCount);
+              // 然後開始生成題目，傳入選擇的題目數量
+              await startPracticeSession(selected, questionCount, null, sessionMode);
               }} 
               disabled={selected.length === 0} 
               className="flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              開始練習 ({questionCount}/100)
+              {sessionMode === 'exam' ? '開始 AI 試卷' : '開始練習'} ({questionCount}/100)
             </button>
         </div>
     </div>
@@ -168,19 +168,63 @@ export const MistakesView = ({ setView, mistakes, retryQuestion }) => (
 
 // ParentView 已移至獨立文件 app/components/ParentView.tsx
 
-export const SummaryView = ({ sessionStats, restartSelection, setView }) => {
+export const SummaryView = ({ sessionStats, sessionQuestions = [], examMode = false, restartSelection, setView }) => {
+    const [openExplanation, setOpenExplanation] = useState({});
     const score = sessionStats.total > 0 ? Math.round((sessionStats.correct / sessionStats.total) * 100) : 0;
+    const title = score >= 80 ? "太強了！" : (examMode ? "試卷完成！" : "練習完成！");
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto text-center animate-in zoom-in-95 font-sans">
+        <div className="bg-white rounded-xl shadow-lg p-8 max-w-3xl mx-auto text-center animate-in zoom-in-95 font-sans">
             <div className="mb-6 relative inline-block"><Award size={80} className={score >= 80 ? "text-yellow-400" : "text-indigo-400"} />{score >= 100 && <Sparkles className="absolute -top-2 -right-2 text-yellow-500 animate-pulse" size={30} />}</div>
-            <h2 className="text-3xl font-black text-slate-800 mb-2">{score >= 80 ? "太強了！" : "練習完成！"}</h2>
+            <h2 className="text-3xl font-black text-slate-800 mb-2">{title}</h2>
             <p className="text-slate-500 mb-6">本次得分: <span className="text-2xl font-bold text-indigo-600">{score}</span> / 100</p>
             <div className="grid grid-cols-2 gap-4 mb-8">
                 <div className="bg-slate-50 p-3 rounded-lg"><div className="text-2xl font-bold text-slate-700">{sessionStats.total}</div><div className="text-xs text-slate-400">總題數</div></div>
                 <div className="bg-slate-50 p-3 rounded-lg"><div className="text-2xl font-bold text-green-600">{sessionStats.correct}</div><div className="text-xs text-slate-400">答對</div></div>
             </div>
-            <div className="flex flex-col gap-3">
-                <button onClick={restartSelection} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg transition">再練一次</button>
+
+            {examMode && sessionQuestions.length > 0 && (
+                <div className="mt-6 text-left">
+                    <h3 className="text-lg font-bold text-slate-800 mb-3">試卷題目與答案</h3>
+                    <div className="space-y-4">
+                        {sessionQuestions.map((q, idx) => {
+                            const key = q.id || `q-${idx}`;
+                            const hasExplanation = Boolean(q.explanation && String(q.explanation).trim());
+                            const isCorrect = q.isCorrect !== false;
+                            return (
+                                <div
+                                    key={key}
+                                    className={`p-4 border rounded-xl ${
+                                        isCorrect
+                                            ? 'bg-green-50 border-green-200'
+                                            : 'bg-red-50 border-red-200'
+                                    }`}
+                                >
+                                    <div className="text-xs text-slate-500 mb-2">第 {idx + 1} 題</div>
+                                    <div className="font-bold text-slate-800 mb-2">{renderMathText(q.question)}</div>
+                                    <div className="text-sm text-slate-600 flex flex-wrap items-center gap-2">
+                                        <span>正確答案：</span>
+                                        <span className="text-green-600 font-bold">{renderMathText(String(q.answer || ''))}{q.unit}</span>
+                                        <button
+                                            onClick={() => setOpenExplanation(prev => ({ ...prev, [key]: !prev[key] }))}
+                                            className="ml-auto text-indigo-600 text-xs font-bold hover:underline"
+                                        >
+                                            看詳解
+                                        </button>
+                                    </div>
+                                    {openExplanation[key] && (
+                                        <div className="mt-3 p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 whitespace-pre-wrap">
+                                            {hasExplanation ? renderMathText(q.explanation) : '此題未提供詳解。'}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            <div className="flex flex-col gap-3 mt-8">
+                <button onClick={restartSelection} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg transition">{examMode ? '再做一份試卷' : '再練一次'}</button>
                 <button onClick={() => setView('dashboard')} className="w-full bg-white border border-slate-200 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-50 transition">回首頁</button>
             </div>
         </div>

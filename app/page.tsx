@@ -69,6 +69,7 @@ export default function App() {
   const [userAnswer, setUserAnswer] = useState('');
   const [feedback, setFeedback] = useState(null);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [sessionMode, setSessionMode] = useState('practice'); // practice | exam
   const [mistakes, setMistakes] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -107,7 +108,12 @@ export default function App() {
   }, []);
 
   // --- Handlers ---
-  const goToSelection = () => setView('selection');
+  const goToSelection = (mode = 'practice') => {
+      setSessionMode(mode);
+      setView('selection');
+  };
+  const goToPracticeSelection = () => goToSelection('practice');
+  const goToExamSelection = () => goToSelection('exam');
   const goToDeveloper = () => setView('developer');
   const goToMistakes = () => setView('mistakes');
   const goToParent = () => setView('parent');
@@ -336,7 +342,10 @@ export default function App() {
   };
 
   // --- Game Loop Logic ---
-  const startPracticeSession = async (selectedTopicIds = [], count = 10, subjectHint = null) => { 
+  const startPracticeSession = async (selectedTopicIds = [], count = 10, subjectHint = null, mode = null) => { 
+      if (mode) {
+          setSessionMode(mode);
+      }
       // 檢查每日任務限制（按科目）
       // 如果 selectedTopicIds 為空，使用 subjectHint；否則從 topics 判斷
       const subject = selectedTopicIds.length > 0 
@@ -771,7 +780,7 @@ export default function App() {
         {isLoggedIn && view !== 'register' && (
           <div className="max-w-6xl mx-auto p-4 md:p-6">
              {/* Main Views */}
-             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
+             {view === 'dashboard' && <DashboardView user={user} setUser={setUser} stats={stats} mistakes={mistakes} goToSelection={goToSelection} goToPracticeSelection={goToPracticeSelection} goToExamSelection={goToExamSelection} adhdMode={adhdMode} toggleAdhdMode={toggleAdhdMode} goToDeveloper={goToDeveloper} goToMistakes={goToMistakes} goToParent={goToParent} goToTeacher={goToTeacher} goToSubscription={goToSubscription} goToDailyTask={goToDailyTask} handleLogout={handleLogout} dailyTasks={dailyTasks} />}
              {view === 'developer' && <DeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} user={user} />}
              {view === 'feedback-review' && <FeedbackReviewView setView={setView} user={user} isFirebaseReady={isFirebaseReady} />}
              {view === 'chinese-developer' && <ChineseDeveloperView topics={topics} setTopics={setTopics} setView={setView} isFirebaseReady={isFirebaseReady} />}
@@ -780,12 +789,12 @@ export default function App() {
              {view === 'daily-task-math' && <DailyTaskView subject="math" dailyTasks={dailyTasks} setView={setView} startPracticeSession={startPracticeSession} user={user} setLoading={setLoading} />}
              {view === 'daily-task-chi' && <DailyTaskView subject="chi" dailyTasks={dailyTasks} setView={setView} startPracticeSession={startPracticeSession} user={user} setLoading={setLoading} />}
              {view === 'daily-task-eng' && <DailyTaskView subject="eng" dailyTasks={dailyTasks} setView={setView} startPracticeSession={startPracticeSession} user={user} setLoading={setLoading} />}
-             {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} setLoading={setLoading} />}
+             {view === 'selection' && <TopicSelectionView user={user} setView={setView} startPracticeSession={startPracticeSession} topics={topics} setLoading={setLoading} sessionMode={sessionMode} />}
              {view === 'mistakes' && <MistakesView setView={setView} mistakes={mistakes} retryQuestion={retryQuestion} />}
              {view === 'parent' && <ParentView setView={setView} user={user} />}
              {view === 'teacher' && <TeacherView setView={setView} user={user} topics={topics} />}
-             {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} topics={topics} />}
-             {view === 'summary' && <SummaryView sessionStats={sessionStats} restartSelection={goToSelection} setView={setView} />}
+             {view === 'practice' && <PracticeView user={user} currentQuestion={currentQuestion} userAnswer={userAnswer} setUserAnswer={setUserAnswer} checkAnswer={checkAnswer} feedback={feedback} setFeedback={setFeedback} handleNext={handleNext} setView={setView} showExplanation={showExplanation} setShowExplanation={setShowExplanation} sessionProgress={sessionStats} loading={loading} adhdMode={adhdMode} topics={topics} examMode={sessionMode === 'exam'} />}
+             {view === 'summary' && <SummaryView sessionStats={sessionStats} sessionQuestions={sessionQuestions} examMode={sessionMode === 'exam'} restartSelection={() => goToSelection(sessionMode)} setView={setView} />}
              
              {/* Floating Action Button */}
              {view === 'dashboard' && (
