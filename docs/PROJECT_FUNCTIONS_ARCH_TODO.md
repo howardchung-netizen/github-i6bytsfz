@@ -166,6 +166,50 @@
   - 風險/警示
     - 生成錯誤率 > 3% 時顯示警示
     - Vision API 使用量突增（> 平均 2 倍）提示
+
+#### A-1. 開發者後台總覽：實作規格（V1）
+**目標**
+- 提供管理員即時掌握「註冊轉換、活躍、生成量、訂閱、錯誤率」與平台分佈。
+
+**資料來源與收集**
+- `visit_logs`（新增）：每次載入首頁或註冊頁時寫入
+  - 欄位：`timestamp`, `platform`(web/tablet), `path`, `sessionId`, `ipHash?`(可選)
+- `users`：註冊事件
+  - 欄位：`createdAt`, `role`, `platform`(於註冊時寫入)
+- `question_usage` / `past_papers`：生成與使用
+- `subscriptions`（新增 placeholder）：未開通 Stripe 時先記錄 mock
+
+**計算定義**
+- 造訪數（visit_count）：`visit_logs` 當日筆數
+- 網站造訪→註冊率：`web_signup_count / web_visit_count`
+- App 內註冊率：`app_signup_count / app_visit_count`
+- DAU/WAU/MAU：在 `question_usage` 或登入事件中去重 userId 計數
+- 生成量：`past_papers` 當日新增數（或 `ai_service` 成功記錄）
+- 生成失敗率：`gen_fail_count / gen_count`
+
+**後台頁面區塊**
+1. KPI 卡片：造訪、註冊率、DAU/WAU/MAU、生成量、訂閱
+2. 趨勢圖：近 30 日註冊/生成/錯誤率
+3. 分佈圖：角色比例、平台比例
+4. 警示區：錯誤率/視覺 API 突增
+
+**權限**
+- 只允許 admin（`user.role === 'admin'` 或指定 email）
+
+#### A-2. 任務清單（V1）
+1. **新增 visit_logs 寫入**
+   - 前端：首頁/註冊頁載入時寫入
+   - 依 userAgent 判斷平台（web/tablet）
+2. **新增 platform 記錄**
+   - 註冊成功時寫入 `users.platform`
+3. **新增 subscriptions placeholder**
+   - 暫用 mock 寫入（待 Stripe 啟用）
+4. **建立聚合 API（或雲端函數）**
+   - 日/週/月統計快取（`metrics_daily`, `metrics_monthly`）
+5. **前端 Dashboard View**
+   - KPI 卡片 + 趨勢圖 + 分佈圖
+6. **權限與錯誤處理**
+   - 非 admin 顯示提示
 - 實作任務
   - 後台 API：聚合統計/快取（區分 Web/平板）
   - 前端 Dashboard：卡片 + 圖表
