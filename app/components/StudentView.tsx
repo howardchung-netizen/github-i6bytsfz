@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, BookOpen, Clock, TrendingUp, AlertCircle, Home } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function StudentView({ setView, user }) {
   const [stats, setStats] = useState(null);
@@ -40,6 +40,16 @@ export default function StudentView({ setView, user }) {
         timeMinutes: Math.round((data.timeSpent || 0) / 60000)
       }))
       .sort((a, b) => (a.date > b.date ? 1 : -1));
+  }, [stats]);
+
+  const mistakeDistribution = useMemo(() => {
+    if (!stats?.mistakes) return [];
+    const map = {};
+    stats.mistakes.forEach((m) => {
+      const key = m.category || m.topic || '未分類';
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [stats]);
 
   if (loading) {
@@ -141,6 +151,24 @@ export default function StudentView({ setView, user }) {
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <h3 className="text-xl font-bold text-slate-800 mb-4">錯題分類分佈</h3>
+        {mistakeDistribution.length === 0 ? (
+          <p className="text-slate-500">暫無錯題資料</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={mistakeDistribution} dataKey="value" nameKey="name" outerRadius={110} label>
+                {mistakeDistribution.map((_, index) => (
+                  <Cell key={`mistake-${index}`} fill={['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
