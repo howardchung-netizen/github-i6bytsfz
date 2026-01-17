@@ -189,7 +189,9 @@ export default function TeacherView({ setView, user, topics }) {
         return;
       }
       console.log('Loading classes for teacher:', teacherUid, user);
-      const classesList = await DB_SERVICE.getTeacherClasses(teacherUid);
+      const classesList = user.institutionName
+        ? await DB_SERVICE.getInstitutionClasses(user.institutionName)
+        : await DB_SERVICE.getTeacherClasses(teacherUid);
       console.log('Loaded classes:', classesList);
       setClasses(classesList);
       if (classesList.length > 0 && !selectedClass) {

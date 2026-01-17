@@ -576,6 +576,23 @@ export const DB_SERVICE = {
         }
     },
     
+    getInstitutionClasses: async (institutionName) => {
+        try {
+            if (!institutionName) return [];
+            const q = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "classes"),
+                where("institutionName", "==", institutionName)
+            );
+            const snap = await getDocs(q);
+            const classes = [];
+            snap.forEach(d => classes.push({ id: d.id, ...d.data() }));
+            return classes;
+        } catch (e) {
+            console.error("Get Institution Classes Error:", e);
+            return [];
+        }
+    },
+    
     createAssignment: async (classId, assignmentData) => {
         try {
             const assignment = {
