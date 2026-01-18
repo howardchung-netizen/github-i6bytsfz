@@ -19,6 +19,9 @@ export default function ParentView({ setView, user }) {
   const [reportSearch, setReportSearch] = useState('');
   const [reportSort, setReportSort] = useState('date_desc');
   const [dailyStatsRange, setDailyStatsRange] = useState([]);
+  const [childrenSummary, setChildrenSummary] = useState([]);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [rankingMetric, setRankingMetric] = useState('timeMinutes');
 
   useEffect(() => {
     loadChildren();
@@ -30,6 +33,74 @@ export default function ParentView({ setView, user }) {
       loadReports(selectedChild.uid);
     }
   }, [selectedChild, trendRangeDays]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadChildrenSummary = async () => {
+      if (!children || children.length === 0) {
+        setChildrenSummary([]);
+        return;
+      }
+      setComparisonLoading(true);
+      try {
+        const summaries = await Promise.all(
+          children.map(async (child) => {
+            const uid = child.uid || child.id;
+            if (!uid) {
+              return {
+                id: child.id,
+                uid: child.uid,
+                name: child.name || '未命名',
+                level: child.level || '未設定',
+                avatar: child.avatar,
+                totalQuestions: 0,
+                correctAnswers: 0,
+                timeMinutes: 0,
+                mistakesCount: 0,
+                accuracyRate: 0
+              };
+            }
+            const stats = await DB_SERVICE.getStudentLearningStats(uid, trendRangeDays);
+            const totalQuestions = stats?.totalQuestions || 0;
+            const correctAnswers = stats?.correctAnswers || 0;
+            const timeMinutes = Math.round((stats?.totalTimeSpent || 0) / 60000);
+            const mistakesCount = stats?.mistakes?.length || 0;
+            const accuracyRate = totalQuestions > 0
+              ? Math.round((correctAnswers / totalQuestions) * 100)
+              : 0;
+            return {
+              id: child.id,
+              uid: child.uid,
+              name: child.name || '未命名',
+              level: child.level || '未設定',
+              avatar: child.avatar,
+              totalQuestions,
+              correctAnswers,
+              timeMinutes,
+              mistakesCount,
+              accuracyRate
+            };
+          })
+        );
+        if (isMounted) {
+          setChildrenSummary(summaries);
+        }
+      } catch (e) {
+        console.error("Load children summary error:", e);
+        if (isMounted) {
+          setChildrenSummary([]);
+        }
+      } finally {
+        if (isMounted) {
+          setComparisonLoading(false);
+        }
+      }
+    };
+    loadChildrenSummary();
+    return () => {
+      isMounted = false;
+    };
+  }, [children, trendRangeDays]);
 
   const loadChildren = async () => {
     if (user.role === 'parent' && user.id) {
@@ -191,6 +262,23 @@ export default function ParentView({ setView, user }) {
     ? Math.round((childStats.correctAnswers / childStats.totalQuestions) * 100)
     : 0;
 
+  const rankingConfig = {
+    timeMinutes: { label: '學習時長（分鐘）', format: (c) => `${c.timeMinutes} 分鐘`, order: 'desc' },
+    accuracyRate: { label: '正確率', format: (c) => `${c.accuracyRate}%`, order: 'desc' },
+    totalQuestions: { label: '做題數', format: (c) => `${c.totalQuestions} 題`, order: 'desc' },
+    mistakesCount: { label: '錯題數', format: (c) => `${c.mistakesCount} 題`, order: 'desc' }
+  };
+
+  const rankedChildren = useMemo(() => {
+    const config = rankingConfig[rankingMetric] || rankingConfig.timeMinutes;
+    const sorted = [...childrenSummary].sort((a, b) => {
+      const valueA = Number(a[rankingMetric] || 0);
+      const valueB = Number(b[rankingMetric] || 0);
+      return config.order === 'asc' ? valueA - valueB : valueB - valueA;
+    });
+    return sorted;
+  }, [childrenSummary, rankingMetric]);
+
   useEffect(() => {
     const loadDailyStats = async () => {
       if (!selectedChild?.uid) {
@@ -323,6 +411,97 @@ export default function ParentView({ setView, user }) {
                 </button>
               ))}
           </div>
+        </div>
+      )}
+
+      {children.length > 1 && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <Users size={20} /> 多子女比較 / 排行（最近 {trendRangeDays} 天）
+            </h3>
+            <select
+              value={rankingMetric}
+              onChange={(e) => setRankingMetric(e.target.value)}
+              className="border rounded-lg px-2 py-1 text-sm"
+            >
+              <option value="timeMinutes">學習時長排行</option>
+              <option value="accuracyRate">正確率排行</option>
+              <option value="totalQuestions">做題數排行</option>
+              <option value="mistakesCount">錯題數排行</option>
+            </select>
+          </div>
+
+          {comparisonLoading ? (
+            <p className="text-slate-500">載入比較資料中...</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {childrenSummary.map((child) => (
+                  <div key={child.id} className={`border rounded-xl p-4 ${
+                    selectedChild?.id === child.id ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200'
+                  }`}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <img
+                        src={child.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${child.name}`}
+                        alt={child.name}
+                        className="w-10 h-10 rounded-full border border-slate-200"
+                      />
+                      <div>
+                        <div className="font-bold text-slate-800">{child.name}</div>
+                        <div className="text-xs text-slate-500">年級：{child.level || '未設定'}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-slate-50 rounded-lg p-2">
+                        <div className="text-slate-500">做題數</div>
+                        <div className="font-bold text-slate-800">{child.totalQuestions}</div>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-2">
+                        <div className="text-slate-500">正確率</div>
+                        <div className="font-bold text-slate-800">{child.accuracyRate}%</div>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-2">
+                        <div className="text-slate-500">學習時長</div>
+                        <div className="font-bold text-slate-800">{child.timeMinutes} 分鐘</div>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-2">
+                        <div className="text-slate-500">錯題數</div>
+                        <div className="font-bold text-slate-800">{child.mistakesCount}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6">
+                <h4 className="font-bold text-slate-700 mb-3">排行：{rankingConfig[rankingMetric]?.label || '學習時長'}</h4>
+                <div className="space-y-2">
+                  {rankedChildren.map((child, index) => (
+                    <div key={`${child.id}-rank`} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-4 py-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center">
+                          {index + 1}
+                        </div>
+                        <img
+                          src={child.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${child.name}`}
+                          alt={child.name}
+                          className="w-8 h-8 rounded-full border border-slate-200"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-800">{child.name}</div>
+                          <div className="text-xs text-slate-500">年級：{child.level || '未設定'}</div>
+                        </div>
+                      </div>
+                      <div className="font-bold text-slate-700">
+                        {rankingConfig[rankingMetric]?.format(child)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
