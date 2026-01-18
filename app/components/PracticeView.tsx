@@ -19,41 +19,294 @@ export default function PracticeView({
   const isDeveloper = user && user.email === 'admin@test.com';
   const [feedbackText, setFeedbackText] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+  const [speechLangBySubject, setSpeechLangBySubject] = useState({
+    math: 'zh-HK',
+    chi: 'zh-HK',
+    eng: 'en-US'
+  });
+  const [speechVoices, setSpeechVoices] = useState([]);
+  const [selectedVoiceByLang, setSelectedVoiceByLang] = useState({
+    'zh-HK': '',
+    'zh-CN': '',
+    'en-US': ''
+  });
+  const [speechError, setSpeechError] = useState('');
+  const preferredVoiceByLang = {
+    'zh-HK': 'Microsoft Tracy - Chinese (Traditional, Hong Kong S.A.R.) (zh-HK)',
+    'zh-CN': 'Microsoft Yating - Chinese (Traditional, Taiwan) (zh-TW)',
+    'en-US': 'Microsoft Zira - English (United States)'
+  };
+  const [translationTarget, setTranslationTarget] = useState('en');
+  const [translationText, setTranslationText] = useState('');
+  const [translationLoading, setTranslationLoading] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [imageExpanded, setImageExpanded] = useState(false);
   
-  // ADHD 模式：自動播放語音
-  useEffect(() => {
-    if (adhdMode && currentQuestion && !loading && !feedback) {
-      // 延遲一點播放，讓用戶先看到題目
-      const timer = setTimeout(() => {
-        speakTextForADHD(
-          currentQuestion.question, 
-          currentQuestion.lang || 'zh-HK',
-          { rate: 0.75, pitch: 1.0, volume: 1.0 }
-        );
-      }, 500);
-      
-      return () => {
-        clearTimeout(timer);
-        window.speechSynthesis.cancel();
-      };
+  const getSubjectKey = () => {
+    const subject = currentQuestion?.subject || 'math';
+    if (subject === 'chi') return 'chi';
+    if (subject === 'eng') return 'eng';
+    return 'math';
+  };
+
+  const isZhLang = (lang) => {
+    return String(lang || '').startsWith('zh');
+  };
+
+  const detectQuestionLang = () => {
+    const text = `${currentQuestion?.question || ''} ${(currentQuestion?.options || []).join(' ')}`;
+    const cjkMatch = text.match(/[\u4e00-\u9fff]/g) || [];
+    const latinMatch = text.match(/[A-Za-z]/g) || [];
+    if (latinMatch.length > 0 && cjkMatch.length === 0) {
+      return 'en-US';
     }
-  }, [adhdMode, currentQuestion?.id, loading, feedback]);
+    if (cjkMatch.length > 0 && latinMatch.length === 0) {
+      return 'zh-HK';
+    }
+    if (latinMatch.length >= cjkMatch.length) {
+      return 'en-US';
+    }
+    return 'zh-HK';
+  };
+
+  const getRecommendedSpeechLang = () => {
+    const subjectKey = getSubjectKey();
+    if (subjectKey === 'eng') return 'en-US';
+    if (subjectKey === 'chi') return 'zh-HK';
+    const questionLang = currentQuestion?.lang;
+    if (questionLang && !isZhLang(questionLang)) return 'en-US';
+    return detectQuestionLang();
+  };
+
+  const getSpeechOptions = () => {
+    const subjectKey = getSubjectKey();
+    if (subjectKey === 'eng') {
+      return [{ value: 'en-US', label: '英文' }];
+    }
+    if (subjectKey === 'chi') {
+      return [
+        { value: 'zh-HK', label: '粵語' },
+        { value: 'zh-CN', label: '普通話' }
+      ];
+    }
+    const questionLang = currentQuestion?.lang;
+    if (questionLang && !isZhLang(questionLang)) {
+      return [{ value: 'en-US', label: '英文' }];
+    }
+    const detectedLang = detectQuestionLang();
+    if (detectedLang === 'en-US') {
+      return [{ value: 'en-US', label: '英文' }];
+    }
+    return [
+      { value: 'zh-HK', label: '粵語' },
+      { value: 'zh-CN', label: '普通話' }
+    ];
+  };
+
+  const activeSpeechLang = speechLangBySubject[getSubjectKey()] || getRecommendedSpeechLang();
+
+  const getVoiceForLangFromList = (lang, list) => {
+    if (!list || list.length === 0) return null;
+    const preferred = preferredVoiceByLang[lang];
+    if (preferred) {
+      const byName = list.find(v => v.name === preferred);
+      if (byName) return byName;
+    }
+    if (lang === 'zh-HK') {
+      return list.find(v => v.name.includes('Tracy') && v.lang === 'zh-HK')
+        || list.find(v => v.lang === 'zh-HK' && !/Hanhan/i.test(v.name));
+    }
+    if (lang === 'zh-CN') {
+      return list.find(v => v.name.includes('Yating') && (v.lang === 'zh-CN' || v.lang === 'zh-TW'))
+        || list.find(v => (v.lang === 'zh-CN' || v.lang === 'zh-TW') && !/Hanhan/i.test(v.name));
+    }
+    if (lang === 'en-US') {
+      return list.find(v => v.name === 'Microsoft Zira - English (United States)')
+        || list.find(v => v.lang.startsWith('en') && !/Hanhan/i.test(v.name));
+    }
+    const prefix = String(lang || '').split('-')[0];
+    return list.find(v => v.lang.startsWith(prefix) && !/Hanhan/i.test(v.name));
+  };
+
+  const getVoiceOptionsForLang = (lang) => {
+    const voice = getVoiceForLangFromList(lang, speechVoices);
+    if (!voice) return [];
+    return [{ value: voice.name, label: `${voice.name} (${voice.lang})` }];
+  };
+
+  const resolveVoiceName = (lang) => {
+    return getVoiceForLangFromList(lang, speechVoices)?.name || '';
+  };
+
+  const ensureVoicesReady = () => {
+    if (!isSpeechSynthesisSupported()) return false;
+    if (speechVoices.length > 0) return true;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (voices.length > 0) {
+      setSpeechVoices(voices);
+      return true;
+    }
+    return false;
+  };
+
+  const getDefaultTranslationTarget = () => {
+    const subjectKey = getSubjectKey();
+    if (subjectKey === 'chi') return 'en';
+    if (subjectKey === 'eng') return 'zh';
+    const questionLang = currentQuestion?.lang;
+    if (questionLang && !isZhLang(questionLang)) return 'zh';
+    return detectQuestionLang() === 'en-US' ? 'zh' : 'en';
+  };
+
+  // ADHD 模式：不自動播放，改為手動按鍵觸發
   
   // 當題目變化時，清空回饋輸入
   useEffect(() => {
     if (currentQuestion) {
       setFeedbackText('');
+      setTranslationText('');
+      setShowTranslation(false);
+      setTranslationTarget(getDefaultTranslationTarget());
+      setImageExpanded(false);
+      if (isSpeechSynthesisSupported()) {
+        window.speechSynthesis.cancel();
+      }
     }
   }, [currentQuestion?.id]);
 
+  useEffect(() => {
+    if (!currentQuestion) return;
+    const subjectKey = getSubjectKey();
+    const recommendedLang = getRecommendedSpeechLang();
+    setSpeechLangBySubject((prev) => {
+      if (subjectKey === 'math' && recommendedLang === 'en-US') {
+        if (prev.math !== 'en-US') {
+          return { ...prev, math: 'en-US' };
+        }
+        return prev;
+      }
+      if (!prev[subjectKey]) {
+        return { ...prev, [subjectKey]: recommendedLang };
+      }
+      return prev;
+    });
+  }, [currentQuestion?.id]);
+
+  useEffect(() => {
+    if (!isSpeechSynthesisSupported()) return;
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices() || [];
+      setSpeechVoices(voices);
+      const updates = {};
+      Object.keys(preferredVoiceByLang).forEach((lang) => {
+        const resolved = getVoiceForLangFromList(lang, voices);
+        if (resolved) {
+          updates[lang] = resolved.name;
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        setSelectedVoiceByLang((prev) => ({ ...prev, ...updates }));
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => {
+      if (window.speechSynthesis.onvoiceschanged === loadVoices) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const options = getVoiceOptionsForLang(activeSpeechLang);
+    if (options.length === 0) return;
+    const resolved = resolveVoiceName(activeSpeechLang);
+    if (resolved) {
+      setSelectedVoiceByLang((prev) => ({ ...prev, [activeSpeechLang]: resolved }));
+    }
+  }, [activeSpeechLang, speechVoices]);
+
   const handleSpeak = () => { 
       if(currentQuestion) {
-        speakTextForADHD(
-          currentQuestion.question, 
-          currentQuestion.lang || 'zh-HK',
-          { rate: 0.75, pitch: 1.0, volume: 1.0 }
-        );
+        setSpeechError('');
+        const trySpeak = () => {
+          const voiceName = resolveVoiceName(activeSpeechLang);
+          if (!voiceName) {
+            setSpeechError('找不到可用的語音聲線，請確認語音包已安裝並重新啟動瀏覽器。');
+            return false;
+          }
+          speakTextForADHD(
+            currentQuestion.question, 
+            activeSpeechLang,
+            { rate: 0.75, pitch: 1.0, volume: 1.0, voiceName }
+          );
+          return true;
+        };
+
+        if (!ensureVoicesReady()) {
+          setSpeechError('語音載入中...');
+          setTimeout(() => {
+            if (!ensureVoicesReady()) {
+              setSpeechError('找不到可用的語音聲線，請確認語音包已安裝並重新啟動瀏覽器。');
+              return;
+            }
+            trySpeak();
+          }, 600);
+          return;
+        }
+        trySpeak();
       }
+  };
+
+  const handleExitPractice = () => {
+    if (loading) return;
+    if (isSpeechSynthesisSupported()) {
+      window.speechSynthesis.cancel();
+    }
+    setView('dashboard');
+  };
+
+  const buildTranslationSource = () => {
+    if (!currentQuestion) return '';
+    const lines = [`題目：${currentQuestion.question}`];
+    if (currentQuestion.options && Array.isArray(currentQuestion.options)) {
+      lines.push('選項：');
+      currentQuestion.options.forEach((opt, index) => {
+        lines.push(`${String.fromCharCode(65 + index)}. ${opt}`);
+      });
+    }
+    return lines.join('\n');
+  };
+
+  const handleTranslate = async () => {
+    if (!currentQuestion) return;
+    if (translationLoading) return;
+    if (showTranslation && translationText) {
+      setShowTranslation(false);
+      return;
+    }
+    setTranslationLoading(true);
+    try {
+      const targetLabel = translationTarget === 'zh' ? '繁體中文' : '英文';
+      const prompt = `請將以下內容翻譯成${targetLabel}，保持數學符號、LaTeX 與選項格式不變，不要加入額外說明：\n\n${buildTranslationSource()}`;
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: prompt })
+      });
+      const data = await response.json();
+      const translated = data?.response || data?.error || '';
+      if (!translated) {
+        throw new Error('翻譯失敗，請稍後再試');
+      }
+      setTranslationText(translated.trim());
+      setShowTranslation(true);
+    } catch (e) {
+      console.error('Translate Error:', e);
+      alert('翻譯失敗，請稍後再試');
+    } finally {
+      setTranslationLoading(false);
+    }
   };
 
   const handleOptionClick = (opt) => {
@@ -213,6 +466,15 @@ export default function PracticeView({
     
     return parts.map((part, index) => {
       if (part.type === 'math') {
+        const hasCommands = /\\[A-Za-z]+/.test(part.content);
+        const hasOperators = /[=+\-*/^]/.test(part.content);
+        const hasLetters = /[A-Za-z]/.test(part.content);
+        const hasSpaces = /\s/.test(part.content);
+        const looksLikePlainText = !hasCommands && !hasOperators && hasLetters && hasSpaces;
+
+        if (looksLikePlainText) {
+          return <span key={index} style={{ fontFamily: 'inherit' }}>{part.content}</span>;
+        }
         try {
           return <InlineMath key={index} math={part.content} style={{ fontFamily: 'KaTeX_Main, "Times New Roman", serif' }} />;
         } catch (e) {
@@ -530,7 +792,7 @@ export default function PracticeView({
         adhdMode ? 'bg-yellow-50 border-yellow-200' : 'bg-slate-50 border-slate-200'
       }`}>
         <button 
-          onClick={() => !loading && setView('dashboard')} 
+          onClick={handleExitPractice} 
           disabled={loading}
           className="text-slate-500 hover:text-slate-800 flex items-center gap-1 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -569,19 +831,83 @@ export default function PracticeView({
         ) : currentQuestion ? (
           <>
             <div className="mb-8 relative">
-              {adhdMode && (
-                <div className="flex justify-end mb-4">
-                   <button 
-                     onClick={() => !loading && handleSpeak()} 
-                     disabled={loading || !isSpeechSynthesisSupported()} 
-                     className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 px-4 py-2 rounded-lg transition shadow-md font-black text-sm disabled:opacity-50 disabled:cursor-not-allowed border-2 border-yellow-600"
-                   >
-                       <Volume2 size={18} /> 重新讀題
-                   </button>
-                </div>
-              )}
+              <div className="flex flex-wrap justify-end gap-3 mb-4">
+                {adhdMode && isSpeechSynthesisSupported() && (
+                  <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${
+                    adhdMode ? 'border-yellow-300 bg-yellow-50 text-yellow-900' : 'border-slate-200 bg-white text-slate-700'
+                  }`}>
+                    <span>讀題語音</span>
+                    <select
+                      value={activeSpeechLang}
+                      onChange={(e) => {
+                        const subjectKey = getSubjectKey();
+                        setSpeechLangBySubject((prev) => ({ ...prev, [subjectKey]: e.target.value }));
+                      }}
+                      className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white"
+                    >
+                      {getSpeechOptions().map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => !loading && handleSpeak()}
+                      disabled={loading}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md transition ${
+                        adhdMode ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
+                    >
+                      <Volume2 size={14} /> 試聽
+                    </button>
+                    {speechError && (
+                      <span className="text-[11px] text-red-600 font-bold">{speechError}</span>
+                    )}
+                  </div>
+                )}
+                {!examMode && (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                    <span>翻譯輔助</span>
+                    {getSubjectKey() === 'math' && (
+                      <select
+                        value={translationTarget}
+                        onChange={(e) => setTranslationTarget(e.target.value)}
+                        className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white"
+                      >
+                        <option value="zh">中文</option>
+                        <option value="en">英文</option>
+                      </select>
+                    )}
+                    <button
+                      onClick={handleTranslate}
+                      disabled={translationLoading}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 transition disabled:opacity-60"
+                    >
+                      {translationLoading ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
+                      {showTranslation ? '收起翻譯' : '顯示翻譯'}
+                    </button>
+                  </div>
+                )}
+              </div>
               
               <div className="text-center">
+                {currentQuestion.image && (
+                  <div className="mb-6">
+                    <div className={`relative mx-auto overflow-hidden rounded-xl border border-slate-200 bg-white ${
+                      imageExpanded ? 'max-h-none' : 'max-h-80'
+                    }`}>
+                      <img
+                        src={currentQuestion.image}
+                        alt="題目圖像"
+                        className="w-full object-contain"
+                      />
+                    </div>
+                    <button
+                      onClick={() => setImageExpanded((prev) => !prev)}
+                      className="mt-2 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                    >
+                      {imageExpanded ? '收起圖形' : '放大圖形'}
+                    </button>
+                  </div>
+                )}
                 <h3 className={`text-xl font-bold text-slate-800 mb-6 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere ${adhdMode ? 'text-2xl leading-loose' : ''}`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                   {adhdMode ? (
                     <span className="inline-block max-w-full">
@@ -591,6 +917,13 @@ export default function PracticeView({
                     <span className="inline-block max-w-full">{renderMathText(currentQuestion.question)}</span>
                   )}
                 </h3>
+
+                {showTranslation && translationText && !examMode && (
+                  <div className="mb-6 text-left bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-700 whitespace-pre-wrap">
+                    <div className="text-xs font-bold text-slate-500 mb-2">翻譯內容</div>
+                    {translationText}
+                  </div>
+                )}
 
                 {(currentQuestion.type === 'geometry' || currentQuestion.shape) && (
                     <div className="mb-6">

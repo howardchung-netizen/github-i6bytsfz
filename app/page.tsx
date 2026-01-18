@@ -85,6 +85,7 @@ export default function App() {
   const [sessionMistakes, setSessionMistakes] = useState([]);
   const [sessionTopics, setSessionTopics] = useState([]);
   const [sessionQuestions, setSessionQuestions] = useState([]); // 追蹤試卷中的所有題目和答題結果
+  const [sessionLanguagePreference, setSessionLanguagePreference] = useState(null);
   const [preloadedQuestion, setPreloadedQuestion] = useState(null); // 預加載的下一題
   const [quotaExceeded, setQuotaExceeded] = useState(false); // 配額超限標記
   const [quotaRetryAfter, setQuotaRetryAfter] = useState(null); // 配額重試時間（秒）
@@ -150,6 +151,9 @@ export default function App() {
             avatar: '', 
             role: '', 
             school: '', 
+            institutionName: '',
+            institutionRole: null,
+            institutionStatus: null,
             gender: '', 
             age: 0, 
             isPremium: false 
@@ -174,6 +178,9 @@ export default function App() {
                 avatar: '', 
                 role: '', 
                 school: '', 
+                institutionName: '',
+                institutionRole: null,
+                institutionStatus: null,
                 gender: '', 
                 age: 0, 
                 isPremium: false 
@@ -392,7 +399,7 @@ export default function App() {
   };
 
   // --- Game Loop Logic ---
-  const startPracticeSession = async (selectedTopicIds = [], count = 10, subjectHint = null, mode = null) => { 
+  const startPracticeSession = async (selectedTopicIds = [], count = 10, subjectHint = null, mode = null, options = null) => { 
       if (mode) {
           setSessionMode(mode);
       }
@@ -413,6 +420,7 @@ export default function App() {
       setSessionMistakes([]); 
       setSessionQuestions([]); // 重置試卷題目追蹤
       setSessionTopics(selectedTopicIds);
+      setSessionLanguagePreference(options?.languagePreference || null);
       // 注意：loading 狀態應該在調用此函數之前就已經設置為 true（在 DailyTaskView 或 TopicSelectionView 中）
       // 這裡確保 loading 狀態是 true
       setLoading(true); 
@@ -434,7 +442,7 @@ export default function App() {
           
           setLastRequestTime(Date.now());
           // 如果 selectedTopicIds 為空，傳入 subject 讓 AI 自動偵測該科目的題目
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject, user);
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject, user, options?.languagePreference || null);
           
           // 檢查是否為錯誤回退（配額超限）
           if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -514,7 +522,7 @@ export default function App() {
       try {
           // 在發送請求前更新時間戳
           setLastRequestTime(Date.now());
-          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics, null, user);
+          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics, null, user, sessionLanguagePreference);
           if (q) {
               // 檢查是否為錯誤回退（配額超限）
               if (q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -589,7 +597,7 @@ export default function App() {
           // 在發送請求前更新時間戳
           setLastRequestTime(Date.now());
           // 傳入 subject 參數以支持自動偵測
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject, user);
+          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject, user, sessionLanguagePreference);
           
           // 檢查是否為錯誤回退（配額超限）
           if (q && q.source === 'error_fallback' && q.question.includes('配額')) {

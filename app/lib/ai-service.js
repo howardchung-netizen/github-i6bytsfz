@@ -11,7 +11,7 @@ let lastCacheKey = null; // 追蹤上次使用的緩存鍵，用於檢測主題�
 const BATCH_SIZE = 3;
 
 // 生成緩存鍵：確保主題、科目、機構一致性
-const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty) => {
+const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty, languagePreference = null) => {
     // 標準化 topicIds：排序並轉換為字符串
     const topicIdsStr = selectedTopicIds.length > 0 
         ? [...selectedTopicIds].sort().join(',') 
@@ -26,7 +26,8 @@ const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty
         topicIds: topicIdsStr,
         subjectHint: subjectHint || 'auto',
         institutionName,
-        difficulty: difficulty || 'normal'
+        difficulty: difficulty || 'normal',
+        languagePreference: languagePreference || 'default'
     };
     
     // 轉換為 JSON 字符串作為唯一鍵
@@ -107,9 +108,9 @@ const LOCAL_BRAIN = {
 };
 
 export const AI_SERVICE = {
-  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null) => {
+  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, languagePreference = null) => {
     // ===== 階段 1: 緩存鍵生成與失效檢查 =====
-    const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty);
+    const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty, languagePreference);
     
     // 如果緩存鍵改變（主題/科目/機構切換），清空舊緩存
     if (lastCacheKey && lastCacheKey !== currentCacheKey) {
@@ -241,11 +242,19 @@ export const AI_SERVICE = {
         return topic && topic.subject === 'math';
     }));
     
+    const resolvedLanguagePreference = targetSubject === 'eng'
+        ? 'en'
+        : (languagePreference || 'zh');
+    const languageInstruction = resolvedLanguagePreference === 'en'
+        ? 'Language: English (US). All text must be in English. Set "lang": "en-US".'
+        : 'Language: 繁體中文（香港）。All text must be in Traditional Chinese. Set "lang": "zh-HK".';
+
     const promptText = `
         Role: Professional HK Primary Math Teacher.
         Task: Create ${BATCH_SIZE} NEW variations of the following seed question. Each variation must be DISTINCT with different numbers, names, and contexts.
         Seed: "${activeSeed.question}" (Topic: ${activeSeed.topic})
         Level: ${level}
+        ${languageInstruction}
         
         Constraints:
         1. You MUST output a JSON ARRAY containing exactly ${BATCH_SIZE} question objects.
@@ -282,8 +291,8 @@ export const AI_SERVICE = {
         
         Output JSON Schema: You MUST return a JSON ARRAY with exactly ${BATCH_SIZE} objects. Each object follows this schema:
         ${isMathSubject ? 
-            '[{ "question": "string", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string", "hint": "string", "shape": "string (optional: rectangle, square, triangle, circle, trapezoid, parallelogram, irregular, composite, map_grid)", "params": "object (optional: for geometry shapes, e.g. {w: 5, h: 3} for rectangle, {radius: 4} for circle, {base: 6, height: 4} for triangle, {top: 4, bottom: 8, height: 5} for trapezoid, {points: [{x: -2, y: -1}, {x: 2, y: -1}, {x: 3, y: 2}, {x: -1, y: 2}]} for irregular)", "mapData": "object (optional: for map_grid type, e.g. {gridSize: {rows: 5, cols: 5}, startPos: {row: 2, col: 2}, path: [{direction: "north", steps: 2}, {direction: "east", steps: 3}], landmarks: [{row: 1, col: 1, label: "學校"}]})" }, ... (repeat ${BATCH_SIZE} times)]' :
-            '[{ "question": "string", "answer": "string/number", "explanation": "string", "hint": "string", "params": null }, ... (repeat ${BATCH_SIZE} times)]'
+            '[{ "question": "string", "lang": "zh-HK|en-US", "type": "mcq", "options": ["option1", "option2", ..., "option8"] (exactly 8 options), "answer": "string/number" (must match one of the options exactly), "explanation": "string", "hint": "string", "shape": "string (optional: rectangle, square, triangle, circle, trapezoid, parallelogram, irregular, composite, map_grid)", "params": "object (optional: for geometry shapes, e.g. {w: 5, h: 3} for rectangle, {radius: 4} for circle, {base: 6, height: 4} for triangle, {top: 4, bottom: 8, height: 5} for trapezoid, {points: [{x: -2, y: -1}, {x: 2, y: -1}, {x: 3, y: 2}, {x: -1, y: 2}]} for irregular)", "mapData": "object (optional: for map_grid type, e.g. {gridSize: {rows: 5, cols: 5}, startPos: {row: 2, col: 2}, path: [{direction: "north", steps: 2}, {direction: "east", steps: 3}], landmarks: [{row: 1, col: 1, label: "學校"}]})" }, ... (repeat ${BATCH_SIZE} times)]' :
+            '[{ "question": "string", "lang": "zh-HK|en-US", "answer": "string/number", "explanation": "string", "hint": "string", "params": null }, ... (repeat ${BATCH_SIZE} times)]'
         }
         
         Example format:
@@ -441,12 +450,14 @@ export const AI_SERVICE = {
                 }
                 
                 // 3. 構建題目物件
+                const resolvedLang = question.lang || (resolvedLanguagePreference === 'en' ? 'en-US' : 'zh-HK');
                 const validatedQ = {
                     ...question,
                     id: baseTimestamp + i, // 確保每題有不同的 ID
                     source: 'ai_next_api',
                     type: activeSeed.type || question.type || 'text',
                     topic: activeSeed.topic,
+                    lang: resolvedLang,
                     is_seed: false
                 };
                 

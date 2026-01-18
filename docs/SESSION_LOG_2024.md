@@ -2,6 +2,46 @@
 
 ## 📋 今天完成的主要工作
 
+### 31. ✅ ADHD 提示詞高亮規則優化
+**功能**：
+- 中文單位詞僅在「數字相鄰」時高亮，避免「分店」等誤判
+- 英文關鍵字加入邊界判斷，避免單字內字母誤觸發
+- 英文單位（如 m、L）需貼近數字才高亮
+
+**相關文件**：
+- `app/lib/adhd-utils.js` - 高亮規則與判斷邏輯
+
+---
+
+### 30. ✅ ADHD 語音體驗修復與 UI 簡化
+**功能**：
+- 英文語音預設優先指定 `Microsoft Zira - English (United States)`
+- 第一次試聽加入語音載入提示與延遲重試，降低首次無聲/報錯
+- 退出練習時強制停止語音播放
+- 移除「顯示語音」按鈕與語音清單 debug UI
+
+**相關文件**：
+- `app/components/PracticeView.tsx` - 語音預設/載入/退出停止與 UI 調整
+
+---
+
+### 29. ✅ P3 完成：語言/語音與翻譯輔助
+**功能**：
+- 題目生成支援數學語言偏好（中文/英文）
+- 練習頁新增語音語言選擇與翻譯輔助
+- 圖形題圖像可放大顯示
+
+**相關文件**：
+- `app/components/PracticeView.tsx` - 語音/翻譯與圖像放大
+- `app/components/CommonViews.tsx` - 數學語言選擇
+- `app/components/DailyTaskView.tsx` - 數學語言選擇
+- `app/lib/ai-service.js` - 語言偏好與 lang 欄位
+- `app/lib/adhd-utils.js` - 語音語言支援
+- `app/page.tsx` - 語言偏好傳遞
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md` - 架構與 P3 狀態更新
+
+---
+
 ### 28. ✅ 已完成功能架構全面補齊
 **功能**：
 - 補齊已完成功能架構（前端視圖、流程、快取、後台指標）

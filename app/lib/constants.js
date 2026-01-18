@@ -31,6 +31,9 @@ export const ADMIN_USER = {
     avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=admin',
     role: 'admin',
     school: 'Test Academy',
+    institutionName: '',
+    institutionRole: null,
+    institutionStatus: null,
     gender: 'boy',
     age: 30,
     isPremium: true // 測試帳號設為全權限模式

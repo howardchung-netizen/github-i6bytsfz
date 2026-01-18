@@ -956,4 +956,3 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
     </div>
   );
 }
-}

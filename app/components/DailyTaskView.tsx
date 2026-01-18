@@ -1,5 +1,5 @@
 "use client";
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft, Target, CheckCircle, Clock, BookOpen, Sparkles } from 'lucide-react';
 
 export default function DailyTaskView({ subject, dailyTasks, setView, startPracticeSession, user, setLoading }) {
@@ -13,6 +13,7 @@ export default function DailyTaskView({ subject, dailyTasks, setView, startPract
   const task = dailyTasks[subject] || { used: 0, limit: 20 };
   const progress = (task.used / task.limit) * 100;
   const remaining = task.limit - task.used;
+  const [mathLanguage, setMathLanguage] = useState('zh');
 
   // 處理開始練習（自動偵測/隨機）
   const handleStartPractice = async () => {
@@ -24,7 +25,9 @@ export default function DailyTaskView({ subject, dailyTasks, setView, startPract
     if (setLoading) setLoading(true);
     setView('practice');
     // 傳入空數組和 subject 參數，讓 AI 自動偵測/隨機生成該科目的題目
-    await startPracticeSession([], 10, subject, 'practice');
+    await startPracticeSession([], 10, subject, 'practice', {
+      languagePreference: subject === 'math' ? mathLanguage : null
+    });
   };
 
   return (
@@ -122,6 +125,23 @@ export default function DailyTaskView({ subject, dailyTasks, setView, startPract
           </div>
         </div>
       </div>
+
+      {subject === 'math' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-6 mb-6">
+          <h3 className="font-bold text-slate-800 mb-2">數學語言</h3>
+          <select
+            value={mathLanguage}
+            onChange={(e) => setMathLanguage(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            <option value="zh">中文（繁體）</option>
+            <option value="en">英文</option>
+          </select>
+          <p className="text-xs text-slate-500 mt-2">
+            中文數學可選粵語/普通話讀題；英文數學只讀英語。
+          </p>
+        </div>
+      )}
 
       {/* 開始練習按鈕 */}
       {remaining > 0 && (

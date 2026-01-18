@@ -56,6 +56,8 @@ export function highlightKeywords(text, lang = 'zh-HK') {
   const isZh = lang === 'zh-HK' || lang === 'zh-CN' || lang === 'zh-TW';
   const actionWords = isZh ? KEY_ACTION_WORDS_ZH : KEY_ACTION_WORDS_EN;
   const unitWords = isZh ? UNIT_WORDS_ZH : UNIT_WORDS_EN;
+  const actionSet = new Set(actionWords.map((word) => word.toLowerCase()));
+  const unitSet = new Set(unitWords.map((word) => word.toLowerCase()));
   
   // 合併所有關鍵字
   const allKeywords = [...actionWords, ...unitWords];
@@ -73,6 +75,9 @@ export function highlightKeywords(text, lang = 'zh-HK') {
   const parts = [];
   let lastIndex = 0;
   let match;
+  const isDigit = (char) => /[0-9]/.test(char);
+  const isZhNumber = (char) => /[零一二三四五六七八九十百千萬兩]/.test(char);
+  const isLetter = (char) => /[A-Za-z]/.test(char);
   
   // 重置正則表達式
   combinedPattern.lastIndex = 0;
@@ -83,30 +88,55 @@ export function highlightKeywords(text, lang = 'zh-HK') {
       parts.push(text.substring(lastIndex, match.index));
     }
     
+    const matchedText = match[0];
+    const matchedLower = matchedText.toLowerCase();
+
     // 檢查是否為數字
     const isNumber = /^\d+\.?\d*|[\u00BC-\u00BE\u2150-\u215E]|\d+\/\d+|\d+%$/.test(match[0]);
     
-    // 檢查是否為關鍵字
-    const isKeyword = allKeywords.some(kw => 
-      match[0].toLowerCase().includes(kw.toLowerCase()) || 
-      kw.toLowerCase().includes(match[0].toLowerCase())
-    );
+    const isActionKeyword = actionSet.has(matchedLower);
+    const isUnitKeyword = unitSet.has(matchedLower);
+    const prevChar = text[match.index - 1] || '';
+    const nextChar = text[match.index + matchedText.length] || '';
+
+    const shouldHighlightAction = () => {
+      if (!isActionKeyword) return false;
+      if (isZh) return true;
+      return !(isLetter(prevChar) || isLetter(nextChar));
+    };
+
+    const shouldHighlightUnit = () => {
+      if (!isUnitKeyword) return false;
+      if (isZh) {
+        return (
+          isDigit(prevChar)
+          || isDigit(nextChar)
+          || isZhNumber(prevChar)
+          || isZhNumber(nextChar)
+        );
+      }
+      const hasNumberNeighbor = isDigit(prevChar) || isDigit(nextChar);
+      if (matchedText.length <= 2) {
+        return hasNumberNeighbor;
+      }
+      return !(isLetter(prevChar) || isLetter(nextChar));
+    };
     
     // 添加高亮的關鍵字或數字
     if (isNumber) {
       parts.push(
         <span key={`num-${match.index}`} className="bg-yellow-300 text-yellow-900 font-black px-1.5 py-0.5 rounded-md shadow-sm border-2 border-yellow-400">
-          {match[0]}
+          {matchedText}
         </span>
       );
-    } else if (isKeyword) {
+    } else if (shouldHighlightAction() || shouldHighlightUnit()) {
       parts.push(
         <span key={`kw-${match.index}`} className="bg-blue-300 text-blue-900 font-black px-1.5 py-0.5 rounded-md shadow-sm border-2 border-blue-400">
-          {match[0]}
+          {matchedText}
         </span>
       );
     } else {
-      parts.push(match[0]);
+      parts.push(matchedText);
     }
     
     lastIndex = match.index + match[0].length;
@@ -149,11 +179,34 @@ export function speakTextForADHD(text, lang = 'zh-HK', options = {}) {
   
   const utterance = new SpeechSynthesisUtterance(text);
   
-  // 設置語言
-  if (lang === 'zh-HK' || lang === 'zh-CN' || lang === 'zh-TW') {
-    utterance.lang = 'zh-HK';
-  } else {
-    utterance.lang = 'en-US';
+  // 設置語言（支援粵語/國語/英語）
+  const normalizedLang = typeof lang === 'string' ? lang : 'zh-HK';
+  const supportedLangs = ['zh-HK', 'zh-CN', 'zh-TW', 'en-US', 'en-GB'];
+  let resolvedLang = 'en-US';
+  if (supportedLangs.includes(normalizedLang)) {
+    resolvedLang = normalizedLang;
+  } else if (normalizedLang.startsWith('zh')) {
+    resolvedLang = 'zh-HK';
+  }
+  utterance.lang = resolvedLang;
+
+  // 嘗試挑選對應語言的 voice（避免被系統預設語音覆蓋）
+  const voices = window.speechSynthesis.getVoices();
+  if (voices && voices.length > 0) {
+    const preferredVoiceName = options.voiceName;
+    const langPrefix = resolvedLang.split('-')[0];
+    const matchedVoice = (preferredVoiceName
+      ? voices.find(v => v.name === preferredVoiceName)
+      : null)
+      || voices.find(v => v.lang === resolvedLang && !/Hanhan/i.test(v.name))
+      || voices.find(v => v.lang.startsWith(langPrefix) && !/Hanhan/i.test(v.name));
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+      // 若指定了 voice，使用該 voice 的語系以避免語系不一致
+      if (matchedVoice.lang) {
+        utterance.lang = matchedVoice.lang;
+      }
+    }
   }
   
   // ADHD 模式優化設置

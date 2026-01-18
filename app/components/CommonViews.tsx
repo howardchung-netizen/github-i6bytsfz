@@ -50,6 +50,15 @@ const renderMathText = (text) => {
   
   return parts.map((part, index) => {
     if (part.type === 'math') {
+      const hasCommands = /\\[A-Za-z]+/.test(part.content);
+      const hasOperators = /[=+\-*/^]/.test(part.content);
+      const hasLetters = /[A-Za-z]/.test(part.content);
+      const hasSpaces = /\s/.test(part.content);
+      const looksLikePlainText = !hasCommands && !hasOperators && hasLetters && hasSpaces;
+
+      if (looksLikePlainText) {
+        return <span key={index} style={{ fontFamily: 'inherit' }}>{part.content}</span>;
+      }
       try {
         return <InlineMath key={index} math={part.content} style={{ fontFamily: 'KaTeX_Main, "Times New Roman", serif' }} />;
       } catch (e) {
@@ -64,8 +73,13 @@ const renderMathText = (text) => {
 export const TopicSelectionView = ({ user, setView, startPracticeSession, topics, setLoading, sessionMode = 'practice' }) => {
   const [selected, setSelected] = useState([]);
   const [questionCount, setQuestionCount] = useState(20); // 默認 20 題
+  const [mathLanguage, setMathLanguage] = useState('zh');
   const availableTopics = topics.filter(t => t.grade === user.level);
   const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const selectedSubjects = selected
+    .map((id) => topics.find(t => t.id === id)?.subject)
+    .filter(Boolean);
+  const hasMathSelected = selectedSubjects.includes('math');
 
   // 處理題目數量變化
   const handleCountChange = (e) => {
@@ -113,6 +127,25 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
           </div>
         </div>
 
+        {hasMathSelected && (
+          <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              數學語言
+            </label>
+            <select
+              value={mathLanguage}
+              onChange={(e) => setMathLanguage(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              <option value="zh">中文（繁體）</option>
+              <option value="en">英文</option>
+            </select>
+            <p className="text-xs text-slate-500 mt-2">
+              中文數學可選粵語/普通話讀題；英文數學只讀英語。
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {availableTopics.length > 0 ? availableTopics.map(t => (
                 <button key={t.id} onClick={() => toggle(t.id)} className={`p-4 rounded-xl border-2 text-left transition-all ${selected.includes(t.id) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-indigo-200'}`}>
@@ -132,7 +165,9 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
                 if (setLoading) setLoading(true);
                 setView('practice');
               // 然後開始生成題目，傳入選擇的題目數量
-              await startPracticeSession(selected, questionCount, null, sessionMode);
+              await startPracticeSession(selected, questionCount, null, sessionMode, {
+                languagePreference: hasMathSelected ? mathLanguage : null
+              });
               }} 
               disabled={selected.length === 0} 
               className="flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
