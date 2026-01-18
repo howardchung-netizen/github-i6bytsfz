@@ -88,6 +88,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [teacherSelectedTypes, setTeacherSelectedTypes] = useState([]);
   const [teacherCategory, setTeacherCategory] = useState('');
   const [isSavingTeacherFeedback, setIsSavingTeacherFeedback] = useState(false);
+  const isTeacherPending = user?.role === 'teacher' && user?.institutionRole === 'member' && user?.institutionStatus !== 'active';
   
   // 題型選項（與開發者相同）
   const questionTypeOptions = [
@@ -787,6 +788,12 @@ export default function TeacherView({ setView, user, topics }) {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 animate-in fade-in duration-500 font-sans">
+      {isTeacherPending && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-6">
+          <p className="text-amber-800 font-bold">⏳ 子帳號等待主號確認中</p>
+          <p className="text-sm text-amber-700 mt-1">完成確認後才能完整使用機構功能。</p>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-black flex items-center gap-2 text-slate-800">
           <Users className="text-indigo-600" size={32} /> 教學者控制台

@@ -591,35 +591,53 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
 
                 {!isLoadingAnalytics && analyticsData && (
                     <>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-white p-4 rounded-xl border border-slate-200">
                                 <div className="text-xs text-slate-500">造訪數</div>
                                 <div className="text-2xl font-bold">{analyticsData.visits?.total || 0}</div>
                                 <div className="text-xs text-slate-500">Web {analyticsData.visits?.web || 0} / 平板 {analyticsData.visits?.tablet || 0}</div>
                             </div>
                             <div className="bg-white p-4 rounded-xl border border-slate-200">
-                                <div className="text-xs text-slate-500">註冊率（Web / 平板）</div>
+                                <div className="text-xs text-slate-500">下載率（暫以註冊代替）</div>
                                 <div className="text-2xl font-bold">
-                                    {((analyticsData.signups?.web_rate || 0) * 100).toFixed(1)}%
+                                    {((analyticsData.signups?.download_rate || 0) * 100).toFixed(1)}%
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                    近 30 日註冊 {analyticsData.signups?.total || 0}
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                <div className="text-xs text-slate-500">新帳號申請（近 30 日）</div>
+                                <div className="text-2xl font-bold">
+                                    {analyticsData.users?.new_30d || 0}
                                 </div>
                                 <div className="text-xs text-slate-500">
                                     Web {analyticsData.signups?.web || 0} / 平板 {analyticsData.signups?.app || 0}
                                 </div>
                             </div>
                             <div className="bg-white p-4 rounded-xl border border-slate-200">
-                                <div className="text-xs text-slate-500">DAU / WAU / MAU</div>
+                                <div className="text-xs text-slate-500">每月訂閱人數（目前）</div>
                                 <div className="text-2xl font-bold">
-                                    {analyticsData.active_users?.dau || 0} / {analyticsData.active_users?.wau || 0} / {analyticsData.active_users?.mau || 0}
+                                    {analyticsData.users?.premium_total || 0}
                                 </div>
-                                <div className="text-xs text-slate-500">近 30 日</div>
+                                <div className="text-xs text-slate-500">近 30 日新增 {analyticsData.users?.premium_new_30d || 0}</div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
+                                帳號總數：{analyticsData.users?.total || 0}
+                            </div>
                             <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
                                 生成量：{analyticsData.generation?.gen_count || 0}（失敗 {analyticsData.generation?.gen_fail_count || 0}）
                             </div>
                             <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
                                 平台比例：Web {analyticsData.visits?.web || 0} / 平板 {analyticsData.visits?.tablet || 0}
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
+                                註冊率（Web / 平板）：{((analyticsData.signups?.web_rate || 0) * 100).toFixed(1)}% / {((analyticsData.signups?.app_rate || 0) * 100).toFixed(1)}%
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm text-slate-600">
+                                DAU / WAU / MAU：{analyticsData.active_users?.dau || 0} / {analyticsData.active_users?.wau || 0} / {analyticsData.active_users?.mau || 0}
                             </div>
                         </div>
 
@@ -685,13 +703,13 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
                                             <Pie
-                                                data={Object.entries(analyticsData.roles || {}).map(([name, value]) => ({ name, value }))}
+                                                data={Object.entries(analyticsData.users?.roles_total || analyticsData.roles || {}).map(([name, value]) => ({ name, value }))}
                                                 dataKey="value"
                                                 nameKey="name"
                                                 outerRadius={90}
                                                 label
                                             >
-                                                {Object.keys(analyticsData.roles || {}).map((_, index) => (
+                                                {Object.keys(analyticsData.users?.roles_total || analyticsData.roles || {}).map((_, index) => (
                                                     <Cell key={`role-${index}`} fill={['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]} />
                                                 ))}
                                             </Pie>
@@ -937,4 +955,5 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       </div>
     </div>
   );
+}
 }

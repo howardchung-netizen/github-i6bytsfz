@@ -1,7 +1,7 @@
 # 專案功能架構與待辦整合總覽
 
 > **用途**：提供完整的「已完成功能架構 + To-Do + 後續建議」，可直接交給另一個 AI 進行技術分析。  
-> **更新日期**：2026年1月15日  
+> **更新日期**：2026年1月18日  
 > **專案路徑**：`C:\ai totur\github-i6bytsfz`
 
 ---
@@ -10,16 +10,18 @@
 
 ### 1.1 前端 UI 架構（Views / Components）
 
-- **DashboardView**：學生儀表板、能力雷達圖、科目切換、分數顯示 `(50/100)`
-- **PracticeView**：練習流程核心（題目呈現、作答、答案檢查、下一題、完成試卷）
-- **CommonViews**：通用視圖（題目選擇、錯題本、題目列表）
-- **DailyTaskView**：每日任務入口與限制
-- **TeacherView**：教師控制台（種子題目上傳、派卷整合、班級管理部分功能）
-- **ParentView**：家長視圖（基礎 UI）
-- **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具
-- **SubscriptionView**：訂閱方案頁面
-- **RegisterView**：登入/註冊流程
-- **page.tsx**：主入口與全局流程協調（題目生成、完成試卷後能力計分）
+- **DashboardView**：主儀表板與入口導覽（練習/考題入口、錯題本、學習數據、作業通知）
+- **PracticeView**：練習/考題流程核心（作答、正誤判斷、ADHD 高亮、考題模式不顯示提示/詳解）
+- **CommonViews**：通用視圖（題目選擇、錯題本、成績表 Summary、個人檔案）
+- **DailyTaskView**：每日任務入口與限制（練習模式啟動）
+- **TeacherView**：教師控制台（種子題上傳、派卷、班級/作業分析、排名與篩選、回饋提交）
+- **ParentView**：家長視圖（子女切換、趨勢圖、AI 報告、錯題分佈、多子女比較/排行）
+- **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
+- **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
+- **FeedbackReviewView**：教學者回饋審核與批准/拒絕
+- **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
+- **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）
+- **page.tsx**：主入口與全局流程協調（題目生成、能力計分、訪問紀錄、登入自動升班）
 
 ### 1.2 API 路由層（Next.js API）
 
@@ -28,23 +30,25 @@
 - `/api/payment`、`/api/webhooks/stripe`：Stripe 支付與 Webhook
 - `/api/check-env`、`/api/check-quota`、`/api/test-google-api`：環境檢測、配額檢測
 - `/api/audit/single`：審計手動觸發（單題審計，含 `maxDuration` / `dynamic`）
+- `/api/metrics`：後台指標聚合（訪問/註冊/活躍/生成量/平台分佈）
 
 ### 1.3 服務層（lib）
 
-- `ai-service.js`：題目生成、提示詞建構、JSON 清理與解析
-- `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態）
+- `ai-service.js`：題目生成、提示詞建構、JSON 清理與解析（含教學者回饋指令）
+- `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
 - `mock-data-generator.js`：模擬學生/班級數據
 - `constants.js`：模型配置（Creator / Auditor / Vision）
+- `adhd-utils.js`：ADHD 模式關鍵字/數字高亮
 
 ### 1.4 主要業務流程
 
 **A. 題目生成流程**
 1. 使用者選單元 → 觸發 `startPracticeSession`
 2. `ai-service` 組裝 prompt（含種子題/回饋）
-3. `/api/chat` 生成題目 JSON
+3. `/api/chat` 生成題目 JSON（Gemini 2.0 Flash）
 4. UI 顯示並進入練習流程
 
 **B. 練習流程**
@@ -52,14 +56,37 @@
 2. 使用者作答 → 即時檢查正誤
 3. 完整試卷完成後 → `ability-scoring` 計算並存入 Firestore
 
+**B-1. 考題模式流程**
+1. 題目作答期間不顯示 AI 提示/詳解
+2. 完成後顯示成績表（題目 + 正確答案 + 查看詳解）
+3. 正確題綠底、錯誤題紅底
+
 **C. 種子題目上傳**
 - 教師端統一上傳介面
 - 自動判斷純文字題（不走 Vision）或圖像題（走 Vision）
 
 **D. 審計流程（手動）**
 1. 呼叫 `/api/audit/single?questionId=xxx`
-2. `auditor-service` 使用 `gemini-2.5-pro`
+2. `auditor-service` 使用 `gemini-2.5-pro`（審核生成題）
 3. 回寫 `audit_status/audit_report/audit_score/...`
+
+**E. 後台回饋審核流程**
+1. 教學者提交回饋 → 後台通知欄顯示待審核數量
+2. 開發者審核（批准/拒絕）
+3. 批准後納入題目生成指令
+
+**F. 年級自動升班流程**
+1. 每次登入判斷是否已過 7/1
+2. 未升班且年級未滿 P6 → 自動升班並回寫
+
+**G. 學習統計快取流程**
+1. 作答寫入 `question_usage`
+2. 同步更新 `daily_stats` 快取
+3. 家長/學生趨勢圖優先讀取快取
+
+**H. 後台指標匯總流程**
+1. `/api/metrics` 聚合 visit/users/usage/past_papers
+2. 開發者後台顯示 KPI、趨勢與分佈
 
 ### 1.5 資料庫結構（核心集合）
 
@@ -67,27 +94,60 @@
   - 審計欄位：`audit_status`, `audit_report`, `audit_score`, `auditor_model_used`, `audit_issues`, `audit_timestamp`
   - `logic_supplement`：開發者注入邏輯  
 - **developer_feedback**：開發者回饋（可影響生成或審計）
+- **teacher_feedback**：教學者回饋（待審核/已批准）
+- **teacher_seed_questions/{institutionName}/questions**：機構題庫
+- **classes**：班級資料（含機構欄位）
+- **assignments**：作業/派卷
+- **notifications**：學生作業通知
+- **visit_logs**：訪問紀錄（平台/路徑/時間）
+- **daily_stats**：每日快取（題數、正確/錯誤、時長）
 - **ability_scores**：能力評分儲存
 - **logs / mistakes**：練習與錯題
+- **users/{uid}/question_usage**：作答歷程與時間
+- **users/{uid}/reports**：AI 學習報告
+- **users**（補充欄位）：
+  - `school` / `institutionName`
+  - `institutionRole` / `institutionStatus`
+  - `lastPromotionYear` / `lastPromotedAt`
 
 ---
 
 ## 2) 整合 To-Do List（待辦事項）
 
-### 2.0 近期優先（P0 / P1）
+### 2.0 近期優先（P0 / P1 / P1.5）
 
-**P0**
-- **個人檔案入口**：登入後可進入個人資料介面（已修）
-- **練習 / 試卷模式驗證**：整體流程已完成，待完整驗證（已完成）
+**P0（立即）**
+- **個人檔案入口**：登入後可進入個人資料介面（已修）→（已完成）
+- **練習 / 試卷模式驗證**：整體流程已完成，待完整驗證（已完成）→（已完成）
 
-**P1**
-- **老師回饋通知欄（後台整合）**：先完成通知欄與資料流，再做回饋轉生題指令
-- **老師回饋 → 生題指令轉換**：依通知欄資料格式建立 prompt/指令模板（基礎版已完成）
+**P1（核心品質）**
+- **老師回饋通知欄（後台整合）**：先完成通知欄與資料流，再做回饋轉生題指令 →（已完成）
+- **老師回饋 → 生題指令轉換**：依通知欄資料格式建立 prompt/指令模板（建立在通知欄之上）→（已完成）
 
-**需等四年級單元設定完成後再做（提醒）**
-- 雲端題目分類儲存測試（影響能力評分）
-- 生題邏輯整理 + 分類 → 能力評分連動
-- 邏輯補充 / 老師回饋功能測試
+**P1.5（等四年級單元設定完成後再做）**
+- 雲端題目分類儲存測試（影響能力評分）→（待四年級單元完成）
+- 生題邏輯整理 + 分類 → 能力評分連動 →（待四年級單元完成）
+- 邏輯補充 / 老師回饋功能測試 →（待四年級單元完成）
+
+### 2.0.1 產品完成度（P2 / P3 / P4）
+
+**P2（完成度）**
+- **開發者後台資料檢視介面**：下載率、每月訂閱人數、新帳號申請、各帳號數量 →（已完成）
+- **老師 / 家長 / 學生資料檢視格式**：增加學習數據、時間紀錄、做題時間 →（已完成）
+- **註冊介面整理 + 學校資料 + 自動升班**：7/1 自動升班、頭像美觀度 →（已完成）
+- **帳號權限細緻分類**：與教育者帳號 / 機構綁定一起設計 →（已完成）
+
+**P3（體驗 / 擴展）**
+- **語言 / 語音選擇**：依學科分開 →（未完成）
+- **翻譯輔助**：中英互譯 →（未完成）
+- **數學圖形題後台排版**：可向下伸展 →（未完成）
+
+**P4（商業化 / 規模）**
+- **收費 / 訂價**
+- **壓測**
+- **資助申請**
+- **優惠條碼**：個人帳號介面入口
+- **優化生題時間**
 
 ### 2.1 審計系統測試（待做）
 

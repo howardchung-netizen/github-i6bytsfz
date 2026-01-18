@@ -260,18 +260,23 @@ export default function App() {
         // 嘗試從 DB 抓取用戶資料
         const profile: any = await DB_SERVICE.getUserProfile(currentUser.email);
         if (profile) {
+            const promotionResult = await DB_SERVICE.autoPromoteStudentIfNeeded(currentUser.uid, profile);
+            const normalizedProfile = promotionResult?.profile || profile;
             setUser({ 
               id: currentUser.uid,
-              name: profile.name || '',
-              email: profile.email || currentUser.email || '',
-              level: profile.level || '',
-              xp: profile.xp || 0,
-              avatar: profile.avatar || '',
-              role: profile.role || '',
-              school: profile.school || '',
-              gender: profile.gender || '',
-              age: profile.age || 0,
-              isPremium: profile.isPremium || false
+              name: normalizedProfile.name || '',
+              email: normalizedProfile.email || currentUser.email || '',
+              level: normalizedProfile.level || '',
+              xp: normalizedProfile.xp || 0,
+              avatar: normalizedProfile.avatar || '',
+              role: normalizedProfile.role || '',
+              school: normalizedProfile.school || '',
+              institutionName: normalizedProfile.institutionName || '',
+              institutionRole: normalizedProfile.institutionRole || null,
+              institutionStatus: normalizedProfile.institutionStatus || null,
+              gender: normalizedProfile.gender || '',
+              age: normalizedProfile.age || 0,
+              isPremium: normalizedProfile.isPremium || false
             });
             setIsLoggedIn(true);
             setView('dashboard');

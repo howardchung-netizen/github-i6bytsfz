@@ -5,7 +5,20 @@ import { DB_SERVICE } from '../lib/db-service';
 
 export default function RegisterView({ setView, setUser }) {
     const [mode, setMode] = useState('login'); // login or register
-    const [formData, setFormData] = useState({ name: '', gender: 'boy', school: '', age: '', grade: 'P4', email: '', password: '', dob: '', role: 'student', institutionName: '' });
+    const [formData, setFormData] = useState({
+        name: '',
+        gender: 'boy',
+        school: '',
+        age: '',
+        grade: 'P4',
+        email: '',
+        password: '',
+        dob: '',
+        role: 'student',
+        institutionName: '',
+        institutionRole: 'owner',
+        institutionCode: ''
+    });
     const [selectedAvatar, setSelectedAvatar] = useState(null);
     const [avatarVersion, setAvatarVersion] = useState(0); 
     const [isProcessing, setIsProcessing] = useState(false);
@@ -37,6 +50,13 @@ export default function RegisterView({ setView, setUser }) {
         return isTablet ? 'tablet' : 'web';
     };
 
+    const getInitialPromotionYear = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const cutoff = new Date(year, 6, 1);
+        return now >= cutoff ? year : year - 1;
+    };
+
     const handleRegister = async () => { 
         setErrorMessage(""); 
         if (!formData.name || !formData.email || !formData.password || !selectedAvatar) { 
@@ -46,11 +66,18 @@ export default function RegisterView({ setView, setUser }) {
         const emailExists = await DB_SERVICE.checkEmailExists(formData.email); 
         if (emailExists) { setErrorMessage("❌ 此電郵已被註冊！"); setIsProcessing(false); return; } 
         
-        // 如果是教學者，必須填寫教育機構名稱
-        if (formData.role === 'teacher' && !formData.institutionName.trim()) {
-            setErrorMessage("⚠️ 教學者帳號必須填寫教育機構名稱"); 
-            setIsProcessing(false); 
-            return;
+        // 如果是教學者，必須填寫機構資料（主號填名稱；子號填驗證碼）
+        if (formData.role === 'teacher') {
+            if (formData.institutionRole === 'owner' && !formData.institutionName.trim()) {
+                setErrorMessage("⚠️ 教學者主帳號必須填寫教育機構名稱"); 
+                setIsProcessing(false); 
+                return;
+            }
+            if (formData.institutionRole === 'member' && !formData.institutionCode.trim()) {
+                setErrorMessage("⚠️ 教學者子帳號必須填寫機構驗證碼"); 
+                setIsProcessing(false); 
+                return;
+            }
         }
 
         const { password, ...profileData } = { 
@@ -60,8 +87,14 @@ export default function RegisterView({ setView, setUser }) {
             level: formData.grade,
             role: formData.role || 'student',
             institutionName: formData.role === 'teacher' ? formData.institutionName.trim() : '', // 只有教學者需要
+            institutionRole: formData.role === 'teacher' ? formData.institutionRole : null,
+            institutionCode: formData.role === 'teacher' ? formData.institutionCode.trim() : '',
+            institutionStatus: formData.role === 'teacher'
+                ? (formData.institutionRole === 'owner' ? 'active' : 'pending')
+                : null,
             isPremium: false, // 預設為免費用戶
-            platform: getPlatformFromUserAgent()
+            platform: getPlatformFromUserAgent(),
+            lastPromotionYear: formData.role === 'student' ? getInitialPromotionYear() : null
         }; 
         const userId = await DB_SERVICE.registerUser(profileData, formData.password); 
         
@@ -112,7 +145,13 @@ export default function RegisterView({ setView, setUser }) {
                                 <label className="block text-sm font-bold text-slate-600 mb-1">帳號類型 *</label>
                                 <select 
                                     value={formData.role} 
-                                    onChange={e => setFormData({...formData, role: e.target.value, institutionName: e.target.value === 'teacher' ? formData.institutionName : ''})} 
+                                    onChange={e => setFormData({
+                                        ...formData,
+                                        role: e.target.value,
+                                        institutionName: e.target.value === 'teacher' ? formData.institutionName : '',
+                                        institutionRole: e.target.value === 'teacher' ? formData.institutionRole : 'owner',
+                                        institutionCode: e.target.value === 'teacher' ? formData.institutionCode : ''
+                                    })} 
                                     className="w-full border-2 border-slate-200 rounded-xl p-3 bg-white"
                                 >
                                     <option value="student">學生</option>
@@ -123,21 +162,45 @@ export default function RegisterView({ setView, setUser }) {
                             {/* 教育機構名稱（僅教學者顯示） */}
                             {formData.role === 'teacher' && (
                                 <div>
+                                    <label className="block text-sm font-bold text-slate-600 mb-1">教學者帳號類型 *</label>
+                                    <select
+                                        value={formData.institutionRole}
+                                        onChange={e => setFormData({ ...formData, institutionRole: e.target.value })}
+                                        className="w-full border-2 border-slate-200 rounded-xl p-3 bg-white mb-3"
+                                    >
+                                        <option value="owner">主帳號（建立機構）</option>
+                                        <option value="member">子帳號（輸入驗證碼加入）</option>
+                                    </select>
                                     <label className="block text-sm font-bold text-slate-600 mb-1">
-                                        教育機構名稱 * <span className="text-red-500 text-xs">（相同機構的教學者可共用種子題目庫）</span>
+                                        {formData.institutionRole === 'owner' ? '教育機構名稱 *' : '機構驗證碼 *'}
+                                        <span className="text-red-500 text-xs">（主號可確認/停用子號）</span>
                                     </label>
-                                    <input 
-                                        type="text" 
-                                        value={formData.institutionName} 
-                                        onChange={e => setFormData({...formData, institutionName: e.target.value})} 
-                                        placeholder="例如：香港小學、ABC補習社"
-                                        className="w-full border-2 border-slate-200 rounded-xl p-3" 
+                                    <input
+                                        type="text"
+                                        value={formData.institutionRole === 'owner' ? formData.institutionName : formData.institutionCode}
+                                        onChange={e => setFormData({
+                                            ...formData,
+                                            institutionName: formData.institutionRole === 'owner' ? e.target.value : formData.institutionName,
+                                            institutionCode: formData.institutionRole === 'member' ? e.target.value : formData.institutionCode
+                                        })}
+                                        placeholder={formData.institutionRole === 'owner' ? '例如：香港小學、ABC補習社' : '輸入主號提供的驗證碼'}
+                                        className="w-full border-2 border-slate-200 rounded-xl p-3"
                                     />
-                                    <p className="text-xs text-slate-500 mt-1">💡 相同機構名稱的教學者將共用種子題目庫</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {formData.institutionRole === 'owner'
+                                            ? '💡 相同機構名稱的教學者將共用種子題目庫'
+                                            : '💡 子帳號提交後需主號確認才可綁定'}
+                                    </p>
                                 </div>
                             )}
 
                             <div><label className="block text-sm font-bold text-slate-600 mb-1">姓名</label><input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-3" /></div>
+                            {formData.role !== 'teacher' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-600 mb-1">學校名稱</label>
+                                    <input type="text" value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-3" placeholder="例如：香港小學" />
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="block text-sm font-bold text-slate-600 mb-1">性別</label><select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-3 bg-white"><option value="boy">男生</option><option value="girl">女生</option></select></div>
                                 <div><label className="block text-sm font-bold text-slate-600 mb-1">年齡</label><input type="number" value={formData.age} readOnly className="w-full border-2 border-slate-100 bg-slate-50 rounded-xl p-3 text-slate-500" placeholder="-" /></div>
@@ -149,8 +212,8 @@ export default function RegisterView({ setView, setUser }) {
                         </div>
                         <div>
                             <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg text-slate-700 flex items-center gap-2"><User size={20}/> 選擇頭像</h3><button onClick={refreshAvatars} className="text-sm bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold flex items-center gap-1 hover:bg-indigo-100"><RefreshCw size={14}/> 換一批</button></div>
-                            <div className="mb-4"><span className="text-xs font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded-full">男生區 👦</span><div className="grid grid-cols-5 gap-2 mt-2">{boySeeds.map((seed) => { const url = `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}&backgroundColor=b6e3f4`; return (<button key={seed} onClick={() => setSelectedAvatar(url)} className={`rounded-full overflow-hidden border-4 transition-all hover:scale-110 aspect-square ${selectedAvatar === url ? 'border-indigo-500 ring-2 ring-indigo-200 scale-110' : 'border-transparent'}`}><img src={url} alt="avatar" className="w-full h-full" /></button>); })}</div></div>
-                            <div><span className="text-xs font-bold text-pink-500 bg-pink-50 px-2 py-1 rounded-full">女生區 👧</span><div className="grid grid-cols-5 gap-2 mt-2">{girlSeeds.map((seed) => { const url = `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}&backgroundColor=ffdfbf`; return (<button key={seed} onClick={() => setSelectedAvatar(url)} className={`rounded-full overflow-hidden border-4 transition-all hover:scale-110 aspect-square ${selectedAvatar === url ? 'border-pink-500 ring-2 ring-pink-200 scale-110' : 'border-transparent'}`}><img src={url} alt="avatar" className="w-full h-full" /></button>); })}</div></div>
+                            <div className="mb-4"><span className="text-xs font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded-full">男生區 👦</span><div className="grid grid-cols-5 gap-2 mt-2">{boySeeds.map((seed) => { const url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=b6e3f4`; return (<button key={seed} onClick={() => setSelectedAvatar(url)} className={`rounded-full overflow-hidden border-4 transition-all hover:scale-110 aspect-square ${selectedAvatar === url ? 'border-indigo-500 ring-2 ring-indigo-200 scale-110' : 'border-transparent'}`}><img src={url} alt="avatar" className="w-full h-full" /></button>); })}</div></div>
+                            <div><span className="text-xs font-bold text-pink-500 bg-pink-50 px-2 py-1 rounded-full">女生區 👧</span><div className="grid grid-cols-5 gap-2 mt-2">{girlSeeds.map((seed) => { const url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}&backgroundColor=ffdfbf`; return (<button key={seed} onClick={() => setSelectedAvatar(url)} className={`rounded-full overflow-hidden border-4 transition-all hover:scale-110 aspect-square ${selectedAvatar === url ? 'border-pink-500 ring-2 ring-pink-200 scale-110' : 'border-transparent'}`}><img src={url} alt="avatar" className="w-full h-full" /></button>); })}</div></div>
                             {errorMessage && <div className="mt-4 bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold text-center animate-pulse">{errorMessage}</div>}
                             <div className="mt-8 flex gap-3">
                                 <button onClick={() => setView('dashboard')} className="flex-1 bg-white border-2 border-slate-200 text-slate-500 font-bold py-3 rounded-xl hover:bg-slate-50">返回</button>

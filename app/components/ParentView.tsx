@@ -262,6 +262,10 @@ export default function ParentView({ setView, user }) {
     ? Math.round((childStats.correctAnswers / childStats.totalQuestions) * 100)
     : 0;
 
+  const avgTimePerQuestion = childStats && childStats.totalQuestions > 0
+    ? Math.round((childStats.totalTimeSpent || 0) / childStats.totalQuestions / 1000)
+    : 0;
+
   const rankingConfig = {
     timeMinutes: { label: '學習時長（分鐘）', format: (c) => `${c.timeMinutes} 分鐘`, order: 'desc' },
     accuracyRate: { label: '正確率', format: (c) => `${c.accuracyRate}%`, order: 'desc' },
@@ -513,7 +517,7 @@ export default function ParentView({ setView, user }) {
       ) : selectedChild && childStats ? (
         <>
           {/* 統計卡片 */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
               <div className="flex items-center justify-between mb-2">
                 <BookOpen size={24} />
@@ -538,6 +542,13 @@ export default function ParentView({ setView, user }) {
                 </span>
               </div>
               <p className="text-sm text-blue-100">學習時間（分鐘）</p>
+            </div>
+            <div className="bg-gradient-to-br from-slate-500 to-slate-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <Clock size={24} />
+                <span className="text-3xl font-black">{avgTimePerQuestion}</span>
+              </div>
+              <p className="text-sm text-slate-100">平均用時（秒/題）</p>
             </div>
 
             <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">

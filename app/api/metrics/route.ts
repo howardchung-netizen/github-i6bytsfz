@@ -28,6 +28,9 @@ export async function GET() {
       collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'),
       where('createdAt', '>=', startIso)
     );
+    const userAllQuery = query(
+      collection(db, 'artifacts', APP_ID, 'public', 'data', 'users')
+    );
     const usageQuery = query(
       collectionGroup(db, 'question_usage'),
       where('createdAt', '>=', startIso)
@@ -37,9 +40,10 @@ export async function GET() {
       where('createdAt', '>=', startIso)
     );
 
-    const [visitSnap, userSnap, usageSnap, paperSnap] = await Promise.all([
+    const [visitSnap, userSnap, userAllSnap, usageSnap, paperSnap] = await Promise.all([
       getDocs(visitQuery),
       getDocs(userQuery),
+      getDocs(userAllQuery),
       getDocs(usageQuery),
       getDocs(paperQuery)
     ]);
@@ -74,6 +78,8 @@ export async function GET() {
 
     let webSignupCount = 0;
     let appSignupCount = 0;
+    let newUserCount = 0;
+    let premiumNewCount = 0;
     const roleCounts: Record<string, number> = {};
 
     userSnap.forEach((docSnap) => {
@@ -82,6 +88,10 @@ export async function GET() {
       const dateKey = getDateKey(data.createdAt);
       const role = data.role || 'other';
       roleCounts[role] = (roleCounts[role] || 0) + 1;
+      newUserCount += 1;
+      if (data.isPremium) {
+        premiumNewCount += 1;
+      }
       if (platform === 'tablet') {
         appSignupCount += 1;
       } else {
@@ -96,6 +106,19 @@ export async function GET() {
         } else {
           dailyMap[dateKey].web_signups += 1;
         }
+      }
+    });
+
+    let totalUserCount = 0;
+    let premiumTotalCount = 0;
+    const roleTotals: Record<string, number> = {};
+    userAllSnap.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+      const role = data.role || 'other';
+      totalUserCount += 1;
+      roleTotals[role] = (roleTotals[role] || 0) + 1;
+      if (data.isPremium) {
+        premiumTotalCount += 1;
       }
     });
 
@@ -146,6 +169,8 @@ export async function GET() {
       signups: {
         web: webSignupCount,
         app: appSignupCount,
+        total: webSignupCount + appSignupCount,
+        download_rate: visitCount > 0 ? +((webSignupCount + appSignupCount) / visitCount).toFixed(4) : 0,
         web_rate: webVisitCount > 0 ? +(webSignupCount / webVisitCount).toFixed(4) : 0,
         app_rate: tabletVisitCount > 0 ? +(appSignupCount / tabletVisitCount).toFixed(4) : 0
       },
@@ -153,6 +178,14 @@ export async function GET() {
         dau: dailyUsers.size,
         wau: weeklyUsers.size,
         mau: monthlyUsers.size
+      },
+      users: {
+        total: totalUserCount,
+        new_30d: newUserCount,
+        premium_total: premiumTotalCount,
+        premium_new_30d: premiumNewCount,
+        roles_total: roleTotals,
+        roles_new_30d: roleCounts
       },
       generation: {
         gen_count: genCount,

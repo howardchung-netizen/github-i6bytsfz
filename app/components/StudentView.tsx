@@ -48,6 +48,11 @@ export default function StudentView({ setView, user }) {
     return Math.round((stats.correctAnswers / stats.totalQuestions) * 100);
   }, [stats]);
 
+  const avgTimePerQuestion = useMemo(() => {
+    if (!stats || stats.totalQuestions === 0) return 0;
+    return Math.round((stats.totalTimeSpent || 0) / stats.totalQuestions / 1000);
+  }, [stats]);
+
   const chartData = useMemo(() => {
     if (dailyStatsRange.length > 0) {
       return dailyStatsRange.map((item: any) => ({
@@ -127,7 +132,7 @@ export default function StudentView({ setView, user }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">
             <BookOpen size={24} />
@@ -150,6 +155,13 @@ export default function StudentView({ setView, user }) {
             </span>
           </div>
           <p className="text-sm text-blue-100">學習時間（分鐘）</p>
+        </div>
+        <div className="bg-gradient-to-br from-slate-500 to-slate-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-2">
+            <Clock size={24} />
+            <span className="text-3xl font-black">{avgTimePerQuestion}</span>
+          </div>
+          <p className="text-sm text-slate-100">平均用時（秒/題）</p>
         </div>
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center justify-between mb-2">

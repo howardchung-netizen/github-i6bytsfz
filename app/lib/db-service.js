@@ -415,6 +415,49 @@ export const DB_SERVICE = {
             return false;
         }
     },
+    autoPromoteStudentIfNeeded: async (uid, profile) => {
+        try {
+            if (!uid || !profile || profile.role !== 'student') {
+                return { updated: false, profile };
+            }
+            const currentGrade = profile.grade || profile.level;
+            if (!currentGrade || !/^P\d+$/.test(currentGrade)) {
+                return { updated: false, profile };
+            }
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const promotionDate = new Date(currentYear, 6, 1);
+            if (now < promotionDate) {
+                return { updated: false, profile };
+            }
+            if (profile.lastPromotionYear === currentYear) {
+                return { updated: false, profile };
+            }
+            const numericGrade = Number(currentGrade.replace('P', ''));
+            if (Number.isNaN(numericGrade) || numericGrade >= 6) {
+                return { updated: false, profile };
+            }
+            const nextGrade = `P${numericGrade + 1}`;
+            const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("uid", "==", uid));
+            const snap = await getDocs(q);
+            if (snap.empty) return { updated: false, profile };
+            const userDoc = snap.docs[0];
+            const updates = {
+                grade: nextGrade,
+                level: nextGrade,
+                lastPromotionYear: currentYear,
+                lastPromotedAt: new Date().toISOString()
+            };
+            await updateDoc(doc(db, "artifacts", APP_ID, "public", "data", "users", userDoc.id), updates);
+            return {
+                updated: true,
+                profile: { ...profile, ...updates }
+            };
+        } catch (e) {
+            console.error("Auto Promote Error:", e);
+            return { updated: false, profile };
+        }
+    },
     
     // === 家長?能 ===
     linkParentToStudent: async (parentUid, studentEmail) => {

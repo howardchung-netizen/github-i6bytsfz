@@ -2,6 +2,36 @@
 
 ## 📋 今天完成的主要工作
 
+### 28. ✅ 已完成功能架構全面補齊
+**功能**：
+- 補齊已完成功能架構（前端視圖、流程、快取、後台指標）
+- 補充核心資料集合（班級、作業、通知、題庫、報告）
+
+**相關文件**：
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md` - 架構內容擴充
+
+---
+
+### 27. ✅ P2 完成：後台指標、學習時間、註冊與升班
+**功能**：
+- 開發者後台補齊指標（下載率、訂閱數、新帳號、帳號總數）
+- 家長/學生新增平均用時（秒/題）
+- 註冊介面加入學校資料、教學者主/子帳號，頭像風格更新
+- 登入時自動升班（7/1 起）
+
+**相關文件**：
+- `app/api/metrics/route.ts` - 指標擴充
+- `app/components/DeveloperView.tsx` - 後台卡片補齊
+- `app/components/ParentView.tsx` - 平均用時
+- `app/components/StudentView.tsx` - 平均用時
+- `app/components/RegisterView.tsx` - 學校與教學者帳號設定
+- `app/lib/db-service.js` - 自動升班
+- `app/page.tsx` - 登入升班與機構欄位注入
+- `app/components/TeacherView.tsx` - 子帳號待確認提示
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md` - 架構與 P2 狀態更新
+
+---
+
 ### 26. ✅ 家長多子女比較/排行 + 本機 Build 檢查
 **功能**：
 - 完成家長後台多子女比較與排行區塊
