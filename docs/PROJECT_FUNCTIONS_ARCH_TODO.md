@@ -21,6 +21,8 @@
 - **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
 - **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
   - 課程單元管理：既有單元可改名/刪除/新增與改名子單元，所有變更即時同步 Firestore
+  - 單元格式修正：數學科可一鍵補齊舊資料欄位（createdAt/updatedAt/type/lang/subTopics）
+  - 後台輸入欄採深色底反白字（含 select/textarea/file input）
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
 - **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）
@@ -42,6 +44,7 @@
 - `vitest.config.ts` / `app/lib/__tests__/ai-service.test.ts`：Vitest 單元測試（涵蓋標準、alias、容錯案例）
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）
   - 課程單元更新採 `setDoc(..., { merge: true })`，可將預設單元同步到 Firestore 並避免更新失敗
+  - `normalizeSyllabusDocs`：補齊舊 syllabus 文件欄位並統一格式
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
@@ -49,6 +52,14 @@
 - `constants.js`：模型配置（Creator / Auditor / Vision）
 - `adhd-utils.js`：ADHD 模式關鍵字/數字高亮
 - `sentry.*.config.ts`：Sentry 前端/後端錯誤監控初始化（含 API routes）
+
+### 1.6 自動化維運閉環（CI/CD + 監控）
+
+- **Observer（Sentry）**：捕捉 Next.js 前後端錯誤（已配置 DSN）
+- **Broker（GitHub Issues）**：Sentry 觸發 → 自動建立 Issue
+- **Fixer（Ellipsis）**：自動修復與 PR（目前暫停）
+- **Deployer（Vercel）**：GitHub main 更新 → 自動部署
+- **協作規範**：每次新 Session/Commit/Push 前先 `git pull` 同步
 
 ### 1.4 主要業務流程
 

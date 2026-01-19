@@ -84,6 +84,41 @@ export const DB_SERVICE = {
             return false;
         }
     },
+    normalizeSyllabusDocs: async () => {
+        try {
+            const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"));
+            let updated = 0;
+            let skipped = 0;
+            const now = new Date().toISOString();
+            for (const docSnap of snap.docs) {
+                const data = docSnap.data() || {};
+                const payload = {};
+                if (!data.createdAt) payload.createdAt = now;
+                if (!data.updatedAt) payload.updatedAt = now;
+                if (!data.type) payload.type = 'text';
+                if (!data.lang) {
+                    if (data.subject === 'eng') payload.lang = 'en-US';
+                    else payload.lang = 'zh-HK';
+                }
+                if (!data.subTopics) payload.subTopics = [];
+                const needsUpdate = Object.keys(payload).length > 0;
+                if (needsUpdate) {
+                    await setDoc(
+                        doc(db, "artifacts", APP_ID, "public", "data", "syllabus", docSnap.id),
+                        payload,
+                        { merge: true }
+                    );
+                    updated += 1;
+                } else {
+                    skipped += 1;
+                }
+            }
+            return { updated, skipped };
+        } catch (e) {
+            console.error("Normalize Syllabus Error:", e);
+            return { updated: 0, skipped: 0, error: e };
+        }
+    },
     checkEmailExists: async (email) => { 
         if (!auth.currentUser) return false;
         try {

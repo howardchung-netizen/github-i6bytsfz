@@ -1559,5 +1559,24 @@ const newScores = calculateAbilityScores(
 
 ---
 
+### 23. ✅ 單元格式修正與後台輸入反白
+
+**日期**：2026年1月19日
+
+**功能描述**：補齊 syllabus 舊資料格式並優化後台輸入欄反白字樣式。
+
+**實作內容**：
+1. 新增 `normalizeSyllabusDocs`，補齊 `createdAt`/`updatedAt`/`type`/`lang`/`subTopics`
+2. 數學科管理頁新增「修正格式」按鈕，一鍵修正並重載
+3. 數學/中文/英文科管理輸入欄改為深色底反白字（含 select/textarea/file input）
+
+**相關文件**：
+- `app/lib/db-service.js`
+- `app/components/DeveloperView.tsx`
+- `app/components/ChineseDeveloperView.tsx`
+- `app/components/EnglishDeveloperView.tsx`
+
+---
+
 **最後更新**：2026年1月19日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`

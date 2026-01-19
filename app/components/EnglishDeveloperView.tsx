@@ -244,26 +244,26 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="text-xs font-bold text-slate-500">Grade</label>
-                                <select value={newTopic.grade} onChange={e => setNewTopic({...newTopic, grade: e.target.value})} className="w-full border p-2 rounded text-sm">
+                                <select value={newTopic.grade} onChange={e => setNewTopic({...newTopic, grade: e.target.value})} className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400">
                                     {['P1','P2','P3','P4','P5','P6'].map(g => <option key={g} value={g}>{g}</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-500">Term</label>
-                                <select value={newTopic.term} onChange={e => setNewTopic({...newTopic, term: e.target.value})} className="w-full border p-2 rounded text-sm">
+                                <select value={newTopic.term} onChange={e => setNewTopic({...newTopic, term: e.target.value})} className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400">
                                     <option>上學期</option><option>下學期</option>
                                 </select>
                             </div>
                         </div>
                         <div>
                             <label className="text-xs font-bold text-slate-500">Unit Name</label>
-                            <input type="text" value={newTopic.name} onChange={e => setNewTopic({...newTopic, name: e.target.value})} className="w-full border p-2 rounded text-sm" placeholder="e.g., Grammar, Reading Comprehension" />
+                            <input type="text" value={newTopic.name} onChange={e => setNewTopic({...newTopic, name: e.target.value})} className="w-full border p-2 rounded text-sm bg-slate-800 text-white placeholder:text-slate-300 border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400" placeholder="e.g., Grammar, Reading Comprehension" />
                         </div>
                         
                         <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
                             <label className="text-xs font-bold text-slate-500 mb-2 block">Sub-topics</label>
                             <div className="flex gap-2 mb-2">
-                                <input type="text" value={subTopicInput} onChange={e => setSubTopicInput(e.target.value)} className="flex-1 border p-2 rounded text-sm" placeholder="Enter and click Add" />
+                                <input type="text" value={subTopicInput} onChange={e => setSubTopicInput(e.target.value)} className="flex-1 border p-2 rounded text-sm bg-slate-800 text-white placeholder:text-slate-300 border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400" placeholder="Enter and click Add" />
                                 <button onClick={handleAddSubTopic} className="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-300">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -298,7 +298,7 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                                                 type="text"
                                                 value={edit.name ?? t.name}
                                                 onChange={e => setTopicEdits(prev => ({ ...prev, [t.id]: { ...prev?.[t.id], name: e.target.value } }))}
-                                                className="flex-1 border p-2 rounded text-xs"
+                                                className="flex-1 border p-2 rounded text-xs bg-slate-800 text-white placeholder:text-slate-300 border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
                                                 placeholder="Enter new name"
                                             />
                                             <button onClick={() => handleRenameTopic(t)} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold hover:bg-slate-300">Rename</button>
@@ -309,7 +309,7 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                                                 type="text"
                                                 value={edit.subTopicInput ?? ''}
                                                 onChange={e => setTopicEdits(prev => ({ ...prev, [t.id]: { ...prev?.[t.id], subTopicInput: e.target.value } }))}
-                                                className="flex-1 border p-2 rounded text-xs"
+                                                className="flex-1 border p-2 rounded text-xs bg-slate-800 text-white placeholder:text-slate-300 border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
                                                 placeholder="Add sub-topic"
                                             />
                                             <button onClick={() => handleAddSubTopicFor(t)} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold hover:bg-slate-300">Add</button>
@@ -330,7 +330,7 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                                                                 }
                                                             }
                                                         }))}
-                                                        className="flex-1 border p-2 rounded text-xs"
+                                                        className="flex-1 border p-2 rounded text-xs bg-slate-800 text-white placeholder:text-slate-300 border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
                                                     />
                                                     <button onClick={() => handleRenameSubTopicFor(t, idx)} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold hover:bg-slate-300">Rename</button>
                                                     <button onClick={() => handleRemoveSubTopicFor(t, idx)} className="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-bold hover:bg-red-100">Delete</button>
@@ -358,13 +358,13 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                     <div className="flex gap-4 mb-4 items-end">
                         <div>
                             <label className="block text-xs font-bold text-slate-500 mb-1">Grade</label>
-                            <select value={paperMeta.grade} onChange={e => setPaperMeta({...paperMeta, grade: e.target.value})} className="border p-2 rounded text-sm bg-white">
+                            <select value={paperMeta.grade} onChange={e => setPaperMeta({...paperMeta, grade: e.target.value})} className="border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400">
                                 {['P1','P2','P3','P4','P5','P6'].map(g => <option key={g} value={g}>{g}</option>)}
                             </select>
                         </div>
                         <div className="flex-1">
                             <label className="block text-xs font-bold text-slate-700 mb-1">Unit (Optional)</label>
-                            <select value={paperMeta.topicId} onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value})} className="border border-amber-200 bg-amber-50 text-amber-900 p-2 rounded text-sm w-full font-bold">
+                            <select value={paperMeta.topicId} onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value})} className="border border-slate-600 bg-slate-800 text-white p-2 rounded text-sm w-full font-bold focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400">
                                 <option value="">🤖 Auto-detect / None</option>
                                 {availableTopics.map(t => (<option key={t.id} value={t.id}>📍 Force: {t.name}</option>))}
                             </select>
@@ -374,7 +374,7 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                     <textarea 
                         value={paperJson} 
                         onChange={e => setPaperJson(e.target.value)} 
-                        className="w-full h-48 border border-slate-300 rounded-lg p-3 font-mono text-xs bg-slate-50 focus:ring-2 focus:ring-green-200 outline-none mb-4" 
+                        className="w-full h-48 border border-slate-600 rounded-lg p-3 font-mono text-xs bg-slate-800 text-white placeholder:text-slate-300 focus:ring-2 focus:ring-green-200 outline-none mb-4" 
                         placeholder='[ { "question": "...", "answer": "...", "topic": "..." } ]'
                     ></textarea>
                     
