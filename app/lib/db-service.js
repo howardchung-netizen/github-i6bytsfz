@@ -10,7 +10,6 @@ import {
     deleteDoc, 
     doc, 
     writeBatch,
-    updateDoc,
     getDoc,
     orderBy,
     setDoc,
@@ -74,7 +73,11 @@ export const DB_SERVICE = {
     updateTopic: async (id, updates = {}) => {
         try {
             const payload = { ...updates, updatedAt: new Date().toISOString() };
-            await updateDoc(doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id), payload);
+            await setDoc(
+                doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id),
+                payload,
+                { merge: true }
+            );
             return true;
         } catch (e) {
             console.error("Update Topic Error:", e);

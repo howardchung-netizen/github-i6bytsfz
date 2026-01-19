@@ -1,7 +1,7 @@
 # 專案功能架構與待辦整合總覽
 
 > **用途**：提供完整的「已完成功能架構 + To-Do + 後續建議」，可直接交給另一個 AI 進行技術分析。  
-> **更新日期**：2026年1月18日  
+> **更新日期**：2026年1月19日  
 > **專案路徑**：`C:\ai totur\github-i6bytsfz`
 
 ---
@@ -38,13 +38,17 @@
 ### 1.3 服務層（lib）
 
 - `ai-service.js`：題目生成、提示詞建構、JSON 清理與解析（含教學者回饋指令）
+- `question-schema.ts` / `types.ts`：Question 型別、normalizeQuestion、Zod 驗證（處理欄位飄移與標準化）
+- `vitest.config.ts` / `app/lib/__tests__/ai-service.test.ts`：Vitest 單元測試（涵蓋標準、alias、容錯案例）
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）
+  - 課程單元更新採 `setDoc(..., { merge: true })`，可將預設單元同步到 Firestore 並避免更新失敗
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
 - `mock-data-generator.js`：模擬學生/班級數據
 - `constants.js`：模型配置（Creator / Auditor / Vision）
 - `adhd-utils.js`：ADHD 模式關鍵字/數字高亮
+- `sentry.*.config.ts`：Sentry 前端/後端錯誤監控初始化（含 API routes）
 
 ### 1.4 主要業務流程
 
@@ -126,6 +130,7 @@
 **P0（立即）**
 - **個人檔案入口**：登入後可進入個人資料介面（已修）→（已完成）
 - **練習 / 試卷模式驗證**：整體流程已完成，待完整驗證（已完成）→（已完成）
+- **課程單元子單元更新失敗修正**：預設單元改用 `setDoc` 合併寫入，避免不存在文件導致更新失敗 →（已完成）
 
 **P1（核心品質）**
 - **老師回饋通知欄（後台整合）**：先完成通知欄與資料流，再做回饋轉生題指令 →（已完成）

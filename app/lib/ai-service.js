@@ -1,6 +1,7 @@
 import { RAG_SERVICE } from './rag-service';
 import { DB_SERVICE } from './db-service';
 import { CURRENT_MODEL_NAME } from './constants';
+import { normalizeQuestion, QuestionSchema } from './question-schema';
 
 // --- Batch Generation Cache ---
 // 全局緩存：Map<cacheKey, question[]>
@@ -411,7 +412,12 @@ export const AI_SERVICE = {
         
         for (let i = 0; i < aiResult.length; i++) {
             try {
-                let question = aiResult[i];
+                const normalizedQuestion = normalizeQuestion(aiResult[i]);
+                const parsed = QuestionSchema.safeParse(normalizedQuestion);
+                const question = parsed.success ? parsed.data : normalizedQuestion;
+                if (!parsed.success) {
+                    console.warn(`⚠️ 第 ${i + 1} 題 schema 驗證失敗，已套用 normalizeQuestion`, parsed.error?.issues);
+                }
                 
                 // 1. 驗證必要欄位
                 if (!question.question || question.answer === undefined) {
@@ -442,6 +448,11 @@ export const AI_SERVICE = {
                     
                     for (let j = 0; j < originalOptions.length; j++) {
                         const normalized = normalizeOption(originalOptions[j]);
+                        // 保留空白 placeholder，避免補齊後被去重移除
+                        if (normalized === '') {
+                            uniqueOptions.push(originalOptions[j]);
+                            continue;
+                        }
                         if (!seen.has(normalized)) {
                             seen.add(normalized);
                             uniqueOptions.push(originalOptions[j]); // 保留原始格式
@@ -730,6 +741,14 @@ export const AI_SERVICE = {
         }
 
         // 驗證和清理選項（確保唯一性）- 與主生成函數相同的邏輯
+        const normalizedResult = normalizeQuestion(aiResult);
+        const parsedResult = QuestionSchema.safeParse(normalizedResult);
+        const sanitizedResult = parsedResult.success ? parsedResult.data : normalizedResult;
+        if (!parsedResult.success) {
+            console.warn(`⚠️ 錯題變化題 schema 驗證失敗，已套用 normalizeQuestion`, parsedResult.error?.issues);
+        }
+        aiResult = sanitizedResult;
+
         if (aiResult.options && Array.isArray(aiResult.options)) {
             const normalizeOption = (opt) => {
                 if (typeof opt !== 'string') opt = String(opt);
@@ -747,6 +766,11 @@ export const AI_SERVICE = {
             
             for (let i = 0; i < originalOptions.length; i++) {
                 const normalized = normalizeOption(originalOptions[i]);
+                // 保留空白 placeholder，避免補齊後被去重移除
+                if (normalized === '') {
+                    uniqueOptions.push(originalOptions[i]);
+                    continue;
+                }
                 if (!seen.has(normalized)) {
                     seen.add(normalized);
                     uniqueOptions.push(originalOptions[i]);

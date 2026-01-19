@@ -1492,5 +1492,72 @@ const newScores = calculateAbilityScores(
 
 ---
 
-**最後更新**：2026年1月15日
+### 20. ✅ 題目資料格式強化（Question Schema + Normalize + Zod）
+
+**日期**：2026年1月19日
+
+**功能描述**：新增 Question 介面與 Zod 驗證，並加入 `normalizeQuestion` 以處理 AI 回傳欄位飄移（最大化保留題目）。
+
+**實作內容**：
+1. 新增 `Question` 型別與統一導出
+2. 新增 `QuestionSchema`（Zod）與 `normalizeQuestion` 正規化流程
+3. 在 `ai-service` 中整合 normalize + schema（批量生題與錯題變化流程）
+4. options 若為陣列且長度 ≥ 2 即可通過；不足 8 會補空字串
+5. Alias 支援：
+   - 題目：`questionText` / `stem` / `prompt` / `q_text`
+   - 選項：`choices` / `alternatives` / `answers`
+   - 答案：`correctAnswer` / `answerIndex` / `solution`
+
+**相關文件**：
+- `app/lib/types/question.ts`
+- `app/lib/types.ts`
+- `app/lib/question-schema.ts`
+- `app/lib/ai-service.js`
+- `package.json` / `package-lock.json`
+
+---
+
+### 21. ✅ P0 測試框架（Vitest + AI Service 單元測試）
+
+**日期**：2026年1月19日
+
+**功能描述**：建立 Vitest 與 `npm run test`，為 `ai-service` 提供標準/alias/容錯測試。
+
+**實作內容**：
+1. 安裝 Vitest 並新增 `test` script
+2. 建立 `vitest.config.ts`
+3. `AI_SERVICE.generateQuestion` 測試涵蓋：
+   - 標準格式
+   - alias（`choices`/`stem`/`answerIndex`）
+   - 容錯（選項少於 2 仍回傳題目）
+
+**相關文件**：
+- `vitest.config.ts`
+- `app/lib/__tests__/ai-service.test.ts`
+- `package.json`
+
+---
+
+### 22. ✅ P1 錯誤監控（Sentry for Next.js）
+
+**日期**：2026年1月19日
+
+**功能描述**：加入 Sentry SDK，涵蓋前端與 API Routes 錯誤監控。
+
+**實作內容**：
+1. 安裝 `@sentry/nextjs`
+2. 新增 `sentry.client/server/edge.config.ts`
+3. 設定 `next.config.mjs`（`withSentryConfig`）
+4. 新增測試 API：`/api/sentry-test`
+
+**相關文件**：
+- `sentry.client.config.ts`
+- `sentry.server.config.ts`
+- `sentry.edge.config.ts`
+- `app/next.config.mjs`
+- `app/api/sentry-test/route.ts`
+
+---
+
+**最後更新**：2026年1月19日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
