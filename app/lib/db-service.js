@@ -71,6 +71,16 @@ export const DB_SERVICE = {
         try { await deleteDoc(doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id)); return true; } 
         catch (e) { console.error("Delete Topic Error:", e); return false; } 
     },
+    updateTopic: async (id, updates = {}) => {
+        try {
+            const payload = { ...updates, updatedAt: new Date().toISOString() };
+            await updateDoc(doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id), payload);
+            return true;
+        } catch (e) {
+            console.error("Update Topic Error:", e);
+            return false;
+        }
+    },
     checkEmailExists: async (email) => { 
         if (!auth.currentUser) return false;
         try {

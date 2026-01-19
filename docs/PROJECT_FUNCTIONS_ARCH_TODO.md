@@ -14,11 +14,13 @@
 - **PracticeView**：練習/考題流程核心（作答、正誤判斷、ADHD 高亮、語音/翻譯輔助、圖形題圖像放大）
   - ADHD 語音：退出練習會停止播放、移除語音清單 debug UI
 - **CommonViews**：通用視圖（題目選擇、錯題本、成績表 Summary、個人檔案、數學語言選擇）
+  - 練習/試卷題目選擇支援子單元篩選
 - **DailyTaskView**：每日任務入口與限制（練習模式啟動）
 - **TeacherView**：教師控制台（種子題上傳、派卷、班級/作業分析、排名與篩選、回饋提交）
 - **ParentView**：家長視圖（子女切換、趨勢圖、AI 報告、錯題分佈、多子女比較/排行）
 - **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
 - **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
+  - 課程單元管理：既有單元可改名/刪除/新增與改名子單元，所有變更即時同步 Firestore
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
 - **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）

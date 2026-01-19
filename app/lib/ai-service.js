@@ -11,7 +11,7 @@ let lastCacheKey = null; // 追蹤上次使用的緩存鍵，用於檢測主題�
 const BATCH_SIZE = 3;
 
 // 生成緩存鍵：確保主題、科目、機構一致性
-const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty, languagePreference = null) => {
+const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty, languagePreference = null, selectedSubTopics = {}) => {
     // 標準化 topicIds：排序並轉換為字符串
     const topicIdsStr = selectedTopicIds.length > 0 
         ? [...selectedTopicIds].sort().join(',') 
@@ -21,13 +21,20 @@ const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty
     const institutionName = user?.institutionName || 'public';
     
     // 構建緩存鍵物件
+    const subTopicsKey = Object.entries(selectedSubTopics || {})
+        .filter(([, list]) => Array.isArray(list) && list.length > 0)
+        .sort(([a], [b]) => String(a).localeCompare(String(b)))
+        .map(([topicId, list]) => `${topicId}:${[...list].sort().join('|')}`)
+        .join(',') || 'all';
+
     const keyObj = {
         level,
         topicIds: topicIdsStr,
         subjectHint: subjectHint || 'auto',
         institutionName,
         difficulty: difficulty || 'normal',
-        languagePreference: languagePreference || 'default'
+        languagePreference: languagePreference || 'default',
+        subTopics: subTopicsKey
     };
     
     // 轉換為 JSON 字符串作為唯一鍵
@@ -108,9 +115,9 @@ const LOCAL_BRAIN = {
 };
 
 export const AI_SERVICE = {
-  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, languagePreference = null) => {
+  generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, languagePreference = null, selectedSubTopics = {}) => {
     // ===== 階段 1: 緩存鍵生成與失效檢查 =====
-    const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty, languagePreference);
+    const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty, languagePreference, selectedSubTopics);
     
     // 如果緩存鍵改變（主題/科目/機構切換），清空舊緩存
     if (lastCacheKey && lastCacheKey !== currentCacheKey) {
@@ -249,10 +256,21 @@ export const AI_SERVICE = {
         ? 'Language: English (US). All text must be in English. Set "lang": "en-US".'
         : 'Language: 繁體中文（香港）。All text must be in Traditional Chinese. Set "lang": "zh-HK".';
 
+    const subTopicFocusText = Object.entries(selectedSubTopics || {})
+        .filter(([, list]) => Array.isArray(list) && list.length > 0)
+        .map(([topicId, list]) => {
+            const topicName = allTopicsList.find(t => t.id === topicId)?.name || topicId;
+            const uniqueList = [...new Set(list)].filter(Boolean);
+            return uniqueList.length > 0 ? `${topicName}: ${uniqueList.join(', ')}` : null;
+        })
+        .filter(Boolean)
+        .join('；');
+
     const promptText = `
         Role: Professional HK Primary Math Teacher.
         Task: Create ${BATCH_SIZE} NEW variations of the following seed question. Each variation must be DISTINCT with different numbers, names, and contexts.
         Seed: "${activeSeed.question}" (Topic: ${activeSeed.topic})
+        ${subTopicFocusText ? `Sub-topic focus: ${subTopicFocusText}` : ''}
         Level: ${level}
         ${languageInstruction}
         

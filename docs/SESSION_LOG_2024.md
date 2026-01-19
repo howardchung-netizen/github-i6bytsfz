@@ -2,6 +2,19 @@
 
 ## 📋 今天完成的主要工作
 
+### 32. ✅ 練習/AI 試卷支援子單元選擇
+**功能**：
+- 練習題目與「開始 AI 試卷」的單元選擇支援子單元篩選
+- 子單元選擇結果傳遞至生題流程並加入 Prompt focus
+
+**相關文件**：
+- `app/components/CommonViews.tsx` - 子單元選擇 UI 與選取狀態
+- `app/page.tsx` - 子單元選擇狀態傳遞與紀錄
+- `app/lib/ai-service.js` - 子單元 prompt focus 與快取鍵
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md` - 架構補充
+
+---
+
 ### 31. ✅ ADHD 提示詞高亮規則優化
 **功能**：
 - 中文單位詞僅在「數字相鄰」時高亮，避免「分店」等誤判

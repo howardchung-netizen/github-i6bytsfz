@@ -14,6 +14,7 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
   const [newTopic, setNewTopic] = useState({ name: '', grade: 'P4', term: '上學期', subject: 'eng' });
   const [subTopics, setSubTopics] = useState([]);
   const [subTopicInput, setSubTopicInput] = useState('');
+  const [topicEdits, setTopicEdits] = useState({});
 
   // 測試生成相關狀態
   const [testSeed, setTestSeed] = useState(null);
@@ -59,6 +60,92 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
      } else {
          alert("Failed to add, please check connection.");
      }
+  };
+
+  const updateTopicInState = (id, patch) => {
+    setTopics(prevTopics => prevTopics.map(t => (t.id === id ? { ...t, ...patch } : t)));
+  };
+
+  const handleRenameTopic = async (topic) => {
+    const nextName = String(topicEdits?.[topic.id]?.name ?? topic.name).trim();
+    if (!nextName) {
+      alert("Please enter a unit name.");
+      return;
+    }
+    if (nextName === topic.name) {
+      alert("No changes detected.");
+      return;
+    }
+    const ok = await DB_SERVICE.updateTopic(topic.id, { name: nextName });
+    if (ok) {
+      updateTopicInState(topic.id, { name: nextName });
+      alert("Unit name updated.");
+    } else {
+      alert("Update failed, please check connection.");
+    }
+  };
+
+  const handleDeleteTopic = async (topic) => {
+    const confirmed = window.confirm(`Delete "${topic.name}"? This cannot be undone.`);
+    if (!confirmed) return;
+    const ok = await DB_SERVICE.deleteTopic(topic.id);
+    if (ok) {
+      setTopics(prevTopics => prevTopics.filter(t => t.id !== topic.id));
+      setTopicEdits(prev => {
+        const next = { ...prev };
+        delete next[topic.id];
+        return next;
+      });
+      alert("Unit deleted.");
+    } else {
+      alert("Delete failed, please check connection.");
+    }
+  };
+
+  const handleAddSubTopicFor = async (topic) => {
+    const input = String(topicEdits?.[topic.id]?.subTopicInput ?? '').trim();
+    if (!input) return;
+    const nextSubTopics = [...(topic.subTopics || []), input];
+    const ok = await DB_SERVICE.updateTopic(topic.id, { subTopics: nextSubTopics });
+    if (ok) {
+      updateTopicInState(topic.id, { subTopics: nextSubTopics });
+      setTopicEdits(prev => ({
+        ...prev,
+        [topic.id]: { ...prev?.[topic.id], subTopicInput: '' }
+      }));
+    } else {
+      alert("Failed to add sub-topic.");
+    }
+  };
+
+  const handleRemoveSubTopicFor = async (topic, index) => {
+    const nextSubTopics = (topic.subTopics || []).filter((_, i) => i !== index);
+    const ok = await DB_SERVICE.updateTopic(topic.id, { subTopics: nextSubTopics });
+    if (ok) {
+      updateTopicInState(topic.id, { subTopics: nextSubTopics });
+    } else {
+      alert("Failed to remove sub-topic.");
+    }
+  };
+
+  const handleRenameSubTopicFor = async (topic, index) => {
+    const nextName = String(topicEdits?.[topic.id]?.subTopicEdits?.[index] ?? topic.subTopics?.[index] ?? '').trim();
+    if (!nextName) {
+      alert("Please enter a sub-topic name.");
+      return;
+    }
+    if (nextName === topic.subTopics?.[index]) {
+      alert("No changes detected.");
+      return;
+    }
+    const nextSubTopics = [...(topic.subTopics || [])];
+    nextSubTopics[index] = nextName;
+    const ok = await DB_SERVICE.updateTopic(topic.id, { subTopics: nextSubTopics });
+    if (ok) {
+      updateTopicInState(topic.id, { subTopics: nextSubTopics });
+    } else {
+      alert("Failed to update sub-topic.");
+    }
   };
 
   const handleUploadPastPaper = async () => {
@@ -193,13 +280,67 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Database size={18}/> Existing Units</h3>
-                    <div className="h-64 overflow-y-auto space-y-2">
-                        {topics.filter(t => t.grade === newTopic.grade && t.subject === 'eng').map(t => (
-                            <div key={t.id} className="p-3 border rounded-lg hover:bg-slate-50 text-sm">
-                                <div className="font-bold text-amber-700">{t.name}</div>
-                                <div className="text-xs text-slate-400 mt-1">{t.grade} • {t.term} • {t.subTopics?.length || 0} sub-topics</div>
-                            </div>
-                        ))}
+                    <div className="h-64 overflow-y-auto space-y-3">
+                        {topics.filter(t => t.grade === newTopic.grade && t.subject === 'eng').map(t => {
+                            const edit = topicEdits?.[t.id] || {};
+                            return (
+                                <details key={t.id} className="border rounded-lg bg-white text-sm">
+                                    <summary className="list-none cursor-pointer p-3 hover:bg-slate-50 rounded-lg flex items-center justify-between">
+                                        <div>
+                                            <div className="font-bold text-amber-700">{t.name}</div>
+                                            <div className="text-xs text-slate-400">{t.grade} • {t.term} • {t.subTopics?.length || 0} sub-topics</div>
+                                        </div>
+                                        <span className="text-xs text-slate-400">Expand</span>
+                                    </summary>
+                                    <div className="p-3 pt-0 space-y-2">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={edit.name ?? t.name}
+                                                onChange={e => setTopicEdits(prev => ({ ...prev, [t.id]: { ...prev?.[t.id], name: e.target.value } }))}
+                                                className="flex-1 border p-2 rounded text-xs"
+                                                placeholder="Enter new name"
+                                            />
+                                            <button onClick={() => handleRenameTopic(t)} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold hover:bg-slate-300">Rename</button>
+                                            <button onClick={() => handleDeleteTopic(t)} className="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-bold hover:bg-red-100">Delete</button>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={edit.subTopicInput ?? ''}
+                                                onChange={e => setTopicEdits(prev => ({ ...prev, [t.id]: { ...prev?.[t.id], subTopicInput: e.target.value } }))}
+                                                className="flex-1 border p-2 rounded text-xs"
+                                                placeholder="Add sub-topic"
+                                            />
+                                            <button onClick={() => handleAddSubTopicFor(t)} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold hover:bg-slate-300">Add</button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {(t.subTopics || []).map((st, idx) => (
+                                                <div key={`${t.id}-${idx}`} className="flex gap-2 items-center">
+                                                    <input
+                                                        type="text"
+                                                        value={edit.subTopicEdits?.[idx] ?? st}
+                                                        onChange={e => setTopicEdits(prev => ({
+                                                            ...prev,
+                                                            [t.id]: {
+                                                                ...prev?.[t.id],
+                                                                subTopicEdits: {
+                                                                    ...(prev?.[t.id]?.subTopicEdits || {}),
+                                                                    [idx]: e.target.value
+                                                                }
+                                                            }
+                                                        }))}
+                                                        className="flex-1 border p-2 rounded text-xs"
+                                                    />
+                                                    <button onClick={() => handleRenameSubTopicFor(t, idx)} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-bold hover:bg-slate-300">Rename</button>
+                                                    <button onClick={() => handleRemoveSubTopicFor(t, idx)} className="bg-red-50 text-red-600 px-2 py-1 rounded text-xs font-bold hover:bg-red-100">Delete</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </details>
+                            );
+                        })}
                         {topics.filter(t => t.grade === newTopic.grade && t.subject === 'eng').length === 0 && <div className="text-center text-slate-400 py-10">No English units for this grade</div>}
                     </div>
                 </div>

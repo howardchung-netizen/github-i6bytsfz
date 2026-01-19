@@ -74,8 +74,31 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
   const [selected, setSelected] = useState([]);
   const [questionCount, setQuestionCount] = useState(20); // 默認 20 題
   const [mathLanguage, setMathLanguage] = useState('zh');
+  const [selectedSubTopics, setSelectedSubTopics] = useState({});
   const availableTopics = topics.filter(t => t.grade === user.level);
-  const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggle = (id) => {
+    setSelected(prev => {
+      if (prev.includes(id)) {
+        setSelectedSubTopics(prevSubs => {
+          const next = { ...prevSubs };
+          delete next[id];
+          return next;
+        });
+        return prev.filter(x => x !== id);
+      }
+      return [...prev, id];
+    });
+  };
+  const toggleSubTopic = (topicId, subTopic) => {
+    setSelected(prev => (prev.includes(topicId) ? prev : [...prev, topicId]));
+    setSelectedSubTopics(prev => {
+      const current = prev?.[topicId] || [];
+      const next = current.includes(subTopic)
+        ? current.filter(item => item !== subTopic)
+        : [...current, subTopic];
+      return { ...prev, [topicId]: next };
+    });
+  };
   const selectedSubjects = selected
     .map((id) => topics.find(t => t.id === id)?.subject)
     .filter(Boolean);
@@ -148,10 +171,28 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {availableTopics.length > 0 ? availableTopics.map(t => (
-                <button key={t.id} onClick={() => toggle(t.id)} className={`p-4 rounded-xl border-2 text-left transition-all ${selected.includes(t.id) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-indigo-200'}`}>
-                    <div className="font-bold text-slate-800">{t.name}</div>
-                    <div className="text-xs text-slate-500 mt-1">{t.subTopics?.length || 0} 個子題</div>
-                </button>
+                <div key={t.id} className={`p-4 rounded-xl border-2 text-left transition-all ${selected.includes(t.id) ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 hover:border-indigo-200'}`}>
+                    <button onClick={() => toggle(t.id)} className="w-full text-left">
+                      <div className="font-bold text-slate-800">{t.name}</div>
+                      <div className="text-xs text-slate-500 mt-1">{t.subTopics?.length || 0} 個子題</div>
+                    </button>
+                    {t.subTopics?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {t.subTopics.map((st, idx) => {
+                          const isSelected = (selectedSubTopics?.[t.id] || []).includes(st);
+                          return (
+                            <button
+                              key={`${t.id}-${idx}`}
+                              onClick={() => toggleSubTopic(t.id, st)}
+                              className={`px-2 py-1 rounded-full text-xs border ${isSelected ? 'border-indigo-500 bg-indigo-100 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-indigo-200'}`}
+                            >
+                              {st}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                </div>
             )) : (
                 <div className="col-span-2 text-center py-10 text-slate-400 bg-slate-50 rounded-xl">此年級暫無單元</div>
             )}
@@ -166,7 +207,8 @@ export const TopicSelectionView = ({ user, setView, startPracticeSession, topics
                 setView('practice');
               // 然後開始生成題目，傳入選擇的題目數量
               await startPracticeSession(selected, questionCount, null, sessionMode, {
-                languagePreference: hasMathSelected ? mathLanguage : null
+                languagePreference: hasMathSelected ? mathLanguage : null,
+                selectedSubTopics
               });
               }} 
               disabled={selected.length === 0} 

@@ -84,6 +84,7 @@ export default function App() {
   const [sessionStats, setSessionStats] = useState({ total: 20, current: 0, correct: 0 });
   const [sessionMistakes, setSessionMistakes] = useState([]);
   const [sessionTopics, setSessionTopics] = useState([]);
+  const [sessionSubTopics, setSessionSubTopics] = useState({});
   const [sessionQuestions, setSessionQuestions] = useState([]); // 追蹤試卷中的所有題目和答題結果
   const [sessionLanguagePreference, setSessionLanguagePreference] = useState(null);
   const [preloadedQuestion, setPreloadedQuestion] = useState(null); // 預加載的下一題
@@ -420,13 +421,20 @@ export default function App() {
       setSessionMistakes([]); 
       setSessionQuestions([]); // 重置試卷題目追蹤
       setSessionTopics(selectedTopicIds);
+      setSessionSubTopics(options?.selectedSubTopics || {});
       setSessionLanguagePreference(options?.languagePreference || null);
       // 注意：loading 狀態應該在調用此函數之前就已經設置為 true（在 DailyTaskView 或 TopicSelectionView 中）
       // 這裡確保 loading 狀態是 true
       setLoading(true); 
       
       // 記錄開始練習
-      await logLearningActivity('start_practice', { topicIds: selectedTopicIds, questionCount: count, subject, autoDetect: selectedTopicIds.length === 0 });
+      await logLearningActivity('start_practice', { 
+          topicIds: selectedTopicIds, 
+          subTopics: options?.selectedSubTopics || {},
+          questionCount: count, 
+          subject, 
+          autoDetect: selectedTopicIds.length === 0 
+      });
       
       let q = null; 
       try { 
@@ -442,7 +450,16 @@ export default function App() {
           
           setLastRequestTime(Date.now());
           // 如果 selectedTopicIds 為空，傳入 subject 讓 AI 自動偵測該科目的題目
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', selectedTopicIds, topics, subject, user, options?.languagePreference || null);
+          q = await AI_SERVICE.generateQuestion(
+              user.level,
+              'normal',
+              selectedTopicIds,
+              topics,
+              subject,
+              user,
+              options?.languagePreference || null,
+              options?.selectedSubTopics || {}
+          );
           
           // 檢查是否為錯誤回退（配額超限）
           if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -462,7 +479,12 @@ export default function App() {
                   [subject]: { ...prev[subject], used: prev[subject].used + 1 }
               }));
               // 記錄生成題目
-              await logLearningActivity('generate_question', { topicIds: selectedTopicIds, subject, autoDetect: selectedTopicIds.length === 0 });
+              await logLearningActivity('generate_question', { 
+                  topicIds: selectedTopicIds, 
+                  subTopics: options?.selectedSubTopics || {},
+                  subject, 
+                  autoDetect: selectedTopicIds.length === 0 
+              });
           }
       } catch (e) { 
           console.error("Start session error:", e);
@@ -522,7 +544,16 @@ export default function App() {
       try {
           // 在發送請求前更新時間戳
           setLastRequestTime(Date.now());
-          const q = await AI_SERVICE.generateQuestion(user.level, 'normal', topicIds, topics, null, user, sessionLanguagePreference);
+          const q = await AI_SERVICE.generateQuestion(
+              user.level,
+              'normal',
+              topicIds,
+              topics,
+              null,
+              user,
+              sessionLanguagePreference,
+              sessionSubTopics
+          );
           if (q) {
               // 檢查是否為錯誤回退（配額超限）
               if (q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -545,6 +576,7 @@ export default function App() {
               // 記錄預加載題目
               await logLearningActivity('generate_question', { 
                   topicIds: topicIds,
+                  subTopics: sessionSubTopics,
                   subject,
                   isPreload: true 
               });
@@ -597,7 +629,16 @@ export default function App() {
           // 在發送請求前更新時間戳
           setLastRequestTime(Date.now());
           // 傳入 subject 參數以支持自動偵測
-          q = await AI_SERVICE.generateQuestion(user.level, 'normal', sessionTopics, topics, subject, user, sessionLanguagePreference);
+          q = await AI_SERVICE.generateQuestion(
+              user.level,
+              'normal',
+              sessionTopics,
+              topics,
+              subject,
+              user,
+              sessionLanguagePreference,
+              sessionSubTopics
+          );
           
           // 檢查是否為錯誤回退（配額超限）
           if (q && q.source === 'error_fallback' && q.question.includes('配額')) {
@@ -617,7 +658,11 @@ export default function App() {
                   [subject]: { ...prev[subject], used: prev[subject].used + 1 }
               }));
               // 記錄生成題目
-              await logLearningActivity('generate_question', { topicIds: sessionTopics, subject });
+              await logLearningActivity('generate_question', { 
+                  topicIds: sessionTopics, 
+                  subTopics: sessionSubTopics,
+                  subject 
+              });
           }
       } catch(e) { 
           console.error("New question error:", e);
