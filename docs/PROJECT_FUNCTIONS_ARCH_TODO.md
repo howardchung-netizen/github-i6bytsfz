@@ -21,7 +21,7 @@
 - **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
 - **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
   - 課程單元管理：既有單元可改名/刪除/新增與改名子單元，所有變更即時同步 Firestore
-  - 單元格式修正：數學科可一鍵補齊舊資料欄位（createdAt/updatedAt/type/lang/subTopics）
+  - 單元格式修正：數學/中文/英文科皆可一鍵補齊舊資料欄位（createdAt/updatedAt/type/lang/subTopics）
   - 後台輸入欄採深色底反白字（含 select/textarea/file input）
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）

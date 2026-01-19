@@ -20,6 +20,7 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
   const [testSeed, setTestSeed] = useState(null);
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isNormalizingSyllabus, setIsNormalizingSyllabus] = useState(false);
 
   // 取得目前條件下的可用單元 (用於下拉選單)
   const availableTopics = useMemo(() => {
@@ -145,6 +146,25 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
       updateTopicInState(topic.id, { subTopics: nextSubTopics });
     } else {
       alert("Failed to update sub-topic.");
+    }
+  };
+
+  const handleNormalizeSyllabus = async () => {
+    if (!isFirebaseReady) {
+      alert("Firebase is not ready. Please try again later.");
+      return;
+    }
+    setIsNormalizingSyllabus(true);
+    const result = await DB_SERVICE.normalizeSyllabusDocs();
+    setIsNormalizingSyllabus(false);
+    if (result?.error) {
+      alert("Normalization failed. Please check connection.");
+      return;
+    }
+    alert(`Normalization done: updated ${result.updated}, skipped ${result.skipped}`);
+    const remoteTopics = await DB_SERVICE.fetchTopics();
+    if (remoteTopics.length > 0) {
+      setTopics([...remoteTopics]);
     }
   };
 
@@ -279,7 +299,16 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Database size={18}/> Existing Units</h3>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold flex items-center gap-2 text-slate-700"><Database size={18}/> Existing Units</h3>
+                        <button
+                            onClick={handleNormalizeSyllabus}
+                            disabled={isNormalizingSyllabus}
+                            className="text-xs bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 disabled:opacity-60"
+                        >
+                            {isNormalizingSyllabus ? 'Normalizing...' : 'Normalize'}
+                        </button>
+                    </div>
                     <div className="h-64 overflow-y-auto space-y-3">
                         {topics.filter(t => t.grade === newTopic.grade && t.subject === 'eng').map(t => {
                             const edit = topicEdits?.[t.id] || {};

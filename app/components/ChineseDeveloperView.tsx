@@ -20,6 +20,7 @@ export default function ChineseDeveloperView({ topics, setTopics, setView, isFir
   const [testSeed, setTestSeed] = useState(null);
   const [generatedResult, setGeneratedResult] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isNormalizingSyllabus, setIsNormalizingSyllabus] = useState(false);
 
   // 取得目前條件下的可用單元 (用於下拉選單)
   const availableTopics = useMemo(() => {
@@ -145,6 +146,25 @@ export default function ChineseDeveloperView({ topics, setTopics, setView, isFir
       updateTopicInState(topic.id, { subTopics: nextSubTopics });
     } else {
       alert("更新子單元失敗，請檢查連線。");
+    }
+  };
+
+  const handleNormalizeSyllabus = async () => {
+    if (!isFirebaseReady) {
+      alert("Firebase 尚未就緒，請稍後再試。");
+      return;
+    }
+    setIsNormalizingSyllabus(true);
+    const result = await DB_SERVICE.normalizeSyllabusDocs();
+    setIsNormalizingSyllabus(false);
+    if (result?.error) {
+      alert("格式修正失敗，請檢查連線。");
+      return;
+    }
+    alert(`格式修正完成：更新 ${result.updated} 筆，略過 ${result.skipped} 筆`);
+    const remoteTopics = await DB_SERVICE.fetchTopics();
+    if (remoteTopics.length > 0) {
+      setTopics([...remoteTopics]);
     }
   };
 
@@ -279,7 +299,16 @@ export default function ChineseDeveloperView({ topics, setTopics, setView, isFir
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Database size={18}/> 現有中文單元列表</h3>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold flex items-center gap-2 text-slate-700"><Database size={18}/> 現有中文單元列表</h3>
+                        <button
+                            onClick={handleNormalizeSyllabus}
+                            disabled={isNormalizingSyllabus}
+                            className="text-xs bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 disabled:opacity-60"
+                        >
+                            {isNormalizingSyllabus ? '修正中...' : '修正格式'}
+                        </button>
+                    </div>
                     <div className="h-64 overflow-y-auto space-y-3">
                         {topics.filter(t => t.grade === newTopic.grade && t.subject === 'chi').map(t => {
                             const edit = topicEdits?.[t.id] || {};

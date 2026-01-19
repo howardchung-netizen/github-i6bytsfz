@@ -1578,5 +1578,22 @@ const newScores = calculateAbilityScores(
 
 ---
 
+### 24. ✅ 中文/英文科加入「修正格式」按鈕
+
+**日期**：2026年1月19日
+
+**功能描述**：中文科與英文科管理頁新增「修正格式」按鈕，與數學科一致補齊舊資料欄位。
+
+**實作內容**：
+1. 中文科：現有中文單元列表右上角加入「修正格式」
+2. 英文科：Existing Units 右上角加入「Normalize」
+3. 執行後顯示更新/略過統計，並重新載入單元
+
+**相關文件**：
+- `app/components/ChineseDeveloperView.tsx`
+- `app/components/EnglishDeveloperView.tsx`
+
+---
+
 **最後更新**：2026年1月19日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
