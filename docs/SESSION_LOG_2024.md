@@ -1785,5 +1785,114 @@ const newScores = calculateAbilityScores(
 
 ---
 
+### 35. ✅ 報告模型強制 Pro
+
+**日期**：2026年1月20日
+
+**功能描述**：雙週報告生成強制使用 Pro 等級模型，避免 Flash 模型幻覺。
+
+**實作內容**：
+1. `/api/chat` 支援 `model` 參數覆寫
+2. 報告生成指定 `REPORT_MODEL_NAME`（Pro）
+
+**相關文件**：
+- `app/api/chat/route.ts`
+- `app/lib/constants.js`
+- `services/report-generator.ts`
+
+---
+
+### 36. ✅ 種子進貨檢驗（Seed Inspection）
+
+**日期**：2026年1月20日
+
+**功能描述**：將上傳題目導入工廠審核流程，新增來源切換與原圖/JSON 分屏編輯，支援 AI 自我驗證。
+
+**實作內容**：
+1. 上傳入庫改為 `DRAFT`，並標記 `origin: 'UPLOAD'`
+2. 工廠模式新增來源切換（AI 生產線 / 種子進貨）
+3. 種子審核加入原圖/JSON 分屏、AI 驗證與 Answer Mismatch 提示
+4. 新增 `/api/factory/verify`（Gemini Pro 自我驗證）
+
+**相關文件**：
+- `app/lib/db-service.js`
+- `app/components/DeveloperView.tsx`
+- `app/components/TeacherView.tsx`
+- `app/api/factory/verify/route.ts`
+- `app/api/factory/generate/route.ts`
+- `app/lib/question-schema.ts`
+- `app/lib/types/question.ts`
+
+---
+
+### 37. ✅ 種子上傳指定子單元
+
+**日期**：2026年1月20日
+
+**功能描述**：上傳種子試題時可選擇子單元；未選則交由 AI 分類。
+
+**相關文件**：
+- `app/components/TeacherView.tsx`
+- `app/components/DeveloperView.tsx`
+
+---
+
+### 38. ✅ 已入庫分類檢視
+
+**日期**：2026年1月20日
+
+**功能描述**：Factory 模式新增已入庫試題分類檢視，顯示年級/科目/單元/子單元題數。
+
+**相關文件**：
+- `app/components/DeveloperView.tsx`
+
+---
+
+### 39. ✅ 已入庫分類檢視修正
+
+**日期**：2026年1月20日
+
+**功能描述**：分類檢視改為直接聚合已入庫題目的實際欄位，避免因 syllabus 缺欄位導致全 0。
+
+**相關文件**：
+- `app/lib/db-service.js`
+- `app/components/DeveloperView.tsx`
+
+---
+
+### 40. ✅ 已入庫分類檢視補抓舊資料
+
+**日期**：2026年1月20日
+
+**功能描述**：已入庫分類改為直接掃描全量題目，確保缺少 `status` 的舊題也能顯示。
+
+**相關文件**：
+- `app/lib/db-service.js`
+
+---
+
+### 41. ✅ 已入庫分類一鍵修正
+
+**日期**：2026年1月20日
+
+**功能描述**：新增「修正分類」按鈕，依 syllabus 回填 grade/subject/topic，修正舊題分類混亂。
+
+**相關文件**：
+- `app/components/DeveloperView.tsx`
+- `app/lib/db-service.js`
+
+---
+
+### 42. ✅ 已入庫分類顯示正規化
+
+**日期**：2026年1月20日
+
+**功能描述**：分類檢視去除無效單元名稱（undefined）並合併含括號重複命名。
+
+**相關文件**：
+- `app/components/DeveloperView.tsx`
+
+---
+
 **最後更新**：2026年1月20日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`

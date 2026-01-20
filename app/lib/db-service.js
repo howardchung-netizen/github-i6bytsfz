@@ -140,20 +140,21 @@ export const DB_SERVICE = {
             const snap = await getDocs(q); 
             if (snap.empty) return null; 
             const doc = snap.docs[0]; 
-            return { id: doc.id, ...doc.data() };
+            const data = doc.data() || {};
+            return { id: doc.id, report_mode: data.report_mode || 'EDUCATOR', ...data };
         } catch (e) { console.error("Get Profile Error:", e); return null; }
     },
     registerUser: async (userData, password) => { 
         try { 
             const userCredential = await createUserWithEmailAndPassword(auth, userData.email, password);
             const user = userCredential.user; 
-            await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, uid: user.uid, createdAt: new Date().toISOString() });
+            await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, report_mode: userData.report_mode || 'EDUCATOR', uid: user.uid, createdAt: new Date().toISOString() });
             return user.uid; 
         } catch (e) { 
             if (e.code === 'auth/operation-not-allowed') { 
                 const mockUid = "mock_" + Date.now();
                 await signInAnonymously(auth); 
-                await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, uid: mockUid, createdAt: new Date().toISOString(), isAnonymousFallback: true });
+                await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, report_mode: userData.report_mode || 'EDUCATOR', uid: mockUid, createdAt: new Date().toISOString(), isAnonymousFallback: true });
                 return mockUid; 
             } 
             return null;
@@ -168,7 +169,7 @@ export const DB_SERVICE = {
                 await signInAnonymously(auth);
                 const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("email", "==", email)); 
                 const snap = await getDocs(q);
-                if (!snap.empty) { const doc = snap.docs[0]; return { id: doc.id, ...doc.data() }; } 
+                if (!snap.empty) { const doc = snap.docs[0]; const data = doc.data() || {}; return { id: doc.id, report_mode: data.report_mode || 'EDUCATOR', ...data }; } 
             } 
             throw e;
         } 
@@ -268,8 +269,13 @@ export const DB_SERVICE = {
             
             papers.forEach(paper => { 
                 const docRef = doc(collectionRef); 
+                const derivedPoolType = paper.poolType
+                    || (paper.image || paper.originalImage ? 'IMAGE_STATIC' : 'TEXT');
                 batch.set(docRef, { 
                     ...paper, 
+                    status: paper.status || 'DRAFT',
+                    origin: paper.origin || 'UPLOAD',
+                    poolType: derivedPoolType,
                     createdAt: new Date().toISOString(),
                     uploadedBy: user?.email || 'system',
                     institutionName: user?.institutionName || null
@@ -362,6 +368,9 @@ export const DB_SERVICE = {
     },
     seedInitialData: async () => {
         try {
+            if (process.env.NODE_ENV !== 'development') {
+                return;
+            }
             const count = await DB_SERVICE.countPastPapers();
             if (count === 0) {
                 console.log("?�� Seeding initial mock data...");
@@ -1208,7 +1217,7 @@ export const DB_SERVICE = {
      * @param {number} timeSpentMs - Time spent in milliseconds (optional, defaults to 0)
      * @returns {Promise<boolean>} - Returns true if successful, false otherwise
      */
-    recordQuestionUsage: async (userId, questionId, isCorrect, timeSpentMs = 0) => {
+    recordQuestionUsage: async (userId, questionId, isCorrect, timeSpentMs = 0, hintUsedCount = 0, retryCount = 0) => {
         try {
             if (!userId || !questionId) {
                 console.warn("⚠️ recordQuestionUsage: Missing userId or questionId");
@@ -1226,16 +1235,40 @@ export const DB_SERVICE = {
                 questionId
             );
             
-            // Use setDoc instead of addDoc to prevent duplicates (idempotent operation)
-            // If the document already exists, it will be overwritten with the latest attempt
+            const attemptIndex = Number.isFinite(retryCount) ? retryCount + 1 : 1;
+
+            // Summary doc (latest attempt)
             await setDoc(usageRef, {
                 questionId: questionId,
                 questionRef: `artifacts/${APP_ID}/public/data/past_papers/${questionId}`,
                 usedAt: serverTimestamp(), // Server-side timestamp for consistency
                 isCorrect: isCorrect,
                 timeSpentMs: timeSpentMs || 0,
+                time_spent_ms: timeSpentMs || 0,
+                hintUsedCount: hintUsedCount || 0,
+                hint_used_count: hintUsedCount || 0,
+                retryCount: retryCount || 0,
+                attemptIndex: attemptIndex,
                 createdAt: new Date().toISOString() // Client-side timestamp as fallback
             }, { merge: true }); // merge: true allows updating existing records without overwriting other fields
+
+            // Per-attempt log (append-only)
+            await addDoc(
+                collection(db, "artifacts", APP_ID, "users", userId, "question_attempts"),
+                {
+                    questionId: questionId,
+                    questionRef: `artifacts/${APP_ID}/public/data/past_papers/${questionId}`,
+                    attemptIndex: attemptIndex,
+                    isCorrect: isCorrect,
+                    timeSpentMs: timeSpentMs || 0,
+                    time_spent_ms: timeSpentMs || 0,
+                    hintUsedCount: hintUsedCount || 0,
+                    hint_used_count: hintUsedCount || 0,
+                    retryCount: retryCount || 0,
+                    usedAt: serverTimestamp(),
+                    createdAt: new Date().toISOString()
+                }
+            );
 
             const dateKey = new Date().toISOString().slice(0, 10);
             const dailyRef = doc(db, "artifacts", APP_ID, "users", userId, "daily_stats", dateKey);
@@ -1504,6 +1537,83 @@ export const DB_SERVICE = {
         } catch (e) {
             console.error("❌ Get Published Question Counts Error:", e);
             return {};
+        }
+    },
+
+    getPublishedQuestionStats: async () => {
+        try {
+            const snap = await getDocs(
+                collection(db, "artifacts", APP_ID, "public", "data", "past_papers")
+            );
+
+            const stats = {};
+
+            snap.forEach((docSnap) => {
+                const data = docSnap.data() || {};
+                const status = data.status || 'PUBLISHED';
+                if (status !== 'PUBLISHED') return;
+                const gradeKey = data.grade || '未分類';
+                const subjectKey = data.subject || '未分類';
+                const topicKey = data.topic_id || data.topicId || data.topic || '未分類';
+                if (!stats[gradeKey]) stats[gradeKey] = {};
+                if (!stats[gradeKey][subjectKey]) stats[gradeKey][subjectKey] = {};
+                if (!stats[gradeKey][subjectKey][topicKey]) {
+                    stats[gradeKey][subjectKey][topicKey] = { total: 0, subTopics: {} };
+                }
+                stats[gradeKey][subjectKey][topicKey].total += 1;
+                const subTopic = data.subTopic || data.sub_topic || data.subtopic || null;
+                if (subTopic) {
+                    const subTopics = stats[gradeKey][subjectKey][topicKey].subTopics;
+                    subTopics[subTopic] = (subTopics[subTopic] || 0) + 1;
+                }
+            });
+
+            return stats;
+        } catch (e) {
+            console.error("❌ Get Published Question Stats Error:", e);
+            return {};
+        }
+    },
+
+    getAllPublishedQuestions: async () => {
+        try {
+            const snap = await getDocs(
+                collection(db, "artifacts", APP_ID, "public", "data", "past_papers")
+            );
+            const result = [];
+            snap.forEach((docSnap) => {
+                const data = docSnap.data() || {};
+                const status = data.status || 'PUBLISHED';
+                if (status !== 'PUBLISHED') return;
+                result.push({ id: docSnap.id, ...data });
+            });
+            return result;
+        } catch (e) {
+            console.error("❌ Get All Published Questions Error:", e);
+            return [];
+        }
+    },
+
+    batchUpdateQuestions: async (updates = []) => {
+        try {
+            if (!Array.isArray(updates) || updates.length === 0) return { updated: 0 };
+            let updated = 0;
+            const chunkSize = 450;
+            for (let i = 0; i < updates.length; i += chunkSize) {
+                const batch = writeBatch(db);
+                const chunk = updates.slice(i, i + chunkSize);
+                chunk.forEach(({ id, data }) => {
+                    if (!id || !data) return;
+                    const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", id);
+                    batch.update(questionRef, { ...data, updatedAt: new Date().toISOString() });
+                });
+                await batch.commit();
+                updated += chunk.length;
+            }
+            return { updated };
+        } catch (e) {
+            console.error("❌ Batch Update Questions Error:", e);
+            return { updated: 0, error: e.message || '未知錯誤' };
         }
     },
 

@@ -53,7 +53,7 @@ export default function TeacherView({ setView, user, topics }) {
   // 種子題目上傳狀態
   const [showSeedUpload, setShowSeedUpload] = useState(false);
   const [paperJson, setPaperJson] = useState('');
-  const [paperMeta, setPaperMeta] = useState({ year: '2024', grade: 'P4', term: '上學期', topicId: '' });
+  const [paperMeta, setPaperMeta] = useState({ year: '2024', grade: 'P4', term: '上學期', topicId: '', subTopic: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [pdfPages, setPdfPages] = useState<{ name: string; dataUrl: string }[]>([]);
@@ -507,7 +507,10 @@ export default function TeacherView({ setView, user, topics }) {
           setImageProcessingProgress({ current: currentIndex, total: totalImages });
           try {
             const result = await processSingleImage(page.dataUrl, page.name);
-            allQuestions.push(result);
+            allQuestions.push({
+              ...result,
+              originalImage: page.dataUrl
+            });
           } catch (e) {
             errors.push({
               source: 'pdf_page',
@@ -525,7 +528,10 @@ export default function TeacherView({ setView, user, topics }) {
           try {
             const base64 = await convertImageToBase64(file);
             const result = await processSingleImage(base64, file.name);
-            allQuestions.push(result);
+            allQuestions.push({
+              ...result,
+              originalImage: base64
+            });
           } catch (e) {
             errors.push({ 
               source: 'image_file', 
@@ -556,7 +562,8 @@ export default function TeacherView({ setView, user, topics }) {
                 allQuestions.push({
                   ...q,
                   ...result,
-                  source: 'vision_api'
+                  source: 'vision_api',
+                  originalImage: q.image
                 });
               } catch (e) {
                 errors.push({ 
@@ -593,9 +600,15 @@ export default function TeacherView({ setView, user, topics }) {
       // 步驟 4：保存到數據庫
       if (allQuestions.length > 0) {
         let selectedTopicName = null;
+        let selectedSubTopic = null;
         if (paperMeta.topicId) {
           const found = topics.find(t => t.id === paperMeta.topicId);
-          if (found) selectedTopicName = found.name;
+          if (found) {
+            selectedTopicName = found.name;
+            if (paperMeta.subTopic && (found.subTopics || []).includes(paperMeta.subTopic)) {
+              selectedSubTopic = paperMeta.subTopic;
+            }
+          }
         }
 
         const enrichedPapers = allQuestions.map(q => ({
@@ -604,6 +617,7 @@ export default function TeacherView({ setView, user, topics }) {
           grade: paperMeta.grade || selectedClass?.grade || 'P4',
           term: paperMeta.term,
           topic: selectedTopicName || q.topic,
+          subTopic: selectedSubTopic || q.subTopic,
           source: q.source || 'seed_init',
           subject: 'math',
           uploadedAt: new Date().toISOString(),
@@ -2143,13 +2157,30 @@ export default function TeacherView({ setView, user, topics }) {
                 <label className="block text-xs font-bold text-slate-700 mb-1">指定單元 (選填)</label>
                 <select 
                   value={paperMeta.topicId} 
-                  onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value})} 
+                  onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value, subTopic: ''})} 
                   className="border border-indigo-200 bg-indigo-50 text-indigo-900 p-2 rounded text-sm w-full font-bold"
                 >
                   <option value="">🤖 自動偵測 / 不指定</option>
                   {topics.filter(t => t.grade === paperMeta.grade && t.subject === 'math').map(t => (
                     <option key={t.id} value={t.id}>📍 {t.name}</option>
                   ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">指定子單元 (選填)</label>
+                <select
+                  value={paperMeta.subTopic}
+                  onChange={e => setPaperMeta({...paperMeta, subTopic: e.target.value})}
+                  disabled={!paperMeta.topicId}
+                  className="border border-slate-300 bg-white p-2 rounded text-sm w-full font-bold disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  <option value="">🤖 交給 AI 分類</option>
+                  {topics
+                    .filter(t => t.id === paperMeta.topicId)
+                    .flatMap(t => t.subTopics || [])
+                    .map(st => (
+                      <option key={st} value={st}>📌 {st}</option>
+                    ))}
                 </select>
               </div>
             </div>

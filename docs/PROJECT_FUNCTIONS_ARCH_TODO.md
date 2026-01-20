@@ -39,6 +39,7 @@
 - **DailyTaskView**：每日任務入口與限制（練習模式啟動）
 - **TeacherView**：教師控制台（種子題上傳、派卷、班級/作業分析、排名與篩選、回饋提交）
   - 種子題上傳支援 PDF 轉圖（批次轉頁 → Vision 解析）
+  - 種子題上傳支援指定子單元（不指定則 AI 分類）
 - **ParentView**：家長視圖（子女切換、趨勢圖、AI 報告、錯題分佈、多子女比較/排行）
 - **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
 - **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
@@ -47,6 +48,11 @@
   - 後台輸入欄採深色底反白字（含 select/textarea/file input）
   - 工廠模式（Factory）：生產控制台 + 審核隊列（DRAFT→AUDITED/PUBLISHED）
   - 數據熟成度監控：行為樣本累積進度條（達標提示）
+  - 種子進貨檢驗：來源切換、原圖/JSON 分屏、AI 自我驗證
+  - 已入庫分類檢視：年級/科目/單元/子單元題數
+    - 以資料庫已入庫題目實際欄位聚合（含未分類）
+    - 一鍵修正分類（依 syllabus 回填 grade/subject/topic）
+    - 顯示用單元名稱正規化（去除無效/重複/undefined）
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
 - **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）
@@ -71,6 +77,7 @@
   - `fetchQuestionBatch`：前端批次調度（3 題並行呼叫 `/api/dispatch`）
 - `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
 - `services/report-generator.ts`：雙週學習報告生成核心（Educator/Observer）
+  - 報告模型強制使用 Pro 等級（避免 Flash 幻覺）
 - `question-schema.ts` / `types.ts`：Question 型別、normalizeQuestion、Zod 驗證（處理欄位飄移與標準化）
 - `vitest.config.ts` / `app/lib/__tests__/ai-service.test.ts`：Vitest 單元測試（涵蓋標準、alias、容錯案例）
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）

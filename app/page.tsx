@@ -695,17 +695,17 @@ export default function App() {
       // }
   };
 
-  const checkAnswer = (answerToCheck) => { 
+  const checkAnswer = (answerToCheck, meta = {}) => { 
       const finalAnswer = answerToCheck || userAnswer; 
-      const startTime = Date.now();
       
       // 簡單的答案檢查邏輯
       const isCorrect = (typeof currentQuestion.answer === 'number') ?
           Math.abs(parseFloat(finalAnswer) - currentQuestion.answer) < 0.1 : 
           finalAnswer.toString().trim() === currentQuestion.answer.toString().trim(); 
       
-      // 計算答題時間
-      const timeSpent = Date.now() - startTime;
+      const timeSpent = typeof meta.timeSpentMs === 'number' ? meta.timeSpentMs : 0;
+      const hintUsedCount = typeof meta.hintUsedCount === 'number' ? meta.hintUsedCount : 0;
+      const retryCount = typeof meta.retryCount === 'number' ? meta.retryCount : 0;
       
       // 記錄題目使用情況（異步，不阻塞 UI）
       if (currentQuestion && currentQuestion.id && user && user.id) {
@@ -718,7 +718,9 @@ export default function App() {
               user.id,
               questionId,
               isCorrect,
-              timeSpent
+              timeSpent,
+              hintUsedCount,
+              retryCount
           ).then(success => {
               if (success) {
                   console.log(`✅ Usage recorded for Question ID: ${questionId}, isCorrect: ${isCorrect}`);

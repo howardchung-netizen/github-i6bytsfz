@@ -10,6 +10,8 @@ export const CURRENT_VISION_MODEL_NAME = "gemini-2.0-flash"; // 用於 Vision AP
 // 已驗證：gemini-2.5-pro 可用（2025年1月8日驗證）
 // Pro 模型比 Flash 模型有更好的推理能力，適合用於審計任務
 export const AUDITOR_MODEL_NAME = "gemini-2.5-pro"; // 審計員模型（已驗證可用）
+// 報告生成模型（高價值輸出，必須使用 Pro 等級）
+export const REPORT_MODEL_NAME = AUDITOR_MODEL_NAME;
 
 // RPM (Requests Per Minute) 速率限制配置
 // 當前使用：Gemini 2.0 Flash 免費版（RPM 15）

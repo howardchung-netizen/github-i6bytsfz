@@ -1,4 +1,5 @@
 import { QuestionUsage } from '../app/lib/types/usage';
+import { REPORT_MODEL_NAME } from '../app/lib/constants';
 
 export type ReportMode = 'EDUCATOR' | 'OBSERVER';
 
@@ -138,7 +139,7 @@ export const generateReport = async (userId: string, mode: ReportMode, data: Ana
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: prompt })
+    body: JSON.stringify({ message: prompt, model: REPORT_MODEL_NAME })
   });
 
   const result = await response.json();

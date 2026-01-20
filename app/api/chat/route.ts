@@ -3,7 +3,7 @@ import { CURRENT_MODEL_NAME } from '../../lib/constants';
 
 export async function POST(request: Request) {
   try {
-    const { message } = await request.json();
+    const { message, model } = await request.json();
 
     // 👇 從環境變數讀取 API Key（安全性最佳實踐）
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
@@ -16,7 +16,8 @@ export async function POST(request: Request) {
 
     // 👇 使用統一的模型配置（從 constants.js 導入）
     // 當前使用：gemini-2.0-flash（2.0 Flash 免費版）
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_MODEL_NAME}:generateContent?key=${apiKey}`;
+    const resolvedModel = model || CURRENT_MODEL_NAME;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolvedModel}:generateContent?key=${apiKey}`;
 
     // 🔄 指數退避重試機制
     const maxRetries = 3;

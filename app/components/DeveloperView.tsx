@@ -50,7 +50,14 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
 
   // 工廠模式（Factory）
   const [factoryPoolType, setFactoryPoolType] = useState('TEXT');
-  const [factorySelections, setFactorySelections] = useState({});
+  const [factorySelections, setFactorySelections] = useState<Record<string, {
+    selected?: boolean;
+    qty?: number;
+    grade?: string;
+    subject?: string;
+    topicId?: string;
+    subTopic?: string;
+  }>>({});
   const [factorySeedImages, setFactorySeedImages] = useState<File[]>([]);
   const [factoryQueue, setFactoryQueue] = useState([]);
   const [factoryStats, setFactoryStats] = useState({ draftCount: 0, publishedCount: 0 });
@@ -97,13 +104,14 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
     [factoryQueue]
   );
 
-  const unauditedSummary = useMemo(() => {
-    const map = {};
+  const unauditedSummary = useMemo<{ label: string; count: number }[]>(() => {
+    const map: Record<string, number> = {};
     unauditedQueue.forEach(item => {
       const label = `${item.grade || 'P4'} ${item.subject || ''} - ${item.topic || item.topic_id || '未分類'}`;
       map[label] = (map[label] || 0) + 1;
     });
-    return Object.entries(map).map(([label, count]) => ({ label, count }));
+    const entries = Object.entries(map) as Array<[string, number]>;
+    return entries.map(([label, count]) => ({ label, count }));
   }, [unauditedQueue]);
 
   useEffect(() => {
@@ -447,6 +455,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   const convertPdfToImages = async (file: File) => {
     try {
       setIsPreparingPdf(true);
+      // @ts-ignore - pdfjs-dist 缺少型別宣告
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
         pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';

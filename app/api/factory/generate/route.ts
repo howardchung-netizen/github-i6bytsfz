@@ -97,6 +97,7 @@ export async function POST(request: Request) {
         topic: topicName || withImage.topic,
         subTopic: subTopic || withImage.subTopic,
         source: 'factory_generate',
+        origin: 'AI_GEN',
         poolType,
         status: 'DRAFT'
       };

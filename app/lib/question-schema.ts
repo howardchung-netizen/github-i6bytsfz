@@ -7,13 +7,23 @@ export const QuestionSchema = z.object({
   question: z.string().min(1),
   answer: z.union([z.string(), z.number()]),
   options: z.array(OptionSchema).min(2).optional(),
+  status: z.enum(['DRAFT', 'AUDITED', 'PUBLISHED', 'REJECTED']).optional(),
+  poolType: z.enum(['TEXT', 'IMAGE_STATIC', 'IMAGE_CANVAS']).optional(),
+  auditMeta: z.object({
+    status: z.enum(['PASS', 'FIXED', 'FAIL']).optional(),
+    confidence: z.number().optional(),
+    reportRef: z.string().optional()
+  }).optional(),
   type: z.string().optional(),
   explanation: z.string().optional(),
   hint: z.string().optional(),
   lang: z.string().optional(),
   category: z.string().optional(),
   topic: z.string().optional(),
+  subTopic: z.string().optional(),
   subject: z.string().optional(),
+  origin: z.string().optional(),
+  originalImage: z.string().optional(),
   shape: z.string().optional(),
   params: z.record(z.any()).optional(),
   mapData: z.record(z.any()).optional()
