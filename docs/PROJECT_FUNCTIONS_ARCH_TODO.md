@@ -33,6 +33,7 @@
 - **DashboardView**：主儀表板與入口導覽（練習/考題入口、錯題本、學習數據、作業通知）
 - **PracticeView**：練習/考題流程核心（作答、正誤判斷、ADHD 高亮、語音/翻譯輔助、圖形題圖像放大）
   - ADHD 語音：退出練習會停止播放、移除語音清單 debug UI
+  - 行為數據採集：計時器 / 提示次數 / 重試次數
 - **CommonViews**：通用視圖（題目選擇、錯題本、成績表 Summary、個人檔案、數學語言選擇）
   - 練習/試卷題目選擇支援子單元篩選
 - **DailyTaskView**：每日任務入口與限制（練習模式啟動）
@@ -45,6 +46,7 @@
   - 單元格式修正：數學/中文/英文科皆可一鍵補齊舊資料欄位（createdAt/updatedAt/type/lang/subTopics）
   - 後台輸入欄採深色底反白字（含 select/textarea/file input）
   - 工廠模式（Factory）：生產控制台 + 審核隊列（DRAFT→AUDITED/PUBLISHED）
+  - 數據熟成度監控：行為樣本累積進度條（達標提示）
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
 - **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）
@@ -68,6 +70,7 @@
 - `ai-service.js`：題目生成、提示詞建構、JSON 清理與解析（含教學者回饋指令）
   - `fetchQuestionBatch`：前端批次調度（3 題並行呼叫 `/api/dispatch`）
 - `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
+- `services/report-generator.ts`：雙週學習報告生成核心（Educator/Observer）
 - `question-schema.ts` / `types.ts`：Question 型別、normalizeQuestion、Zod 驗證（處理欄位飄移與標準化）
 - `vitest.config.ts` / `app/lib/__tests__/ai-service.test.ts`：Vitest 單元測試（涵蓋標準、alias、容錯案例）
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）

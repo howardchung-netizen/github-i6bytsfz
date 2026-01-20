@@ -1731,5 +1731,59 @@ const newScores = calculateAbilityScores(
 
 ---
 
+### 32. ✅ 行為數據採集基礎建設（Phase 1）
+
+**日期**：2026年1月20日
+
+**功能描述**：新增作答計時器與提示/重試記錄，支援雙週報告所需的行為資料蒐集。
+
+**實作內容**：
+1. PracticeView 加入正數計時器（00:00）
+2. 點擊讀題/提示即累計 `hint_used_count`
+3. 點擊重試累計 `retry_count`
+4. `recordQuestionUsage` 寫入新增欄位並保留每次作答紀錄
+5. 使用者預設 `report_mode` 為 `EDUCATOR`
+
+**相關文件**：
+- `app/components/PracticeView.tsx`
+- `app/lib/db-service.js`
+- `app/page.tsx`
+- `app/lib/types/usage.ts`
+
+---
+
+### 33. ✅ 數據熟成度監控（Factory Tab）
+
+**日期**：2026年1月20日
+
+**功能描述**：Factory Tab 新增行為樣本累積進度條與達標提示，作為 Phase 2 進入條件。
+
+**實作內容**：
+1. 新增 `AnalyticsService.getBehaviorDataCount()`（count aggregation）
+2. 進度條顯示「有效行為樣本: X / 200」
+3. 達標顯示綠色 Alert 提示進入 Phase 2
+
+**相關文件**：
+- `app/lib/analytics-service.ts`
+- `app/components/DeveloperView.tsx`
+
+---
+
+### 34. ✅ AI 雙週報告生成核心（Phase 2）
+
+**日期**：2026年1月20日
+
+**功能描述**：新增雙週學習報告生成服務，支援 Educator/Observer 兩種報告模式與資料聚合。
+
+**實作內容**：
+1. 聚合 QuestionUsage（平均時間、提示率、重試率、強弱項）
+2. 依 report_mode 產生 Educator / Observer Prompt
+3. 透過 `/api/chat` 輸出 Markdown 報告
+
+**相關文件**：
+- `services/report-generator.ts`
+
+---
+
 **最後更新**：2026年1月20日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`
