@@ -8,6 +8,26 @@
 
 ## 1) 已完成功能架構（可供技術分析）
 
+### 1.0 核心生題與調度策略（Smart Dispatcher）
+
+**最高原則（永久規範）**
+- **文字題（TEXT）**：追求無限不重複；允許即時生成補庫存。
+- **圖片題（IMAGE）**：追求絕對穩定；前台嚴禁即時生成，只能讀取已發布庫存。
+
+**調度路徑**
+- **路徑 A：文字題（TEXT）**
+  1. 查 `QuestionPool` 中 `TEXT` 且 `NOT IN UserHistory`
+  2. 命中 → 直接回傳
+  3. 未命中 → 即時生成（Flash），回傳給用戶並寫入 Pool
+- **路徑 B：圖片題（IMAGE_STATIC / IMAGE_CANVAS）**
+  1. 查 `QuestionPool` 中 `IMAGE_*` 且 `NOT IN UserHistory`
+  2. 命中 → 直接回傳
+  3. 未命中 → **禁止即時生成**，啟動回收模式（Recycle）
+
+**生產線分工**
+- **前台/API**：文字題可即時生成；圖片題唯讀、僅讀 `status=PUBLISHED`
+- **後台 Job**：負責圖片題生產與嚴格審核（Generate → Audit → Publish）
+
 ### 1.1 前端 UI 架構（Views / Components）
 
 - **DashboardView**：主儀表板與入口導覽（練習/考題入口、錯題本、學習數據、作業通知）
@@ -17,12 +37,14 @@
   - 練習/試卷題目選擇支援子單元篩選
 - **DailyTaskView**：每日任務入口與限制（練習模式啟動）
 - **TeacherView**：教師控制台（種子題上傳、派卷、班級/作業分析、排名與篩選、回饋提交）
+  - 種子題上傳支援 PDF 轉圖（批次轉頁 → Vision 解析）
 - **ParentView**：家長視圖（子女切換、趨勢圖、AI 報告、錯題分佈、多子女比較/排行）
 - **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
 - **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
   - 課程單元管理：既有單元可改名/刪除/新增與改名子單元，所有變更即時同步 Firestore
   - 單元格式修正：數學/中文/英文科皆可一鍵補齊舊資料欄位（createdAt/updatedAt/type/lang/subTopics）
   - 後台輸入欄採深色底反白字（含 select/textarea/file input）
+  - 工廠模式（Factory）：生產控制台 + 審核隊列（DRAFT→AUDITED/PUBLISHED）
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
 - **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）
@@ -31,6 +53,10 @@
 ### 1.2 API 路由層（Next.js API）
 
 - `/api/chat`：AI 題目生成（Gemini 2.0 Flash）
+- `/api/factory/generate`：工廠生產線（批量產生 DRAFT 題目）
+- `/api/factory/audit`：工廠審核線（Gemini 2.5 Pro）
+- `/api/factory/publish`：工廠發布（DRAFT/AUDITED → PUBLISHED）
+- `/api/dispatch`：混合調度（TEXT 即時生題 / IMAGE 回收）
 - `/api/vision`：圖像題識別與結構化輸出（Vision API）
 - `/api/payment`、`/api/webhooks/stripe`：Stripe 支付與 Webhook
 - `/api/check-env`、`/api/check-quota`、`/api/test-google-api`：環境檢測、配額檢測
@@ -40,6 +66,8 @@
 ### 1.3 服務層（lib）
 
 - `ai-service.js`：題目生成、提示詞建構、JSON 清理與解析（含教學者回饋指令）
+  - `fetchQuestionBatch`：前端批次調度（3 題並行呼叫 `/api/dispatch`）
+- `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
 - `question-schema.ts` / `types.ts`：Question 型別、normalizeQuestion、Zod 驗證（處理欄位飄移與標準化）
 - `vitest.config.ts` / `app/lib/__tests__/ai-service.test.ts`：Vitest 單元測試（涵蓋標準、alias、容錯案例）
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）
@@ -113,6 +141,9 @@
 ### 1.5 資料庫結構（核心集合）
 
 - **past_papers**：題目主集合  
+  - 工廠狀態欄位：`status`（DRAFT/AUDITED/PUBLISHED/REJECTED）
+  - 調度欄位：`poolType`（TEXT/IMAGE_STATIC/IMAGE_CANVAS）
+  - 審核摘要：`auditMeta`（status/confidence/reportRef）
   - 審計欄位：`audit_status`, `audit_report`, `audit_score`, `auditor_model_used`, `audit_issues`, `audit_timestamp`
   - `logic_supplement`：開發者注入邏輯  
 - **developer_feedback**：開發者回饋（可影響生成或審計）
@@ -555,6 +586,7 @@
 - `docs/SESSION_LOG_2024.md`：開發會話紀錄與變更摘要
 - `docs/AI_GENERATION_AND_APP_ARCH.md`：系統架構與題目生成流程
 - `docs/AUDITOR_SYSTEM.md`：審計系統（設計/實施/測試）
+- `docs/TECHNICAL_RISK_ASSESSMENT.md`：自動化生題與審核系統技術風險評估
 - `docs/OPS_API_AND_QUOTA.md`：API Key 與配額操作
 - `docs/DEPLOYMENT_AND_TESTING.md`：部署與測試
 - `docs/OPTIMIZATION_AND_SCALE.md`：效能與擴展

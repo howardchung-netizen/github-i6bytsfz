@@ -12,6 +12,7 @@ import {
     writeBatch,
     getDoc,
     orderBy,
+    updateDoc,
     setDoc,
     serverTimestamp,
     increment
@@ -32,6 +33,12 @@ const buildInstructionFromFeedback = (text = '') => {
     if (!trimmed) return '';
     if (/^(請|不要|必須|禁止)/.test(trimmed)) return trimmed;
     return `請${trimmed}`;
+};
+
+const normalizeQuestionRecord = (data = {}) => {
+    const status = data.status || 'PUBLISHED';
+    const poolType = data.poolType || (data.image ? 'IMAGE_STATIC' : 'TEXT');
+    return { ...data, status, poolType };
 };
 
 export const DB_SERVICE = {
@@ -1366,7 +1373,7 @@ export const DB_SERVICE = {
             const questionSnap = await getDoc(questionRef);
             
             if (questionSnap.exists()) {
-                return { id: questionSnap.id, ...questionSnap.data() };
+                return normalizeQuestionRecord({ id: questionSnap.id, ...questionSnap.data() });
             }
             
             return null;
@@ -1405,6 +1412,186 @@ export const DB_SERVICE = {
         } catch (e) {
             console.error("❌ Update Audit Status Error:", e);
             return false;
+        }
+    },
+
+    fetchFactoryQueue: async (statuses = ['DRAFT', 'AUDITED', 'REJECTED']) => {
+        try {
+            const q = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "past_papers"),
+                where("status", "in", statuses)
+            );
+            const snap = await getDocs(q);
+            const items = [];
+            snap.forEach(docSnap => {
+                items.push(normalizeQuestionRecord({ id: docSnap.id, ...docSnap.data() }));
+            });
+            items.sort((a, b) => {
+                const ta = new Date(a.createdAt || 0).getTime();
+                const tb = new Date(b.createdAt || 0).getTime();
+                return tb - ta;
+            });
+            return items;
+        } catch (e) {
+            console.error("❌ Fetch Factory Queue Error:", e);
+            return [];
+        }
+    },
+
+    getFactoryStats: async () => {
+        try {
+            const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "past_papers"));
+            let draftCount = 0;
+            let publishedCount = 0;
+            let auditedCount = 0;
+            let rejectedCount = 0;
+            snap.forEach(docSnap => {
+                const data = docSnap.data() || {};
+                const status = data.status || 'PUBLISHED';
+                if (status === 'DRAFT') draftCount += 1;
+                else if (status === 'AUDITED') auditedCount += 1;
+                else if (status === 'REJECTED') rejectedCount += 1;
+                else publishedCount += 1;
+            });
+            return { draftCount, publishedCount, auditedCount, rejectedCount };
+        } catch (e) {
+            console.error("❌ Get Factory Stats Error:", e);
+            return { draftCount: 0, publishedCount: 0, auditedCount: 0, rejectedCount: 0 };
+        }
+    },
+
+    getPublishedQuestionCounts: async ({ grade = null, subject = null } = {}) => {
+        try {
+            const buildQuery = (statusValue) => {
+                const conditions = [];
+                if (grade) conditions.push(where("grade", "==", grade));
+                if (subject) conditions.push(where("subject", "==", subject));
+                if (statusValue === null) conditions.push(where("status", "==", null));
+                else conditions.push(where("status", "==", statusValue));
+                return query(
+                    collection(db, "artifacts", APP_ID, "public", "data", "past_papers"),
+                    ...conditions
+                );
+            };
+
+            const [publishedSnap, legacySnap] = await Promise.all([
+                getDocs(buildQuery('PUBLISHED')),
+                getDocs(buildQuery(null))
+            ]);
+
+            const seen = new Set();
+            const counts = {};
+
+            const pushDoc = (docSnap) => {
+                if (seen.has(docSnap.id)) return;
+                seen.add(docSnap.id);
+                const data = docSnap.data() || {};
+                const topicKey = data.topic_id || data.topicId || data.topic || 'unknown';
+                if (!counts[topicKey]) {
+                    counts[topicKey] = { total: 0, subTopics: {} };
+                }
+                counts[topicKey].total += 1;
+                const subTopic = data.subTopic || data.sub_topic || data.subtopic || null;
+                if (subTopic) {
+                    counts[topicKey].subTopics[subTopic] = (counts[topicKey].subTopics[subTopic] || 0) + 1;
+                }
+            };
+
+            publishedSnap.forEach(pushDoc);
+            legacySnap.forEach(pushDoc);
+
+            return counts;
+        } catch (e) {
+            console.error("❌ Get Published Question Counts Error:", e);
+            return {};
+        }
+    },
+
+    deleteQuestionFromPool: async (questionId) => {
+        try {
+            if (!questionId) return false;
+            await deleteDoc(doc(db, "artifacts", APP_ID, "public", "data", "past_papers", questionId));
+            return true;
+        } catch (e) {
+            console.error("❌ Delete Question Error:", e);
+            return false;
+        }
+    },
+
+    fetchQuestionsByIds: async (questionIds = []) => {
+        try {
+            if (!Array.isArray(questionIds) || questionIds.length === 0) return [];
+            const items = await Promise.all(questionIds.map(async (qid) => {
+                const ref = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", qid);
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return null;
+                return normalizeQuestionRecord({ id: snap.id, ...snap.data() });
+            }));
+            return items.filter(Boolean);
+        } catch (e) {
+            console.error("❌ Fetch Questions By IDs Error:", e);
+            return [];
+        }
+    },
+
+    createFactoryQuestions: async (questions = [], meta = {}) => {
+        try {
+            if (!Array.isArray(questions) || questions.length === 0) return [];
+            const batch = writeBatch(db);
+            const createdIds = [];
+            const now = new Date().toISOString();
+            const status = meta.status || 'DRAFT';
+            const poolType = meta.poolType || null;
+            questions.forEach((q) => {
+                const docRef = doc(collection(db, "artifacts", APP_ID, "public", "data", "past_papers"));
+                const payload = normalizeQuestionRecord({
+                    ...q,
+                    status,
+                    poolType: q.poolType || poolType || q.poolType,
+                    auditMeta: q.auditMeta || meta.auditMeta || undefined,
+                    createdAt: q.createdAt || now,
+                    updatedAt: now
+                });
+                batch.set(docRef, payload);
+                createdIds.push(docRef.id);
+            });
+            await batch.commit();
+            return createdIds;
+        } catch (e) {
+            console.error("❌ Create Factory Questions Error:", e);
+            return [];
+        }
+    },
+
+    updateQuestionFactoryStatus: async (questionId, updates = {}) => {
+        try {
+            if (!questionId) return false;
+            const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", questionId);
+            await updateDoc(questionRef, {
+                ...updates,
+                updatedAt: new Date().toISOString()
+            });
+            return true;
+        } catch (e) {
+            console.error("❌ Update Question Status Error:", e);
+            return false;
+        }
+    },
+
+    saveAuditReport: async (payload = {}) => {
+        try {
+            const docRef = await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "audit_reports"),
+                {
+                    ...payload,
+                    createdAt: new Date().toISOString(),
+                    createdAtServer: serverTimestamp()
+                }
+            );
+            return docRef.id;
+        } catch (e) {
+            console.error("❌ Save Audit Report Error:", e);
+            return null;
         }
     },
 

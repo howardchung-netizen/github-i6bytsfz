@@ -1595,5 +1595,141 @@ const newScores = calculateAbilityScores(
 
 ---
 
-**最後更新**：2026年1月19日
+### 25. ✅ 自動化生題與審核系統技術風險評估報告
+
+**日期**：2026年1月20日
+
+**功能描述**：新增「自動化生題與審核系統」技術實作路徑與風險評估報告，涵蓋混合內容分類、生成與審核策略、Human-in-the-loop 流程與成本/延遲/幻覺風險。
+
+**實作內容**：
+1. 定義混合內容自動分類（Type A/B/C）與版面分析流程
+2. 生題者成本與準確度優化策略（Few-shot、圖片引用、推理輸出摘要）
+3. 審題者輸出規格（AuditResult Schema）
+4. 人類決策流程與狀態流轉設計
+5. 成本/延遲/幻覺風險評估與分階段落地建議
+
+**相關文件**：
+- `docs/TECHNICAL_RISK_ASSESSMENT.md`
+
+---
+
+### 26. ✅ 混合調度策略（Hybrid Dispatch）後端實作
+
+**日期**：2026年1月20日
+
+**功能描述**：新增混合調度策略後端 API 與調度服務，支援文字題即時生題與圖像題回收模式。
+
+**實作內容**：
+1. 新增 `services/question-dispatcher.ts`，依 TEXT/IMAGE 路徑調度
+2. 文字題缺貨時即時生題並非同步入庫
+3. 圖像題缺貨時啟動回收模式（允許重複）
+4. 新增 `/api/dispatch` API 路由供前端呼叫
+5. `ai-service` 支援伺服端呼叫 `/api/chat`（自動補齊 base URL）
+
+**相關文件**：
+- `services/question-dispatcher.ts`
+- `app/api/dispatch/route.ts`
+- `app/lib/ai-service.js`
+- `docs/TECHNICAL_RISK_ASSESSMENT.md`
+
+---
+
+### 27. ✅ 前端批次獲取（Batch Retrieval）對接混合調度
+
+**日期**：2026年1月20日
+
+**功能描述**：前端服務層新增 `fetchQuestionBatch`，以 3 題為一組並行呼叫 `/api/dispatch`，回傳混合題型陣列並維持原本快取機制。
+
+**實作內容**：
+1. `ai-service` 新增 `fetchQuestionBatch`（並行三次 `/api/dispatch`）
+2. `generateQuestion` 改用調度批次回填快取
+3. `generateQuestionDirect` 保留作為即時生題後端用
+4. 文字題新增 `poolType: TEXT` 寫入規則
+5. 單元測試更新為使用 `generateQuestionDirect`
+
+**相關文件**：
+- `app/lib/ai-service.js`
+- `app/lib/__tests__/ai-service.test.ts`
+- `services/question-dispatcher.ts`
+
+---
+
+### 28. ✅ 工廠後端基礎建設（Schema + API）
+
+**日期**：2026年1月20日
+
+**功能描述**：新增工廠後端基礎結構（DRAFT/AUDITED/PUBLISHED/REJECTED），並建立生產/審核/發布 API。
+
+**實作內容**：
+1. 題目 schema 新增 `status`、`poolType`、`auditMeta`
+2. DB Service 新增批次建立題目與審核報告存檔
+3. Factory API：`/api/factory/generate`、`/api/factory/audit`、`/api/factory/publish`
+4. 調度器讀取 `status`，缺省視為 `PUBLISHED`
+
+**相關文件**：
+- `app/lib/question-schema.ts`
+- `app/lib/types/question.ts`
+- `app/lib/db-service.js`
+- `services/question-dispatcher.ts`
+- `app/api/factory/generate/route.ts`
+- `app/api/factory/audit/route.ts`
+- `app/api/factory/publish/route.ts`
+
+---
+
+### 29. ✅ 工廠模式前端 UI（DeveloperView）
+
+**日期**：2026年1月20日
+
+**功能描述**：DeveloperView 新增「🏭 工廠模式」分頁，提供生產控制台與審核隊列，支援生產 → 審核 → 發布流程。
+
+**實作內容**：
+1. 生產控制台：poolType / count / 年級 / 單元 / 種子圖片
+2. 審核隊列：顯示 DRAFT/AUDITED/REJECTED，支援 AI 審核與發布/丟棄
+3. 顯示審核報告與信心分數
+4. 顯示庫存統計（待審核/已入庫）
+
+**相關文件**：
+- `app/components/DeveloperView.tsx`
+- `app/lib/db-service.js`
+
+---
+
+### 30. ✅ 生產控制中心 UI 重構（Factory 流水線）
+
+**日期**：2026年1月20日
+
+**功能描述**：Factory Tab 改為三階段流水線介面，新增庫存樹狀列表、待審核/已審核窗口與批量生產流程。
+
+**實作內容**：
+1. 生產下單與庫存監控：Grade/Subject/Unit/Sub-unit 樹狀清單 + 庫存顏色提示
+2. 批量生產：多選單元/子單元 + Qty 下單
+3. 審核流水線：待審核清單 + 一鍵審核 + 已審核卡片驗收
+4. 庫存統計讀取 `status=PUBLISHED`（含舊資料）
+
+**相關文件**：
+- `app/components/DeveloperView.tsx`
+- `app/lib/db-service.js`
+- `app/api/factory/generate/route.ts`
+
+---
+
+### 31. ✅ 種子題上傳支援 PDF 轉圖
+
+**日期**：2026年1月20日
+
+**功能描述**：教師/開發者的統一上傳介面支援 PDF 檔，會自動轉成多頁圖片並逐頁送 Vision 解析。
+
+**實作內容**：
+1. PDF 轉圖（每頁輸出 PNG）
+2. 併入批次上傳流程與進度顯示
+3. 前端可同時上傳圖片與 PDF
+
+**相關文件**：
+- `app/components/TeacherView.tsx`
+- `app/components/DeveloperView.tsx`
+
+---
+
+**最後更新**：2026年1月20日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`

@@ -56,6 +56,8 @@ export default function TeacherView({ setView, user, topics }) {
   const [paperMeta, setPaperMeta] = useState({ year: '2024', grade: 'P4', term: '上學期', topicId: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [pdfPages, setPdfPages] = useState<{ name: string; dataUrl: string }[]>([]);
+  const [isPreparingPdf, setIsPreparingPdf] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [imageProcessingProgress, setImageProcessingProgress] = useState({ current: 0, total: 0 });
   const [seedQuestions, setSeedQuestions] = useState([]); // 種子題目列表
@@ -392,6 +394,55 @@ export default function TeacherView({ setView, user, topics }) {
     });
   };
 
+  const convertPdfToImages = async (file: File) => {
+    try {
+      setIsPreparingPdf(true);
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
+      if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      const pages: { name: string; dataUrl: string }[] = [];
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) continue;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: context, viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/png');
+        pages.push({ name: `${file.name}-page-${pageNum}.png`, dataUrl });
+      }
+      return pages;
+    } catch (e) {
+      console.error("PDF Convert Error:", e);
+      return [];
+    } finally {
+      setIsPreparingPdf(false);
+    }
+  };
+
+  const handleSeedFileChange = async (files: FileList | null) => {
+    const list = Array.from(files || []);
+    if (list.length === 0) return;
+    const imageList = list.filter(f => f.type.startsWith('image/'));
+    const pdfList = list.filter(f => f.type === 'application/pdf');
+    if (imageList.length > 0) {
+      setImageFiles(imageList);
+    }
+    if (pdfList.length > 0) {
+      const pages = [];
+      for (const pdfFile of pdfList) {
+        const pdfPages = await convertPdfToImages(pdfFile);
+        pages.push(...pdfPages);
+      }
+      setPdfPages(pages);
+    }
+  };
+
   // 檢查是否為圖像 Base64
   const isImageBase64 = (str: string): boolean => {
     return typeof str === 'string' && (
@@ -445,14 +496,32 @@ export default function TeacherView({ setView, user, topics }) {
     setImageProcessingProgress({ current: 0, total: 0 });
 
     try {
-      // 步驟 1：處理上傳的圖像文件
-      if (imageFiles.length > 0) {
-        setImageProcessingProgress({ current: 0, total: imageFiles.length });
-        
+      const totalImages = imageFiles.length + pdfPages.length;
+      // 步驟 1：處理上傳的圖像/PDF頁面
+      if (totalImages > 0) {
+        setImageProcessingProgress({ current: 0, total: totalImages });
+        let currentIndex = 0;
+
+        for (const page of pdfPages) {
+          currentIndex += 1;
+          setImageProcessingProgress({ current: currentIndex, total: totalImages });
+          try {
+            const result = await processSingleImage(page.dataUrl, page.name);
+            allQuestions.push(result);
+          } catch (e) {
+            errors.push({
+              source: 'pdf_page',
+              name: page.name,
+              error: e instanceof Error ? e.message : '處理失敗'
+            });
+          }
+        }
+
         for (let i = 0; i < imageFiles.length; i++) {
           const file = imageFiles[i];
-          setImageProcessingProgress({ current: i + 1, total: imageFiles.length });
-          
+          currentIndex += 1;
+          setImageProcessingProgress({ current: currentIndex, total: totalImages });
+
           try {
             const base64 = await convertImageToBase64(file);
             const result = await processSingleImage(base64, file.name);
@@ -514,7 +583,7 @@ export default function TeacherView({ setView, user, topics }) {
       }
 
       // 步驟 3：如果沒有任何內容，提示用戶
-      if (allQuestions.length === 0 && imageFiles.length === 0 && !paperJson.trim()) {
+      if (allQuestions.length === 0 && imageFiles.length === 0 && pdfPages.length === 0 && !paperJson.trim()) {
         alert("請至少上傳圖像或輸入 JSON 內容");
         setIsUploading(false);
         setIsProcessingImages(false);
@@ -566,6 +635,7 @@ export default function TeacherView({ setView, user, topics }) {
         // 清空表單並重新載入
         setPaperJson('');
         setImageFiles([]);
+        setPdfPages([]);
         await loadSeedQuestions();
         await loadPaperCount();
       } else {
@@ -2094,19 +2164,24 @@ export default function TeacherView({ setView, user, topics }) {
               {/* 方式 1：上傳圖像 */}
               <div className="mb-3">
                 <label className="block text-xs font-bold text-slate-700 mb-2">
-                  📷 方式 1：上傳圖像文件（支持多選，自動識別圖形）
+                  📷 方式 1：上傳圖像或 PDF（支持多選，自動識別圖形）
                 </label>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf"
                   multiple
-                  onChange={(e) => setImageFiles(Array.from(e.target.files || []))}
+                  onChange={(e) => handleSeedFileChange(e.target.files)}
                   className="w-full text-xs border border-slate-300 rounded p-2 bg-white"
-                  disabled={isUploading || isProcessingImages}
+                  disabled={isUploading || isProcessingImages || isPreparingPdf}
                 />
-                {imageFiles.length > 0 && (
+                {(imageFiles.length > 0 || pdfPages.length > 0) && (
                   <div className="text-xs text-green-700 mt-1 font-bold">
-                    ✓ 已選擇 {imageFiles.length} 張圖像
+                    ✓ 已選擇 {imageFiles.length + pdfPages.length} 張圖像
+                  </div>
+                )}
+                {isPreparingPdf && (
+                  <div className="text-xs text-amber-600 mt-1 font-bold">
+                    PDF 轉圖中，請稍候...
                   </div>
                 )}
               </div>
@@ -2146,14 +2221,14 @@ export default function TeacherView({ setView, user, topics }) {
               {/* 統一上傳按鈕 */}
               <button 
                 onClick={handleUnifiedUpload} 
-                disabled={isUploading || isProcessingImages || (imageFiles.length === 0 && !paperJson.trim())} 
+                disabled={isUploading || isProcessingImages || (imageFiles.length === 0 && pdfPages.length === 0 && !paperJson.trim())} 
                 className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {isUploading || isProcessingImages ? (
                   <>
                     <RefreshCw size={18} className="animate-spin"/>
                     {isProcessingImages 
-                      ? `處理中 ${imageProcessingProgress.current}/${imageProcessingProgress.total || imageFiles.length}...` 
+                      ? `處理中 ${imageProcessingProgress.current}/${imageProcessingProgress.total || (imageFiles.length + pdfPages.length)}...` 
                       : '上傳中...'}
                   </>
                 ) : (

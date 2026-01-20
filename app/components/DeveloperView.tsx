@@ -43,8 +43,24 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
   
   // 圖像上傳相關狀態
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [pdfPages, setPdfPages] = useState<{ name: string; dataUrl: string }[]>([]);
+  const [isPreparingPdf, setIsPreparingPdf] = useState(false);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [imageProcessingProgress, setImageProcessingProgress] = useState({ current: 0, total: 0 });
+
+  // 工廠模式（Factory）
+  const [factoryPoolType, setFactoryPoolType] = useState('TEXT');
+  const [factorySelections, setFactorySelections] = useState({});
+  const [factorySeedImages, setFactorySeedImages] = useState<File[]>([]);
+  const [factoryQueue, setFactoryQueue] = useState([]);
+  const [factoryStats, setFactoryStats] = useState({ draftCount: 0, publishedCount: 0 });
+  const [factoryStockMap, setFactoryStockMap] = useState({});
+  const [isFactoryGenerating, setIsFactoryGenerating] = useState(false);
+  const [isFactoryLoadingQueue, setIsFactoryLoadingQueue] = useState(false);
+  const [isFactoryAuditingAll, setIsFactoryAuditingAll] = useState(false);
+  const [factoryAuditLoading, setFactoryAuditLoading] = useState({});
+  const [factoryPublishLoading, setFactoryPublishLoading] = useState({});
+  const [factoryDiscardLoading, setFactoryDiscardLoading] = useState({});
 
   // 取得目前條件下的可用單元 (用於下拉選單，只顯示數學科)
   const availableTopics = useMemo(() => {
@@ -60,11 +76,233 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
     if(activeTab === 'past_papers') fetchCount();
   }, [activeTab, isFirebaseReady]);
 
+  const factoryTopicTree = useMemo(() => {
+    return topics.reduce((groups, t) => {
+      const gradeKey = t.grade || 'P4';
+      const subjectKey = t.subject || 'math';
+      if (!groups[gradeKey]) groups[gradeKey] = {};
+      if (!groups[gradeKey][subjectKey]) groups[gradeKey][subjectKey] = [];
+      groups[gradeKey][subjectKey].push(t);
+      return groups;
+    }, {});
+  }, [topics]);
+
+  const unauditedQueue = useMemo(
+    () => factoryQueue.filter(q => q.status === 'DRAFT' && !q.auditMeta),
+    [factoryQueue]
+  );
+
+  const auditedQueue = useMemo(
+    () => factoryQueue.filter(q => q.status === 'DRAFT' && q.auditMeta),
+    [factoryQueue]
+  );
+
+  const unauditedSummary = useMemo(() => {
+    const map = {};
+    unauditedQueue.forEach(item => {
+      const label = `${item.grade || 'P4'} ${item.subject || ''} - ${item.topic || item.topic_id || '未分類'}`;
+      map[label] = (map[label] || 0) + 1;
+    });
+    return Object.entries(map).map(([label, count]) => ({ label, count }));
+  }, [unauditedQueue]);
+
+  useEffect(() => {
+    if (activeTab !== 'factory') return;
+    loadFactoryQueue();
+    loadFactoryStock();
+  }, [activeTab, isFirebaseReady]);
+
   // --- Handlers ---
   const handleAddSubTopic = () => { 
       if (!subTopicInput.trim()) return; 
       setSubTopics([...subTopics, subTopicInput.trim()]); 
       setSubTopicInput(''); 
+  };
+
+  const loadFactoryQueue = async () => {
+    if (!isFirebaseReady) return;
+    setIsFactoryLoadingQueue(true);
+    try {
+      const [queue, stats] = await Promise.all([
+        DB_SERVICE.fetchFactoryQueue(['DRAFT', 'AUDITED', 'REJECTED']),
+        DB_SERVICE.getFactoryStats()
+      ]);
+      setFactoryQueue(queue);
+      setFactoryStats({
+        draftCount: stats.draftCount || 0,
+        publishedCount: stats.publishedCount || 0
+      });
+    } catch (e) {
+      console.error("Load Factory Queue Error:", e);
+    } finally {
+      setIsFactoryLoadingQueue(false);
+    }
+  };
+
+  const loadFactoryStock = async () => {
+    if (!isFirebaseReady) return;
+    try {
+      const combos = topics.reduce((acc, t) => {
+        const key = `${t.grade}__${t.subject}`;
+        if (!acc[key]) acc[key] = { grade: t.grade, subject: t.subject };
+        return acc;
+      }, {});
+      const entries = Object.values(combos);
+      const results = await Promise.all(entries.map(item => DB_SERVICE.getPublishedQuestionCounts(item)));
+      const merged = {};
+      results.forEach((map) => {
+        Object.entries(map || {}).forEach(([topicKey, val]) => {
+          if (!merged[topicKey]) {
+            merged[topicKey] = { total: 0, subTopics: {} };
+          }
+          merged[topicKey].total += val.total || 0;
+          if (val.subTopics) {
+            Object.entries(val.subTopics).forEach(([st, count]) => {
+              merged[topicKey].subTopics[st] = (merged[topicKey].subTopics[st] || 0) + count;
+            });
+          }
+        });
+      });
+      setFactoryStockMap(merged);
+    } catch (e) {
+      console.error("Load Factory Stock Error:", e);
+    }
+  };
+
+  const parseAuditReport = (raw) => {
+    if (!raw) return null;
+    try {
+      if (typeof raw === 'string') return JSON.parse(raw);
+      return raw;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleFactoryGenerate = async () => {
+    if (isFactoryGenerating) return;
+    const selectedItems = Object.values(factorySelections).filter(item => item?.selected);
+    if (selectedItems.length === 0) {
+      alert("請至少勾選一個單元或子單元");
+      return;
+    }
+    let seedImageBase64 = null;
+    if (factorySeedImages.length > 0) {
+      try {
+        seedImageBase64 = await convertImageToBase64(factorySeedImages[0]);
+      } catch (e) {
+        alert("圖像轉換失敗，請重試");
+        return;
+      }
+    }
+    setIsFactoryGenerating(true);
+    try {
+      for (const item of selectedItems) {
+        const qty = Math.max(1, Number(item.qty || 1));
+        const payload: any = {
+          poolType: factoryPoolType,
+          type: factoryPoolType,
+          count: qty,
+          topic: item.topicId,
+          grade: item.grade,
+          subject: item.subject,
+          subTopic: item.subTopic || null
+        };
+        if (seedImageBase64) {
+          payload.seedImage = seedImageBase64;
+        }
+        const response = await fetch('/api/factory/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Factory generate failed');
+        }
+      }
+      alert("✅ 批量生產完成");
+      setFactorySeedImages([]);
+      setFactorySelections({});
+      await loadFactoryQueue();
+      await loadFactoryStock();
+    } catch (e) {
+      console.error("Factory Generate Error:", e);
+      alert(`生產失敗：${e.message || '未知錯誤'}`);
+    } finally {
+      setIsFactoryGenerating(false);
+    }
+  };
+
+  const handleFactoryAudit = async (questionIds = []) => {
+    if (!questionIds.length) return;
+    if (questionIds.length > 1) {
+      setIsFactoryAuditingAll(true);
+    }
+    const loadingState = {};
+    questionIds.forEach(id => { loadingState[id] = true; });
+    setFactoryAuditLoading(prev => ({ ...prev, ...loadingState }));
+    try {
+      const response = await fetch('/api/factory/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionIds })
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Factory audit failed');
+      }
+      await loadFactoryQueue();
+    } catch (e) {
+      console.error("Factory Audit Error:", e);
+      alert(`審核失敗：${e.message || '未知錯誤'}`);
+    } finally {
+      setFactoryAuditLoading(prev => {
+        const next = { ...prev };
+        questionIds.forEach(id => { delete next[id]; });
+        return next;
+      });
+      setIsFactoryAuditingAll(false);
+    }
+  };
+
+  const handleFactoryPublish = async (questionId) => {
+    if (!questionId) return;
+    setFactoryPublishLoading(prev => ({ ...prev, [questionId]: true }));
+    try {
+      const response = await fetch('/api/factory/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionIds: [questionId] })
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Publish failed');
+      }
+      await loadFactoryQueue();
+      await loadFactoryStock();
+    } catch (e) {
+      console.error("Factory Publish Error:", e);
+      alert(`發布失敗：${e.message || '未知錯誤'}`);
+    } finally {
+      setFactoryPublishLoading(prev => ({ ...prev, [questionId]: false }));
+    }
+  };
+
+  const handleFactoryDiscard = async (questionId) => {
+    if (!questionId) return;
+    if (!confirm('確定要丟棄此題目嗎？')) return;
+    setFactoryDiscardLoading(prev => ({ ...prev, [questionId]: true }));
+    try {
+      const ok = await DB_SERVICE.deleteQuestionFromPool(questionId);
+      if (!ok) throw new Error('Delete failed');
+      await loadFactoryQueue();
+    } catch (e) {
+      console.error("Factory Discard Error:", e);
+      alert(`丟棄失敗：${e.message || '未知錯誤'}`);
+    } finally {
+      setFactoryDiscardLoading(prev => ({ ...prev, [questionId]: false }));
+    }
   };
 
   const handleAddTopic = async () => {
@@ -206,6 +444,55 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
     });
   };
 
+  const convertPdfToImages = async (file: File) => {
+    try {
+      setIsPreparingPdf(true);
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
+      if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      const pages: { name: string; dataUrl: string }[] = [];
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) continue;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: context, viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/png');
+        pages.push({ name: `${file.name}-page-${pageNum}.png`, dataUrl });
+      }
+      return pages;
+    } catch (e) {
+      console.error("PDF Convert Error:", e);
+      return [];
+    } finally {
+      setIsPreparingPdf(false);
+    }
+  };
+
+  const handleSeedFileChange = async (files: FileList | null) => {
+    const list = Array.from(files || []);
+    if (list.length === 0) return;
+    const imageList = list.filter(f => f.type.startsWith('image/'));
+    const pdfList = list.filter(f => f.type === 'application/pdf');
+    if (imageList.length > 0) {
+      setImageFiles(imageList);
+    }
+    if (pdfList.length > 0) {
+      const pages = [];
+      for (const pdfFile of pdfList) {
+        const pdfPages = await convertPdfToImages(pdfFile);
+        pages.push(...pdfPages);
+      }
+      setPdfPages(pages);
+    }
+  };
+
   // 檢查是否為圖像 Base64
   const isImageBase64 = (str: string): boolean => {
     return typeof str === 'string' && (
@@ -254,14 +541,32 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
     setImageProcessingProgress({ current: 0, total: 0 });
 
     try {
-      // 步驟 1：處理上傳的圖像文件
-      if (imageFiles.length > 0) {
+      const totalImages = imageFiles.length + pdfPages.length;
+      // 步驟 1：處理上傳的圖像/PDF頁面
+      if (totalImages > 0) {
         hasImages = true;
-        setImageProcessingProgress({ current: 0, total: imageFiles.length });
-        
+        setImageProcessingProgress({ current: 0, total: totalImages });
+        let currentIndex = 0;
+
+        for (const page of pdfPages) {
+          currentIndex += 1;
+          setImageProcessingProgress({ current: currentIndex, total: totalImages });
+          try {
+            const result = await processSingleImage(page.dataUrl, page.name);
+            allQuestions.push(result);
+          } catch (e) {
+            errors.push({
+              source: 'pdf_page',
+              name: page.name,
+              error: e instanceof Error ? e.message : '處理失敗'
+            });
+          }
+        }
+
         for (let i = 0; i < imageFiles.length; i++) {
           const file = imageFiles[i];
-          setImageProcessingProgress({ current: i + 1, total: imageFiles.length });
+          currentIndex += 1;
+          setImageProcessingProgress({ current: currentIndex, total: totalImages });
           
           try {
             const base64 = await convertImageToBase64(file);
@@ -326,7 +631,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
       }
 
       // 步驟 3：如果沒有任何內容，提示用戶
-      if (allQuestions.length === 0 && imageFiles.length === 0 && !paperJson.trim()) {
+      if (allQuestions.length === 0 && imageFiles.length === 0 && pdfPages.length === 0 && !paperJson.trim()) {
         alert("請至少上傳圖像或輸入 JSON 內容");
         setIsUploading(false);
         setIsProcessingImages(false);
@@ -371,6 +676,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
         // 清空表單
         setPaperJson('');
         setImageFiles([]);
+        setPdfPages([]);
         const c = await DB_SERVICE.countPastPapers();
         setPaperCount(c);
       } else {
@@ -609,6 +915,14 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                     className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'analytics' ? 'text-emerald-600 border-b-2 border-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                     4. 後台總覽
+                </button>
+            )}
+            {isAdminReviewer && (
+                <button
+                    onClick={() => setActiveTab('factory')}
+                    className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'factory' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    🏭 工廠模式
                 </button>
             )}
         </div>
@@ -928,22 +1242,27 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                         
                         {/* 方式 1：上傳圖像 */}
                         <div className="mb-3">
-                            <label className="block text-xs font-bold text-slate-700 mb-2">
-                                📷 方式 1：上傳圖像文件（支持多選，自動識別圖形）
-                            </label>
-                                <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={(e) => setImageFiles(Array.from(e.target.files || []))}
-                                    className="w-full text-xs border border-slate-600 rounded p-2 bg-slate-800 text-white"
-                                disabled={isUploading || isProcessingImages}
-                            />
-                            {imageFiles.length > 0 && (
-                                <div className="text-xs text-green-700 mt-1 font-bold">
-                                    ✓ 已選擇 {imageFiles.length} 張圖像
-                                </div>
-                            )}
+                        <label className="block text-xs font-bold text-slate-700 mb-2">
+                            📷 方式 1：上傳圖像或 PDF（支持多選，自動識別圖形）
+                        </label>
+                            <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            multiple
+                            onChange={(e) => handleSeedFileChange(e.target.files)}
+                                className="w-full text-xs border border-slate-600 rounded p-2 bg-slate-800 text-white"
+                            disabled={isUploading || isProcessingImages || isPreparingPdf}
+                        />
+                        {(imageFiles.length > 0 || pdfPages.length > 0) && (
+                            <div className="text-xs text-green-700 mt-1 font-bold">
+                                ✓ 已選擇 {imageFiles.length + pdfPages.length} 張圖像
+                            </div>
+                        )}
+                        {isPreparingPdf && (
+                            <div className="text-xs text-amber-500 mt-1 font-bold">
+                                PDF 轉圖中，請稍候...
+                            </div>
+                        )}
                         </div>
 
                         {/* 方式 2：輸入 JSON */}
@@ -981,14 +1300,14 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                         {/* 統一上傳按鈕 */}
                         <button 
                             onClick={handleUnifiedUpload} 
-                            disabled={isUploading || isProcessingImages || (imageFiles.length === 0 && !paperJson.trim())} 
+                            disabled={isUploading || isProcessingImages || (imageFiles.length === 0 && pdfPages.length === 0 && !paperJson.trim())} 
                             className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             {isUploading || isProcessingImages ? (
                                 <>
                                     <RefreshCw size={18} className="animate-spin"/>
                                     {isProcessingImages 
-                                        ? `處理中 ${imageProcessingProgress.current}/${imageProcessingProgress.total || imageFiles.length}...` 
+                                        ? `處理中 ${imageProcessingProgress.current}/${imageProcessingProgress.total || (imageFiles.length + pdfPages.length)}...` 
                                         : '上傳中...'}
                                 </>
                             ) : (
@@ -1118,6 +1437,343 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                                 ))}
                             </div>
                         </>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'factory' && isAdminReviewer && (
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">待審核庫存</div>
+                        <div className="text-2xl font-bold text-slate-800 mt-1">{factoryStats.draftCount}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">已入庫總數</div>
+                        <div className="text-2xl font-bold text-slate-800 mt-1">{factoryStats.publishedCount}</div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                        <Upload size={18} className="text-amber-600" /> 生產下單與庫存監控
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500">Pool 類型</label>
+                            <select
+                                value={factoryPoolType}
+                                onChange={e => setFactoryPoolType(e.target.value)}
+                                className="w-full border p-2 rounded text-sm bg-white"
+                            >
+                                <option value="TEXT">TEXT（文字題）</option>
+                                <option value="IMAGE_STATIC">IMAGE_STATIC（圖片題）</option>
+                                <option value="IMAGE_CANVAS">IMAGE_CANVAS（幾何題）</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="text-xs font-bold text-slate-500">種子圖片（選填，圖片題用）</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => setFactorySeedImages(Array.from(e.target.files || []))}
+                                className="w-full text-xs border border-slate-300 rounded p-2 bg-white"
+                            />
+                            {factorySeedImages.length > 0 && (
+                                <div className="text-xs text-emerald-600 mt-1 font-semibold">
+                                    ✓ 已選擇 {factorySeedImages.length} 張圖像
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-lg">
+                        {Object.entries(factoryTopicTree).map(([grade, subjectMap]) => (
+                            <details key={grade} className="border-b border-slate-200">
+                                <summary className="cursor-pointer px-4 py-2 font-semibold text-slate-700 bg-slate-50">{grade}</summary>
+                                <div className="px-4 py-2 space-y-2">
+                                    {Object.entries(subjectMap).map(([subject, subjectTopics]) => (
+                                        <details key={`${grade}-${subject}`} className="border border-slate-200 rounded-lg">
+                                            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-600 bg-white">{subject}</summary>
+                                            <div className="px-3 py-2 space-y-2">
+                                                {subjectTopics.map((topic) => {
+                                                    const stock = factoryStockMap[topic.id]?.total ?? factoryStockMap[topic.name]?.total ?? 0;
+                                                    const stockColor = stock < 10 ? 'text-red-600' : stock > 50 ? 'text-emerald-600' : 'text-slate-600';
+                                                    const topicKey = `topic-${topic.id}`;
+                                                    const topicSelected = factorySelections[topicKey]?.selected;
+                                                    return (
+                                                        <div key={topic.id} className="border border-slate-200 rounded-lg p-2 bg-slate-50">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={!!topicSelected}
+                                                                        onChange={(e) => {
+                                                                            const checked = e.target.checked;
+                                                                            setFactorySelections(prev => ({
+                                                                                ...prev,
+                                                                                [topicKey]: {
+                                                                                    ...(prev[topicKey] || {}),
+                                                                                    selected: checked,
+                                                                                    qty: prev[topicKey]?.qty || 3,
+                                                                                    grade: topic.grade,
+                                                                                    subject: topic.subject,
+                                                                                    topicId: topic.id,
+                                                                                    subTopic: null
+                                                                                }
+                                                                            }));
+                                                                        }}
+                                                                    />
+                                                                    <div className="text-sm font-semibold text-slate-700">{topic.name}</div>
+                                                                    <div className={`text-xs font-semibold ${stockColor}`}>庫存 {stock}</div>
+                                                                </div>
+                                                                <input
+                                                                    type="number"
+                                                                    min={1}
+                                                                    disabled={!topicSelected}
+                                                                    value={factorySelections[topicKey]?.qty || 3}
+                                                                    onChange={(e) => {
+                                                                        const qty = Number(e.target.value || 1);
+                                                                        setFactorySelections(prev => ({
+                                                                            ...prev,
+                                                                            [topicKey]: { ...(prev[topicKey] || {}), qty }
+                                                                        }));
+                                                                    }}
+                                                                    className="w-20 border p-1 rounded text-xs bg-white"
+                                                                />
+                                                            </div>
+                                                            {Array.isArray(topic.subTopics) && topic.subTopics.length > 0 && (
+                                                                <div className="mt-2 space-y-1">
+                                                                    {topic.subTopics.map((st) => {
+                                                                        const subKey = `sub-${topic.id}-${st}`;
+                                                                        const subCount = factoryStockMap[topic.id]?.subTopics?.[st]
+                                                                            ?? factoryStockMap[topic.name]?.subTopics?.[st]
+                                                                            ?? 0;
+                                                                        const subColor = subCount < 10 ? 'text-red-600' : subCount > 50 ? 'text-emerald-600' : 'text-slate-500';
+                                                                        const subSelected = factorySelections[subKey]?.selected;
+                                                                        return (
+                                                                            <div key={subKey} className="flex items-center justify-between gap-2 pl-6">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={!!subSelected}
+                                                                                        onChange={(e) => {
+                                                                                            const checked = e.target.checked;
+                                                                                            setFactorySelections(prev => ({
+                                                                                                ...prev,
+                                                                                                [subKey]: {
+                                                                                                    ...(prev[subKey] || {}),
+                                                                                                    selected: checked,
+                                                                                                    qty: prev[subKey]?.qty || 3,
+                                                                                                    grade: topic.grade,
+                                                                                                    subject: topic.subject,
+                                                                                                    topicId: topic.id,
+                                                                                                    subTopic: st
+                                                                                                }
+                                                                                            }));
+                                                                                        }}
+                                                                                    />
+                                                                                    <div className="text-xs text-slate-600">{st}</div>
+                                                                                    <div className={`text-[11px] font-semibold ${subColor}`}>庫存 {subCount}</div>
+                                                                                </div>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min={1}
+                                                                                    disabled={!subSelected}
+                                                                                    value={factorySelections[subKey]?.qty || 3}
+                                                                                    onChange={(e) => {
+                                                                                        const qty = Number(e.target.value || 1);
+                                                                                        setFactorySelections(prev => ({
+                                                                                            ...prev,
+                                                                                            [subKey]: { ...(prev[subKey] || {}), qty }
+                                                                                        }));
+                                                                                    }}
+                                                                                    className="w-20 border p-1 rounded text-[11px] bg-white"
+                                                                                />
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </details>
+                                    ))}
+                                </div>
+                            </details>
+                        ))}
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                        <button
+                            onClick={handleFactoryGenerate}
+                            disabled={isFactoryGenerating}
+                            className="bg-amber-600 hover:bg-amber-700 disabled:bg-slate-400 text-white font-bold py-2 px-4 rounded-lg transition flex items-center gap-2"
+                        >
+                            {isFactoryGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                            {isFactoryGenerating ? '生產中...' : '🚀 批量生產'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <FileJson size={18} className="text-indigo-600" /> 審核隊列
+                        </h3>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={loadFactoryQueue}
+                                className="text-xs bg-white border border-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-100 transition"
+                            >
+                                重新整理
+                            </button>
+                            <button
+                                onClick={() => handleFactoryAudit(unauditedQueue.map(q => q.id))}
+                                className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 transition"
+                            >
+                                ⚡ 一鍵審核
+                            </button>
+                        </div>
+                    </div>
+
+                    {isFactoryLoadingQueue ? (
+                        <div className="text-center py-8">
+                            <RefreshCw size={32} className="animate-spin text-indigo-600 mx-auto mb-4" />
+                            <p className="text-slate-600">載入中...</p>
+                        </div>
+                    ) : factoryQueue.length === 0 ? (
+                        <div className="text-center py-8 text-slate-400">
+                            <Sparkles size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">暫無待審核題目</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {isFactoryAuditingAll && (
+                                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-sm text-indigo-700 flex items-center gap-2">
+                                    <RefreshCw size={16} className="animate-spin" />
+                                    AI 正在審核中，請勿關閉...
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                                    <div className="font-semibold text-slate-700 mb-2">⬅️ 待審核區</div>
+                                    {unauditedQueue.length === 0 ? (
+                                        <div className="text-xs text-slate-400">沒有待審核題目</div>
+                                    ) : (
+                                        <ul className="text-xs text-slate-600 space-y-1">
+                                            {unauditedSummary.map(({ label, count }) => (
+                                                <li key={label}>{label}（{count}題）</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                                    <div className="font-semibold text-slate-700 mb-2">➡️ 已審核驗收區</div>
+                                    <div className="text-xs text-slate-500">
+                                        {auditedQueue.length} 題待確認
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                            {auditedQueue.map((q) => {
+                                const auditReport = parseAuditReport(q.audit_report);
+                                const auditStatus = q.auditMeta?.status
+                                    || (auditReport?.status === 'verified' ? 'PASS' : auditReport?.status === 'flagged' ? 'FAIL' : null);
+                                const reportText = auditReport?.report || auditReport?.error_report || '（無審核報告）';
+                                const suggestedFix = auditReport?.suggested_fix || null;
+                                const isAudited = Boolean(auditStatus);
+
+                                const statusBadge = auditStatus === 'PASS'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : auditStatus === 'FAIL'
+                                        ? 'bg-red-100 text-red-700'
+                                        : auditStatus === 'FIXED'
+                                            ? 'bg-amber-100 text-amber-700'
+                                            : 'bg-slate-100 text-slate-600';
+
+                                return (
+                                    <div key={q.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded ${statusBadge}`}>
+                                                        {auditStatus === 'PASS' ? '🟢 PASS' : auditStatus === 'FAIL' ? '🔴 REJECT' : auditStatus === 'FIXED' ? '🟡 FIXED' : '⚪ 未審核'}
+                                                    </span>
+                                                    <span className="text-xs text-slate-500">狀態：{q.status || 'DRAFT'}</span>
+                                                    <span className="text-xs text-slate-500">Pool：{q.poolType || 'TEXT'}</span>
+                                                </div>
+                                                {q.image && (
+                                                    <img src={q.image} alt="seed" className="w-full max-w-md rounded border border-slate-200 mb-3" />
+                                                )}
+                                                <div className="text-sm font-semibold text-slate-800 mb-1">{q.question || '（無題目文字）'}</div>
+                                                {q.options && Array.isArray(q.options) && q.options.length > 0 && (
+                                                    <div className="text-xs text-slate-600 mb-2">
+                                                        選項：{q.options.filter(Boolean).slice(0, 8).join(' / ')}
+                                                    </div>
+                                                )}
+                                                <div className="text-xs text-slate-500">答案：{q.answer}</div>
+                                            </div>
+                                            <div className="flex flex-col gap-2 min-w-[140px]">
+                                                {!isAudited && (
+                                                    <button
+                                                        onClick={() => handleFactoryAudit([q.id])}
+                                                        disabled={factoryAuditLoading[q.id]}
+                                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white text-xs font-bold py-2 rounded"
+                                                    >
+                                                        {factoryAuditLoading[q.id] ? '審核中...' : '✨ 執行 AI 審核'}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => handleFactoryPublish(q.id)}
+                                                    disabled={factoryPublishLoading[q.id] || (isAudited && auditStatus === 'FAIL')}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-xs font-bold py-2 rounded"
+                                                >
+                                                    {factoryPublishLoading[q.id] ? '發布中...' : '批准發布'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleFactoryDiscard(q.id)}
+                                                    disabled={factoryDiscardLoading[q.id]}
+                                                    className="bg-red-100 hover:bg-red-200 text-red-600 text-xs font-bold py-2 rounded disabled:opacity-60"
+                                                >
+                                                    {factoryDiscardLoading[q.id] ? '處理中...' : '丟棄'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {isAudited && (
+                                            <div className="mt-4 space-y-3">
+                                                <div className="bg-white border border-slate-200 rounded p-3 text-xs text-slate-700">
+                                                    <div className="font-semibold text-slate-600 mb-1">審核報告</div>
+                                                    <div className="whitespace-pre-wrap">{reportText}</div>
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    信心分數：{typeof q.auditMeta?.confidence === 'number' ? q.auditMeta.confidence.toFixed(2) : '—'}
+                                                </div>
+                                                {auditStatus === 'FIXED' && (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        <div className="bg-white border border-amber-200 rounded p-3 text-xs text-slate-700">
+                                                            <div className="font-semibold text-amber-700 mb-1">修改前</div>
+                                                            <pre className="whitespace-pre-wrap">{JSON.stringify(suggestedFix?.before || q, null, 2)}</pre>
+                                                        </div>
+                                                        <div className="bg-white border border-emerald-200 rounded p-3 text-xs text-slate-700">
+                                                            <div className="font-semibold text-emerald-700 mb-1">修改後</div>
+                                                            <pre className="whitespace-pre-wrap">{JSON.stringify(suggestedFix?.after || q, null, 2)}</pre>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>
