@@ -42,7 +42,7 @@ const padOptionsToEight = (options: Array<string | number>) => {
 
 export const normalizeQuestion = (raw: unknown): Question => {
   const base = raw && typeof raw === 'object' ? { ...(raw as Record<string, unknown>) } : {};
-  const normalized: Record<string, unknown> = { ...base };
+  const normalized: Partial<Question> & Record<string, unknown> = { ...base };
 
   if (!normalized.question) {
     normalized.question = normalized.questionText
@@ -106,7 +106,15 @@ export const normalizeQuestion = (raw: unknown): Question => {
     normalized.lang = normalized.language as string;
   }
 
+  if (normalized.answer === undefined) {
+    normalized.answer = '';
+  }
+
   normalized.__raw = base;
 
-  return normalized as Question;
+  return {
+    ...normalized,
+    question: toPrimitiveString(normalized.question),
+    answer: normalized.answer as string | number
+  };
 };
