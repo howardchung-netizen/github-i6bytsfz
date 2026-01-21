@@ -2,6 +2,18 @@
 
 ## 📋 今天完成的主要工作
 
+### 38. ✅ 工廠審核極致優化（JSON 模式 + 並發）
+**功能**：
+- 審核 Prompt 改為極簡 JSON 輸出規格（PASS/FAIL/FIXED + 短 reason）
+- 審核 API 強制 `generationConfig`（temperature=0、maxOutputTokens=200、JSON mode）
+- 工廠審核改為每批 5 題並發處理（Promise.all）
+
+**相關文件**：
+- `app/lib/auditor-service.js` - JSON 模式 Prompt 與 generationConfig
+- `app/api/factory/audit/route.ts` - 並發處理與寫回流程
+
+---
+
 ### 37. ✅ 種子題庫拆分與審核後修正流程
 **功能**：
 - 種子上傳改寫入 `seed_questions`，審核通過後複製到 `past_papers`（origin=SEED）

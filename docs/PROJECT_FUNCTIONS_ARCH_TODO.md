@@ -52,7 +52,7 @@
   - 統一上傳補齊 status/origin/poolType/source/auditMeta，避免「幽靈資料」無法進待審核
   - 種子檢驗工作台：Split View（原圖/表單）+ 子單元編輯 + 答案存疑 Badge
   - 審核後修正流程：FAIL 題可修正/再審/套用 AI 建議後再入庫
-  - 審核後自動修正：一鍵套用 AI 建議分類並標記 FIXED
+  - 審核後自動修正：AI 審核後自動寫回建議分類/答案並標記 FIXED
   - 種子上傳支援指定子單元，寫入 `subTopic` 便於後續分類
   - 圖像種子上傳加入 Vision 解析逾時保護與提示
   - PDF 上傳轉圖支援 worker fallback 與錯誤提示
@@ -73,6 +73,7 @@
 - `/api/factory/generate`：工廠生產線（批量產生 DRAFT 題目）
 - `/api/factory/audit`：工廠審核線（Gemini 2.5 Pro）
   - 改用 Admin SDK 讀寫 `past_papers` / `audit_reports`，避免權限阻擋造成審核找不到 DRAFT
+  - 審核並發：每批 5 題 Promise.all，加速審核
 - `/api/factory/publish`：工廠發布（DRAFT/AUDITED → PUBLISHED）
 - `/api/dispatch`：混合調度（TEXT 即時生題 / IMAGE 回收）
 - `/api/vision`：圖像題識別與結構化輸出（Vision API）
@@ -98,6 +99,7 @@
   - 種子入庫拆分：`seed_questions`（上傳/審核）→ `publishSeedToPool` 複製入 `past_papers`
   - 新增 `fetchSeedQueue` / `updateSeedQuestionStatus` / `deleteSeedQuestion` 支援種子審核流程
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
+  - 審核 JSON 模式：極簡 prompt + `generationConfig`（temperature=0、maxOutputTokens=200）
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
 - `mock-data-generator.js`：模擬學生/班級數據
@@ -232,6 +234,17 @@
   - 方案 A：前端規則判斷（中文單位需貼近數字、英文關鍵字邊界）
   - 方案 B：同次生題輸出 `highlight_keywords` 欄位（不增加 API 次數）
   - 方案 C：額外 AI 呼叫抽提示詞（高成本，僅備用）(考慮審核題目時順便做)
+- **未來擴充路線圖（2026-01-21）**
+  - 原則：避免過早優化，資料量未達瓶頸前維持 Firebase 原生架構
+  - 數據分析/倉儲：BigQuery（觸發：10k-50k 筆、跨集合統計需求）
+    - 同步：Firebase Extension "Stream Firestore to BigQuery"
+    - Backfill：`fs-bq-import-collection` 匯入歷史資料
+    - 場景：深度報告、Looker/Data Studio 戰情室
+  - 全文檢索/模糊搜尋：Typesense/Algolia（觸發：50k+、搜尋變慢/模糊需求）
+    - 雙寫：Firestore 為主，Search Index 為輔
+    - 同步：Cloud Function onCreate/onUpdate/onDelete
+    - 成本：優先自架 Typesense（$5/mo VPS），Algolia 免費層可先試
+  - 結論：現版本可支撐 5k+ 題，後續可無縫接軌升級
 
 ### 2.1 審計系統測試（待做）
 
