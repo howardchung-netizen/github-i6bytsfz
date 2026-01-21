@@ -415,6 +415,7 @@ export default function FactoryDashboard({
     setIsInspectionSaving(true);
     try {
       const isSeed = inspectionItem.__collection === 'seed_questions';
+      const nowIso = new Date().toISOString();
       const options = inspectionForm.optionsText
         .split('\n')
         .map(s => s.trim())
@@ -427,6 +428,14 @@ export default function FactoryDashboard({
         grade: inspectionForm.grade,
         options
       };
+      if (!publish && inspectionItem.auditMeta?.status === 'FAIL') {
+        updates.auditMeta = {
+          ...(inspectionItem.auditMeta || {}),
+          status: 'FIXED',
+          fixedAt: nowIso
+        };
+        updates.status = 'DRAFT';
+      }
       if (publish) {
         updates.status = 'PUBLISHED';
       }
@@ -462,6 +471,63 @@ export default function FactoryDashboard({
     if (!inspectionItem?.id) return;
     await handleFactoryDiscard(inspectionItem);
     setInspectionItem(null);
+  };
+
+  const applySuggestedFix = (item, auditReport) => {
+    const suggestedTopic = auditReport?.suggested_topic
+      || auditReport?.suggestedTopic
+      || auditReport?.suggested_fix?.topic
+      || auditReport?.suggested_fix?.topic_name;
+    const suggestedSubTopic = auditReport?.suggested_subTopic
+      || auditReport?.suggested_subtopic
+      || auditReport?.suggestedSubTopic
+      || auditReport?.suggested_fix?.subTopic
+      || auditReport?.suggested_fix?.sub_topic;
+    openInspection(item);
+    setInspectionForm(prev => ({
+      ...prev,
+      topic: suggestedTopic ?? prev.topic,
+      subTopic: suggestedSubTopic ?? prev.subTopic
+    }));
+  };
+
+  const applySuggestedFixAndSave = async (item, auditReport) => {
+    if (!item?.id) return;
+    const suggestedTopic = auditReport?.suggested_topic
+      || auditReport?.suggestedTopic
+      || auditReport?.suggested_fix?.topic
+      || auditReport?.suggested_fix?.topic_name;
+    const suggestedSubTopic = auditReport?.suggested_subTopic
+      || auditReport?.suggested_subtopic
+      || auditReport?.suggestedSubTopic
+      || auditReport?.suggested_fix?.subTopic
+      || auditReport?.suggested_fix?.sub_topic;
+    if (!suggestedTopic && !suggestedSubTopic) {
+      alert('審核報告沒有提供可套用的分類建議');
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    const updates: any = {
+      topic: suggestedTopic ?? item.topic ?? '未分類',
+      subTopic: suggestedSubTopic ?? item.subTopic ?? null,
+      status: 'DRAFT',
+      auditMeta: {
+        ...(item.auditMeta || {}),
+        status: 'FIXED',
+        fixedAt: nowIso,
+        suggestedApplied: true
+      }
+    };
+    try {
+      const isSeed = item.__collection === 'seed_questions';
+      const ok = isSeed
+        ? await DB_SERVICE.updateSeedQuestionStatus(item.id, updates)
+        : await DB_SERVICE.updateQuestionFactoryStatus(item.id, updates);
+      if (!ok) throw new Error('Auto fix failed');
+      await loadFactoryQueue();
+    } catch (e) {
+      alert(`自動修正失敗：${e instanceof Error ? e.message : '未知錯誤'}`);
+    }
   };
 
   const convertImageToBase64 = (file: File): Promise<string> => {
@@ -585,9 +651,12 @@ export default function FactoryDashboard({
 
   const processSingleImage = async (imageBase64: string, fileName?: string): Promise<any[]> => {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
       const response = await fetch('/api/vision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           imageBase64: imageBase64,
           prompt: `請分析這張數學試題的圖像，擷取所有題目並回傳 JSON 陣列。
@@ -600,7 +669,7 @@ export default function FactoryDashboard({
 只回傳 JSON 陣列，不要加上 markdown。`
         })
       });
-
+      clearTimeout(timeout);
       const data = await response.json();
 
       if (data.success && data.result) {
@@ -616,6 +685,9 @@ export default function FactoryDashboard({
         throw new Error(data.error || '識別失敗');
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        throw new Error('Vision 解析逾時，請稍後重試或改用較小圖片');
+      }
       throw new Error(e instanceof Error ? e.message : '處理失敗');
     }
   };
@@ -734,7 +806,7 @@ export default function FactoryDashboard({
           year: paperMeta.year,
           grade: paperMeta.grade,
           term: paperMeta.term,
-          topic: selectedTopicName || q.topic,
+          topic: selectedTopicName ?? q.topic ?? '未分類',
           subTopic: selectedSubTopic ?? q.subTopic ?? null,
           status: 'DRAFT',
           origin: 'SEED',
@@ -1246,6 +1318,14 @@ export default function FactoryDashboard({
                       || (auditReport?.status === 'verified' ? 'PASS' : auditReport?.status === 'flagged' ? 'FAIL' : null);
                     const reportText = auditReport?.report || auditReport?.error_report || '（無審核報告）';
                     const suggestedFix = auditReport?.suggested_fix || null;
+                    const suggestedTopic = auditReport?.suggested_topic
+                      || auditReport?.suggestedTopic
+                      || auditReport?.suggested_fix?.topic;
+                    const suggestedSubTopic = auditReport?.suggested_subTopic
+                      || auditReport?.suggested_subtopic
+                      || auditReport?.suggestedSubTopic
+                      || auditReport?.suggested_fix?.subTopic
+                      || auditReport?.suggested_fix?.sub_topic;
                     const isAudited = Boolean(auditStatus);
                     const reportTextNormalized = String(reportText || '');
                     const isMismatchFlag = Boolean(
@@ -1306,6 +1386,51 @@ export default function FactoryDashboard({
                                 className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white text-xs font-bold py-2 rounded"
                               >
                                 {factoryAuditLoading[q.id] ? '審核中...' : '✨ 執行 AI 審核'}
+                              </button>
+                            )}
+                            {isAudited && auditStatus !== 'PASS' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFactoryAudit([q]);
+                                }}
+                                disabled={factoryAuditLoading[q.id]}
+                                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white text-xs font-bold py-2 rounded"
+                              >
+                                {factoryAuditLoading[q.id] ? '審核中...' : '🔁 再審一次'}
+                              </button>
+                            )}
+                            {isAudited && auditStatus !== 'PASS' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openInspection(q);
+                                }}
+                                className="bg-amber-100 hover:bg-amber-200 text-amber-700 text-xs font-bold py-2 rounded"
+                              >
+                                ✏️ 修正
+                              </button>
+                            )}
+                            {isAudited && auditStatus !== 'PASS' && (suggestedTopic || suggestedSubTopic || suggestedFix) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  applySuggestedFix(q, auditReport);
+                                }}
+                                className="bg-sky-100 hover:bg-sky-200 text-sky-700 text-xs font-bold py-2 rounded"
+                              >
+                                🪄 套用建議
+                              </button>
+                            )}
+                            {isAudited && auditStatus !== 'PASS' && (suggestedTopic || suggestedSubTopic || suggestedFix) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  applySuggestedFixAndSave(q, auditReport);
+                                }}
+                                className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-bold py-2 rounded"
+                              >
+                                🤖 自動修正
                               </button>
                             )}
                             <button

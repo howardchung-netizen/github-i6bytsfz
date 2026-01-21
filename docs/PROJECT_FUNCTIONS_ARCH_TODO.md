@@ -51,7 +51,10 @@
   - 種子進貨檢驗：上傳種子寫入 `seed_questions` 並標記 origin=SEED，審核通過後複製到 `past_papers`
   - 統一上傳補齊 status/origin/poolType/source/auditMeta，避免「幽靈資料」無法進待審核
   - 種子檢驗工作台：Split View（原圖/表單）+ 子單元編輯 + 答案存疑 Badge
+  - 審核後修正流程：FAIL 題可修正/再審/套用 AI 建議後再入庫
+  - 審核後自動修正：一鍵套用 AI 建議分類並標記 FIXED
   - 種子上傳支援指定子單元，寫入 `subTopic` 便於後續分類
+  - 圖像種子上傳加入 Vision 解析逾時保護與提示
   - PDF 上傳轉圖支援 worker fallback 與錯誤提示
   - 已入庫分類檢視：年級/科目/單元/子單元題數
     - 以資料庫已入庫題目實際欄位聚合（含未分類）
@@ -92,7 +95,8 @@
   - `normalizeSyllabusDocs`：補齊舊 syllabus 文件欄位並統一格式
   - 新增 lastError 供前端顯示 Firestore 實際錯誤
   - `uploadPastPaperBatch` 寬容寫入：保留擴充欄位並補齊 status/origin/poolType/auditMeta/source
-  - `uploadPastPaperBatch` 強制寫入 `past_papers`，避免工廠隊列查無資料
+  - 種子入庫拆分：`seed_questions`（上傳/審核）→ `publishSeedToPool` 複製入 `past_papers`
+  - 新增 `fetchSeedQueue` / `updateSeedQuestionStatus` / `deleteSeedQuestion` 支援種子審核流程
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射

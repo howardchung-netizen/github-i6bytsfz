@@ -32,6 +32,8 @@ ${logicSupplement || '（無邏輯補充要求）'}
   "score": 0-100,
   "issues": ["問題1", "問題2", ...],
   "report": "詳細審計報告（中文）",
+  "suggested_topic": "若分類不正確，請給出建議單元，否則留空字串",
+  "suggested_subTopic": "若分類不正確，請給出建議子單元，否則留空字串",
   "logic_supplement_compliance": { "compliant": true | false, "details": "..." },
   "correctness": { "is_correct": true | false, "details": "..." },
   "format": { "is_valid": true | false, "details": "..." },
@@ -61,6 +63,8 @@ ${JSON.stringify(question, null, 2)}
   "issues": ["問題1", "問題2", ...],
   "report": "詳細審計報告（中文）",
   "ai_answer": "AI 計算出的答案",
+  "suggested_topic": "若分類不正確，請給出建議單元，否則留空字串",
+  "suggested_subTopic": "若分類不正確，請給出建議子單元，否則留空字串",
   "correctness": { "is_correct": true | false, "details": "..." },
   "format": { "is_valid": true | false, "details": "..." }
 }

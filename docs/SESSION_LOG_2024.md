@@ -2,6 +2,23 @@
 
 ## 📋 今天完成的主要工作
 
+### 37. ✅ 種子題庫拆分與審核後修正流程
+**功能**：
+- 種子上傳改寫入 `seed_questions`，審核通過後複製到 `past_papers`（origin=SEED）
+- 工廠審核改用 Admin SDK 讀寫，避免權限阻擋
+- 審核後新增「修正 / 再審 / 套用建議 / 自動修正」流程
+- 上傳欄位防呆（topic/subTopic 避免 undefined）
+- Vision 解析加入逾時保護提示
+- Split View 下拉選單避免被遮切（modal overflow 與右側可滾動）
+
+**相關文件**：
+- `app/lib/db-service.js` - seed_questions 流程與 publishSeedToPool
+- `app/api/factory/audit/route.ts` - Admin SDK 審核讀寫
+- `app/components/admin/FactoryDashboard.tsx` - 審核後修正與自動修正
+- `app/lib/auditor-service.js` - suggested_topic/subTopic 回傳
+
+---
+
 ### 36. ✅ 種子檢驗工作台與異常警示補強
 **功能**：
 - Factory 審核隊列支援 Split View 檢視：原圖 + 可編輯表單
