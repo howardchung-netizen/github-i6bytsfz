@@ -2,6 +2,18 @@
 
 ## 📋 今天完成的主要工作
 
+### 39. ✅ 審核員修復：Prompt 思考+解析可視化
+**功能**：
+- 審核 Prompt 改為含 `analysis` 的驗算流程（先解題、再比對答案、輸出 JSON）
+- 審核設定調整：`temperature=0.1`、`maxOutputTokens=1000`、維持 JSON mode
+- 解析結果合併：PASS 也顯示驗算過程，避免報告空白
+- 解析錯誤回傳原始片段，提升可視化除錯能力
+
+**相關文件**：
+- `app/lib/auditor-service.js` - Prompt / generationConfig / parseAuditResult
+
+---
+
 ### 38. ✅ 工廠審核極致優化（JSON 模式 + 並發）
 **功能**：
 - 審核 Prompt 改為極簡 JSON 輸出規格（PASS/FAIL/FIXED + 短 reason）

@@ -99,7 +99,8 @@
   - 種子入庫拆分：`seed_questions`（上傳/審核）→ `publishSeedToPool` 複製入 `past_papers`
   - 新增 `fetchSeedQueue` / `updateSeedQuestionStatus` / `deleteSeedQuestion` 支援種子審核流程
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
-  - 審核 JSON 模式：極簡 prompt + `generationConfig`（temperature=0、maxOutputTokens=200）
+  - 審核 JSON 模式：Prompt 加入 `analysis` 驗算流程，`generationConfig`（temperature=0.1、maxOutputTokens=1000）
+  - `parseAuditResult`：analysis 併入 reason，解析失敗回傳原始片段供除錯
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
 - `mock-data-generator.js`：模擬學生/班級數據
