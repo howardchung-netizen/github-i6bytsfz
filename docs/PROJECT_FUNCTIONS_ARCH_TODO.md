@@ -48,11 +48,17 @@
   - 後台輸入欄採深色底反白字（含 select/textarea/file input）
   - 工廠模式（Factory）：生產控制台 + 審核隊列（DRAFT→AUDITED/PUBLISHED）
   - 數據熟成度監控：行為樣本累積進度條（達標提示）
-  - 種子進貨檢驗：來源切換、原圖/JSON 分屏、AI 自我驗證
+  - 種子進貨檢驗：上傳種子寫入 `seed_questions` 並標記 origin=SEED，審核通過後複製到 `past_papers`
+  - 統一上傳補齊 status/origin/poolType/source/auditMeta，避免「幽靈資料」無法進待審核
+  - 種子檢驗工作台：Split View（原圖/表單）+ 子單元編輯 + 答案存疑 Badge
+  - 種子上傳支援指定子單元，寫入 `subTopic` 便於後續分類
+  - PDF 上傳轉圖支援 worker fallback 與錯誤提示
   - 已入庫分類檢視：年級/科目/單元/子單元題數
     - 以資料庫已入庫題目實際欄位聚合（含未分類）
     - 一鍵修正分類（依 syllabus 回填 grade/subject/topic）
     - 顯示用單元名稱正規化（去除無效/重複/undefined）
+  - 已拆分子元件：`FactoryDashboard`（工廠/上傳/審核）、`AnalyticsView`、`SystemLogs`、`SyllabusView`
+  - 後台重構完成：DeveloperView 拆分為獨立子元件，降低維護成本
 - **FeedbackReviewView**：教學者回饋審核與批准/拒絕
 - **SubscriptionView**：訂閱方案頁面（Stripe Checkout）
 - **RegisterView**：登入/註冊流程（平台辨識、學校資料、教學者主/子帳號）
@@ -63,6 +69,7 @@
 - `/api/chat`：AI 題目生成（Gemini 2.0 Flash）
 - `/api/factory/generate`：工廠生產線（批量產生 DRAFT 題目）
 - `/api/factory/audit`：工廠審核線（Gemini 2.5 Pro）
+  - 改用 Admin SDK 讀寫 `past_papers` / `audit_reports`，避免權限阻擋造成審核找不到 DRAFT
 - `/api/factory/publish`：工廠發布（DRAFT/AUDITED → PUBLISHED）
 - `/api/dispatch`：混合調度（TEXT 即時生題 / IMAGE 回收）
 - `/api/vision`：圖像題識別與結構化輸出（Vision API）
@@ -83,6 +90,9 @@
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）
   - 課程單元更新採 `setDoc(..., { merge: true })`，可將預設單元同步到 Firestore 並避免更新失敗
   - `normalizeSyllabusDocs`：補齊舊 syllabus 文件欄位並統一格式
+  - 新增 lastError 供前端顯示 Firestore 實際錯誤
+  - `uploadPastPaperBatch` 寬容寫入：保留擴充欄位並補齊 status/origin/poolType/auditMeta/source
+  - `uploadPastPaperBatch` 強制寫入 `past_papers`，避免工廠隊列查無資料
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
@@ -156,6 +166,8 @@
   - 審核摘要：`auditMeta`（status/confidence/reportRef）
   - 審計欄位：`audit_status`, `audit_report`, `audit_score`, `auditor_model_used`, `audit_issues`, `audit_timestamp`
   - `logic_supplement`：開發者注入邏輯  
+- **seed_questions**：種子題庫（上傳/審核用，核准後複製到 `past_papers`）
+  - 與 `past_papers` 同欄位結構，保留 `origin=SEED`
 - **developer_feedback**：開發者回饋（可影響生成或審計）
 - **teacher_feedback**：教學者回饋（待審核/已批准）
 - **teacher_seed_questions/{institutionName}/questions**：機構題庫
@@ -596,6 +608,7 @@
 - `docs/SESSION_LOG_2024.md`：開發會話紀錄與變更摘要
 - `docs/AI_GENERATION_AND_APP_ARCH.md`：系統架構與題目生成流程
 - `docs/AUDITOR_SYSTEM.md`：審計系統（設計/實施/測試）
+- `docs/CORE_LOGIC.md`：核心生題與調度策略（系統憲法）
 - `docs/TECHNICAL_RISK_ASSESSMENT.md`：自動化生題與審核系統技術風險評估
 - `docs/OPS_API_AND_QUOTA.md`：API Key 與配額操作
 - `docs/DEPLOYMENT_AND_TESTING.md`：部署與測試

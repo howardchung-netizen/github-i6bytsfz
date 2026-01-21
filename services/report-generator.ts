@@ -73,61 +73,27 @@ const computeStats = (usages: QuestionUsage[]) => {
 };
 
 const buildEducatorPrompt = (data: ReturnType<typeof computeStats>) => `
-You are a Senior Educational Consultant with 20 years of experience. Your goal is to analyze a student's learning data and provide a "Formative Assessment Report" that is encouraging, insightful, and actionable.
+You are an experienced, empathetic primary school teacher. Your goal is to encourage the student. Focus on their effort and progress. Use warm, supportive language (Cantonese style written Chinese). Avoid technical jargon. Even if the score is low, find a highlight to praise. Structure the feedback as: 1. Encouragement, 2. Key Strength, 3. One gentle suggestion for improvement.
 
-**Tone**: Warm, Professional, like a supportive coach. Use the "Sandwich Method" (Praise -> Constructive Feedback -> Action).
-
-**Data Context**:
-- Average Time per Question: ${data.avgTimeSec}s (Norm: 10-30s)
+Data Summary:
+- Average Time per Question: ${data.avgTimeSec}s
 - Hint Usage Rate: ${data.hintRate}%
-- Retry Resilience: ${data.retryRate}% (How often they retry after failure)
+- Retry Rate: ${data.retryRate}%
 - Strong Topics: ${data.strongTopics}
 - Weak Topics: ${data.weakTopics}
-
-**Report Structure (Output in Markdown)**:
-
-## 🌟 雙週學習亮點 (Highlights)
-[Identify 1 specific strength. E.g., "I noticed you never give up! Your retry rate is high..."]
-
-## 🔍 深度診斷 (Diagnostic Analysis)
-- **知識點 (Knowledge)**: [Analyze strong/weak topics]
-- **技巧與習慣 (Skill)**: [Analyze time & hints. E.g., "You answer very quickly (avg ${data.avgTimeSec}s), which sometimes leads to careless mistakes..."]
-- **學習態度 (Attitude)**: [Analyze retry behavior]
-
-## 🚀 下一階段處方 (Next Steps)
-[Give 2 concrete, actionable pieces of advice. No generic "work hard". Give specific strategy like "Draw a diagram before calculating".]
-
-## 👨‍👩‍👧 給家長的安心小語
-[A professional reassurance about the student's learning curve.]
+- Error Pattern: ${data.errorPattern}
 `.trim();
 
 const buildObserverPrompt = (data: ReturnType<typeof computeStats>) => `
-You are a Clinical Learning Behavioral Observer. Your task is to generate an objective "Behavioral Observation Log" for a student (possibly with ADHD/ADD) to be reviewed by parents and clinicians. DO NOT diagnose; only observe and report patterns based on data.
+You are an educational data scientist and auditor. Your goal is to diagnose the student's learning gaps based strictly on the data. Be precise, concise, and clinical. No emotional fluff. Identify: 1. Error Patterns (e.g., 'Careless calculation' vs 'Concept misunderstanding'), 2. Specific weak topics, 3. Recommended intervention. Use professional, analytical language.
 
-**Tone**: Clinical, Objective, Data-driven. Avoid emotional adjectives.
-
-**Data Context**:
-- Average Time: ${data.avgTimeSec}s (Evaluate for Impulsivity if < 5s)
-- Hint Dependency: ${data.hintRate}% (Evaluate for Working Memory support)
+Data Summary:
+- Average Time: ${data.avgTimeSec}s
+- Hint Usage Rate: ${data.hintRate}%
+- Retry Rate: ${data.retryRate}%
+- Weak Topics: ${data.weakTopics}
 - Error Pattern: ${data.errorPattern}
-- Consistency: ${data.timeVariance} (High variance indicates attention fluctuation)
-
-**Report Structure (Output in Markdown)**:
-
-## 📊 執行功能指標 (Executive Function Metrics)
-
-### 1. 衝動控制 (Impulse Control)
-- **Observation**: [Analyze if avgTime is too short on wrong answers. E.g., "User averages 3s on incorrect answers, suggesting impulsive responding."]
-- **Data Point**: Avg Time: ${data.avgTimeSec}s.
-
-### 2. 持續性注意力 (Sustained Attention)
-- **Observation**: [Analyze performance decay over the session. E.g., "Accuracy drops significantly after the 10th question."]
-
-### 3. 認知彈性與依賴度 (Flexibility & Dependency)
-- **Hint Usage**: Used hints in ${data.hintRate}% of questions. [Analyze if hints successfully led to correct answers.]
-
-## 📝 臨床/居家觀察建議 (Observations for Review)
-[Summarize behavioral patterns that the doctor should pay attention to. E.g., "High frequency of 'rapid guessing' observed in text-heavy questions."]
+- Consistency (Time Variance): ${data.timeVariance}
 `.trim();
 
 export const generateReport = async (userId: string, mode: ReportMode, data: AnalysisData) => {
@@ -136,10 +102,25 @@ export const generateReport = async (userId: string, mode: ReportMode, data: Ana
     ? buildObserverPrompt(stats)
     : buildEducatorPrompt(stats);
 
+  const modelConfig = {
+    model: "gemini-1.5-pro",
+    temperature: 0.3,
+    topP: 0.8,
+    maxOutputTokens: 2048
+  };
+
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: prompt, model: REPORT_MODEL_NAME })
+    body: JSON.stringify({
+      message: prompt,
+      model: modelConfig.model || REPORT_MODEL_NAME,
+      generationConfig: {
+        temperature: modelConfig.temperature,
+        topP: modelConfig.topP,
+        maxOutputTokens: modelConfig.maxOutputTokens
+      }
+    })
   });
 
   const result = await response.json();

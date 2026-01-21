@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         }
 
         // 3. 執行審計
-        const auditResult = await auditQuestion(question, logicSupplement);
+        const auditResult = await auditQuestion(question, logicSupplement, { origin: question?.origin });
 
         // 4. 更新數據庫
         const updated = await DB_SERVICE.updateQuestionAuditStatus(

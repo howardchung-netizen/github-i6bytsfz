@@ -44,6 +44,10 @@ export default function ChineseDeveloperView({ topics, setTopics, setView, isFir
   };
 
   const handleAddTopic = async () => {
+     if (!isFirebaseReady) {
+         alert("Firebase 尚未就緒，請稍後再試。");
+         return;
+     }
      const topicToAdd = { 
          name: newTopic.name, grade: newTopic.grade, term: newTopic.term, subject: 'chi', 
          type: 'text', lang: 'zh-HK', 
@@ -59,7 +63,9 @@ export default function ChineseDeveloperView({ topics, setTopics, setView, isFir
          setNewTopic({...newTopic, name: ''});
          setSubTopics([]);
      } else {
-         alert("新增失敗，請檢查連線。");
+         const error = DB_SERVICE.getLastError?.();
+         const message = error?.message || error?.code || "未知錯誤";
+         alert(`新增失敗，請檢查連線。\n${message}`);
      }
   };
 

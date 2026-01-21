@@ -397,9 +397,10 @@ export default function TeacherView({ setView, user, topics }) {
   const convertPdfToImages = async (file: File) => {
     try {
       setIsPreparingPdf(true);
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
-      if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+      const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf');
+      const pdfjs = (pdfjsModule && pdfjsModule.default) || pdfjsModule;
+      if (pdfjs.GlobalWorkerOptions && !pdfjs.GlobalWorkerOptions.workerSrc) {
+        pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.530/pdf.worker.min.js';
       }
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;

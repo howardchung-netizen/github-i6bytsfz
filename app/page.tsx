@@ -8,7 +8,7 @@ import { Loader2, Sparkles, MoreVertical } from 'lucide-react';
 import { auth } from './lib/firebase';
 import { DB_SERVICE } from './lib/db-service';
 import { AI_SERVICE } from './lib/ai-service';
-import { INITIAL_TOPICS, ADMIN_USER, RPM_LIMIT, MIN_REQUEST_INTERVAL_MS } from './lib/constants';
+import { ADMIN_USER, RPM_LIMIT, MIN_REQUEST_INTERVAL_MS } from './lib/constants';
 import { calculateAbilityScores, formatScoresForRadar } from './lib/ability-scoring';
 
 // UI Components
@@ -61,11 +61,27 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 export default function App() {
   const [view, setView] = useState('dashboard');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState(ADMIN_USER);
+  const [user, setUser] = useState({
+    id: '',
+    name: '',
+    email: '',
+    level: '',
+    xp: 0,
+    avatar: '',
+    role: '',
+    school: '',
+    institutionName: '',
+    institutionRole: null,
+    institutionStatus: null,
+    gender: '',
+    age: 0,
+    isPremium: false,
+    isEditingProfile: false
+  });
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
   
   const [adhdMode, setAdhdMode] = useState(false);
-  const [topics, setTopics] = useState(INITIAL_TOPICS);
+  const [topics, setTopics] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [userAnswer, setUserAnswer] = useState('');
   const [feedback, setFeedback] = useState(null);
@@ -157,7 +173,8 @@ export default function App() {
             institutionStatus: null,
             gender: '', 
             age: 0, 
-            isPremium: false 
+            isPremium: false,
+            isEditingProfile: false
           }); 
           setView('register'); 
       });
@@ -184,7 +201,8 @@ export default function App() {
                 institutionStatus: null,
                 gender: '', 
                 age: 0, 
-                isPremium: false 
+                isPremium: false,
+                isEditingProfile: false
               });
               setView('register');
           }
@@ -284,17 +302,20 @@ export default function App() {
               institutionStatus: normalizedProfile.institutionStatus || null,
               gender: normalizedProfile.gender || '',
               age: normalizedProfile.age || 0,
-              isPremium: normalizedProfile.isPremium || false
+              isPremium: normalizedProfile.isPremium || false,
+              isEditingProfile: false
             });
             setIsLoggedIn(true);
             setView('dashboard');
         } else {
-             // 如果是 Admin 測試帳號，保持登入
-             if (user.email === 'admin@test.com') {
-                 setUser(prev => ({ ...prev, id: currentUser.uid }));
+             // 沒有 profile 時，只允許真正的 admin 帳號登入（非匿名）
+             if (currentUser.email === 'admin@test.com' && !currentUser.isAnonymous) {
+                 setUser({ ...ADMIN_USER, id: currentUser.uid, isEditingProfile: false });
                  setIsLoggedIn(true);
+                 setView('dashboard');
              } else {
-                 // 否則視為未註冊，保持在 RegisterView 但不強迫登出
+                 setIsLoggedIn(false);
+                 // 視為未註冊，保持在 RegisterView 但不強迫登出
                  setView('register');
              }
         }
@@ -320,9 +341,15 @@ export default function App() {
           
           // 載入單元
           try {
-              const remoteTopics = await DB_SERVICE.fetchTopics(); 
-              if(remoteTopics.length > 0) setTopics([...INITIAL_TOPICS, ...remoteTopics]); 
-          } catch(e) { console.error("Fetch Topic Error:", e); }
+              const remoteTopics = await DB_SERVICE.fetchTopics();
+              if (remoteTopics.length > 0) {
+                setTopics(remoteTopics);
+              } else {
+                setTopics([]);
+              }
+          } catch(e) {
+              console.error("Fetch Topic Error:", e);
+          }
 
           // 自動填充種子資料 (如果 DB 是空的)
           await DB_SERVICE.seedInitialData();
@@ -695,7 +722,10 @@ export default function App() {
       // }
   };
 
-  const checkAnswer = (answerToCheck, meta = {}) => { 
+  const checkAnswer = (
+      answerToCheck,
+      meta: { timeSpentMs?: number; hintUsedCount?: number; retryCount?: number } = {}
+  ) => { 
       const finalAnswer = answerToCheck || userAnswer; 
       
       // 簡單的答案檢查邏輯

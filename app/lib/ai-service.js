@@ -3,10 +3,22 @@ import { DB_SERVICE } from './db-service';
 import { CURRENT_MODEL_NAME } from './constants';
 import { normalizeQuestion, QuestionSchema } from './question-schema';
 
+const resolveApiBaseUrl = () => {
+    if (typeof window !== 'undefined') return '';
+    const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || '';
+    if (!envUrl) return '';
+    if (envUrl.startsWith('http://') || envUrl.startsWith('https://')) return envUrl;
+    return `https://${envUrl}`;
+};
+
+const buildApiUrl = (path) => `${resolveApiBaseUrl()}${path}`;
+
 // --- Batch Generation Cache ---
 // 全局緩存：Map<cacheKey, question[]>
 let questionCache = new Map();
 let lastCacheKey = null; // 追蹤上次使用的緩存鍵，用於檢測主題切換
+let dispatchCache = new Map();
+let lastDispatchCacheKey = null;
 
 // 批量大小常量
 const BATCH_SIZE = 3;
@@ -40,6 +52,27 @@ const generateCacheKey = (level, selectedTopicIds, subjectHint, user, difficulty
     
     // 轉換為 JSON 字符串作為唯一鍵
     return JSON.stringify(keyObj);
+};
+
+const resolveSubject = (level, selectedTopicIds, allTopicsList, subjectHint = null) => {
+    if (subjectHint) return subjectHint;
+    if (selectedTopicIds.length > 0) {
+        const topic = allTopicsList.find(t => selectedTopicIds.includes(t.id));
+        return topic?.subject || 'math';
+    }
+    const availableSubjects = [...new Set(allTopicsList.filter(t => t.grade === level).map(t => t.subject))];
+    return availableSubjects.length > 0
+        ? availableSubjects[Math.floor(Math.random() * availableSubjects.length)]
+        : 'math';
+};
+
+const buildDispatchPlan = (subject, count) => {
+    if (subject === 'math') {
+        const plan = ['TEXT', 'TEXT', 'IMAGE'];
+        if (count <= plan.length) return plan.slice(0, count);
+        return Array.from({ length: count }, (_, idx) => plan[idx % plan.length]);
+    }
+    return Array.from({ length: count }, () => 'TEXT');
 };
 
 // --- JSON 清理和解析輔助函數 ---
@@ -116,7 +149,116 @@ const LOCAL_BRAIN = {
 };
 
 export const AI_SERVICE = {
+  fetchQuestionBatch: async (count, level, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, selectedSubTopics = {}) => {
+    const topicId = selectedTopicIds.length > 0 ? selectedTopicIds[0] : null;
+    const resolvedSubject = resolveSubject(level, selectedTopicIds, allTopicsList, subjectHint);
+    const modes = buildDispatchPlan(resolvedSubject, count);
+    const userId = user?.uid || user?.id || user?.userId || null;
+
+    if (!userId) {
+        console.warn('⚠️ fetchQuestionBatch: Missing userId, fallback to direct generation');
+        const fallbackQuestion = await AI_SERVICE.generateQuestionDirect(
+            level,
+            'normal',
+            selectedTopicIds,
+            allTopicsList,
+            resolvedSubject,
+            user,
+            null,
+            selectedSubTopics
+        );
+        return fallbackQuestion ? [fallbackQuestion] : [];
+    }
+
+    const requests = modes.map((mode) => {
+        const payload = {
+            userId,
+            grade: level,
+            subject: resolvedSubject,
+            topicId,
+            mode,
+            poolTypes: mode === 'TEXT' ? ['TEXT'] : ['IMAGE_STATIC', 'IMAGE_CANVAS'],
+            topics: allTopicsList,
+            userContext: user
+        };
+        return fetch(buildApiUrl('/api/dispatch'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(async (response) => {
+            const data = await response.json();
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.error || `Dispatch failed (${response.status})`);
+            }
+            return data.data?.question || null;
+        });
+    });
+
+    const results = await Promise.allSettled(requests);
+    const questions = results
+        .map((res) => (res.status === 'fulfilled' ? res.value : null))
+        .filter(Boolean);
+
+    if (questions.length === 0) {
+        console.warn('⚠️ fetchQuestionBatch: No questions returned from dispatch, fallback to direct generation');
+        const fallbackQuestion = await AI_SERVICE.generateQuestionDirect(
+            level,
+            'normal',
+            selectedTopicIds,
+            allTopicsList,
+            resolvedSubject,
+            user,
+            null,
+            selectedSubTopics
+        );
+        return fallbackQuestion ? [fallbackQuestion] : [];
+    }
+
+    return questions;
+  },
+
   generateQuestion: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, languagePreference = null, selectedSubTopics = {}) => {
+    const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty, languagePreference, selectedSubTopics);
+
+    if (lastDispatchCacheKey && lastDispatchCacheKey !== currentCacheKey) {
+        if (dispatchCache.has(lastDispatchCacheKey)) {
+            dispatchCache.delete(lastDispatchCacheKey);
+        }
+    }
+    lastDispatchCacheKey = currentCacheKey;
+
+    if (!dispatchCache.has(currentCacheKey)) {
+        dispatchCache.set(currentCacheKey, []);
+    }
+    const cache = dispatchCache.get(currentCacheKey);
+
+    if (cache.length > 0) {
+        const cachedQuestion = cache.shift();
+        return cachedQuestion;
+    }
+
+    const batch = await AI_SERVICE.fetchQuestionBatch(
+        BATCH_SIZE,
+        level,
+        selectedTopicIds,
+        allTopicsList,
+        subjectHint,
+        user,
+        selectedSubTopics
+    );
+
+    if (!batch || batch.length === 0) {
+        return LOCAL_BRAIN.generateQuestion(level, difficulty, selectedTopicIds, allTopicsList);
+    }
+
+    const [firstQuestion, ...remainingQuestions] = batch;
+    if (remainingQuestions.length > 0) {
+        cache.push(...remainingQuestions);
+    }
+    return firstQuestion;
+  },
+
+  generateQuestionDirect: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, languagePreference = null, selectedSubTopics = {}) => {
     // ===== 階段 1: 緩存鍵生成與失效檢查 =====
     const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty, languagePreference, selectedSubTopics);
     
@@ -330,7 +472,7 @@ export const AI_SERVICE = {
     // 3. 呼叫 Next.js API Route
     console.log("🚀 Calling Next.js API Route (/api/chat)...");
     try {
-        const response = await fetch('/api/chat', { 
+        const response = await fetch(buildApiUrl('/api/chat'), { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: promptText }),
@@ -484,6 +626,7 @@ export const AI_SERVICE = {
                     ...question,
                     id: baseTimestamp + i, // 確保每題有不同的 ID
                     source: 'ai_next_api',
+                    poolType: 'TEXT',
                     type: activeSeed.type || question.type || 'text',
                     topic: activeSeed.topic,
                     lang: resolvedLang,
@@ -700,7 +843,7 @@ export const AI_SERVICE = {
     console.log("🔄 Generating variation from mistake:", originalQuestion);
     
     try {
-        const response = await fetch('/api/chat', { 
+        const response = await fetch(buildApiUrl('/api/chat'), { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: promptText }),

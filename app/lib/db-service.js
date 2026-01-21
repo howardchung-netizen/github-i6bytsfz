@@ -41,9 +41,14 @@ const normalizeQuestionRecord = (data = {}) => {
     return { ...data, status, poolType };
 };
 
+let lastError = null;
+
 export const DB_SERVICE = {
+    getLastError: () => lastError,
+    clearLastError: () => { lastError = null; },
     logVisit: async ({ path = '/', platform = 'web', sessionId = '' }) => {
         try {
+            lastError = null;
             const docRef = await addDoc(
                 collection(db, "artifacts", APP_ID, "public", "data", "visit_logs"),
                 {
@@ -56,29 +61,48 @@ export const DB_SERVICE = {
             );
             return docRef.id;
         } catch (e) {
+            lastError = e;
             console.error("Log Visit Error:", e);
             return null;
         }
     },
     addTopic: async (topicData) => { 
         try {
+            lastError = null;
             const docRef = await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"), topicData);
             return docRef.id; 
-        } catch (e) { console.error("Add Topic Error:", e); return null; }
+        } catch (e) {
+            lastError = e;
+            console.error("Add Topic Error:", e);
+            return null;
+        }
     },
     fetchTopics: async () => { 
         try {
+            lastError = null;
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"));
             const res = []; snap.forEach(d => res.push({id: d.id, ...d.data()})); 
             return res; 
-        } catch (e) { console.error("Fetch Topic Error:", e); return []; }
+        } catch (e) {
+            lastError = e;
+            console.error("Fetch Topic Error:", e);
+            return [];
+        }
     },
     deleteTopic: async (id) => { 
-        try { await deleteDoc(doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id)); return true; } 
-        catch (e) { console.error("Delete Topic Error:", e); return false; } 
+        try {
+            lastError = null;
+            await deleteDoc(doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id));
+            return true;
+        } catch (e) {
+            lastError = e;
+            console.error("Delete Topic Error:", e);
+            return false;
+        }
     },
     updateTopic: async (id, updates = {}) => {
         try {
+            lastError = null;
             const payload = { ...updates, updatedAt: new Date().toISOString() };
             await setDoc(
                 doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id),
@@ -87,12 +111,14 @@ export const DB_SERVICE = {
             );
             return true;
         } catch (e) {
+            lastError = e;
             console.error("Update Topic Error:", e);
             return false;
         }
     },
     normalizeSyllabusDocs: async () => {
         try {
+            lastError = null;
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"));
             let updated = 0;
             let skipped = 0;
@@ -122,6 +148,7 @@ export const DB_SERVICE = {
             }
             return { updated, skipped };
         } catch (e) {
+            lastError = e;
             console.error("Normalize Syllabus Error:", e);
             return { updated: 0, skipped: 0, error: e };
         }
@@ -255,48 +282,41 @@ export const DB_SERVICE = {
     },
     uploadPastPaperBatch: async (papers, user = null) => { 
         try {
+            lastError = null;
             const batch = writeBatch(db);
             
-            // 判斷存儲位置：教學者存到機構專用庫，開發者存到主庫
-            let collectionRef;
-            if (user && user.role === 'teacher' && user.institutionName) {
-                // 教學者：存到機構專用庫
-                collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", user.institutionName, "questions");
-            } else {
-                // 開發者/主庫：存到主庫
-                collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "past_papers");
-            }
+            // 種子一律寫入 seed_questions，審核通過後再入 past_papers
+            const collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "seed_questions");
             
             papers.forEach(paper => { 
                 const docRef = doc(collectionRef); 
                 const derivedPoolType = paper.poolType
                     || (paper.image || paper.originalImage ? 'IMAGE_STATIC' : 'TEXT');
+                const derivedSource = paper.source || paper.imageFileName || paper.fileName || 'seed_upload';
                 batch.set(docRef, { 
                     ...paper, 
-                    status: paper.status || 'DRAFT',
-                    origin: paper.origin || 'UPLOAD',
-                    poolType: derivedPoolType,
-                    createdAt: new Date().toISOString(),
+                    status: paper.status ?? 'DRAFT',
+                    origin: paper.origin ?? 'SEED',
+                    poolType: paper.poolType ?? derivedPoolType,
+                    source: paper.source ?? derivedSource,
+                    auditMeta: paper.auditMeta ?? null,
+                    createdAt: paper.createdAt ?? new Date().toISOString(),
                     uploadedBy: user?.email || 'system',
                     institutionName: user?.institutionName || null
                 }); 
             });
             await batch.commit(); 
             return true; 
-        } catch (e) { console.error("Batch Upload Error:", e); return false; }
+        } catch (e) {
+            lastError = e;
+            console.error("Batch Upload Error:", e);
+            return false;
+        }
     },
     countPastPapers: async (user = null) => {
         try {
-            // 如果是教學者，計算機構庫的數量
-            if (user && user.role === 'teacher' && user.institutionName) {
-                const snap = await getDocs(
-                    collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions", user.institutionName, "questions")
-                );
-                return snap.size;
-            }
-            // 開發者/主庫
-            const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "past_papers"));
-            return snap.size; 
+            const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "seed_questions"));
+            return snap.size;
         } catch (e) { console.error("Count Error:", e); return 0; }
     },
     
@@ -1471,6 +1491,29 @@ export const DB_SERVICE = {
         }
     },
 
+    fetchSeedQueue: async (statuses = ['DRAFT', 'AUDITED', 'REJECTED']) => {
+        try {
+            const q = query(
+                collection(db, "artifacts", APP_ID, "public", "data", "seed_questions"),
+                where("status", "in", statuses)
+            );
+            const snap = await getDocs(q);
+            const items = [];
+            snap.forEach(docSnap => {
+                items.push(normalizeQuestionRecord({ id: docSnap.id, ...docSnap.data() }));
+            });
+            items.sort((a, b) => {
+                const ta = new Date(a.createdAt || 0).getTime();
+                const tb = new Date(b.createdAt || 0).getTime();
+                return tb - ta;
+            });
+            return items;
+        } catch (e) {
+            console.error("❌ Fetch Seed Queue Error:", e);
+            return [];
+        }
+    },
+
     getFactoryStats: async () => {
         try {
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "past_papers"));
@@ -1685,6 +1728,56 @@ export const DB_SERVICE = {
         } catch (e) {
             console.error("❌ Update Question Status Error:", e);
             return false;
+        }
+    },
+
+    updateSeedQuestionStatus: async (questionId, updates = {}) => {
+        try {
+            if (!questionId) return false;
+            const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "seed_questions", questionId);
+            await updateDoc(questionRef, {
+                ...updates,
+                updatedAt: new Date().toISOString()
+            });
+            return true;
+        } catch (e) {
+            console.error("❌ Update Seed Question Status Error:", e);
+            return false;
+        }
+    },
+
+    deleteSeedQuestion: async (questionId) => {
+        try {
+            if (!questionId) return false;
+            await deleteDoc(doc(db, "artifacts", APP_ID, "public", "data", "seed_questions", questionId));
+            return true;
+        } catch (e) {
+            console.error("❌ Delete Seed Question Error:", e);
+            return false;
+        }
+    },
+
+    publishSeedToPool: async (seedQuestion = {}, overrides = {}) => {
+        try {
+            const { id, __collection, ...rest } = seedQuestion || {};
+            const now = new Date().toISOString();
+            const payload = normalizeQuestionRecord({
+                ...rest,
+                ...overrides,
+                origin: 'SEED',
+                status: 'PUBLISHED',
+                createdAt: rest.createdAt || now,
+                publishedAt: now,
+                updatedAt: now
+            });
+            const docRef = await addDoc(
+                collection(db, "artifacts", APP_ID, "public", "data", "past_papers"),
+                payload
+            );
+            return docRef.id;
+        } catch (e) {
+            console.error("❌ Publish Seed Error:", e);
+            return null;
         }
     },
 

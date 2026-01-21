@@ -29,14 +29,21 @@ export const QuestionSchema = z.object({
   mapData: z.record(z.any()).optional()
 }).passthrough();
 
-const toPrimitiveString = (value: unknown) => {
+const toPrimitiveString = (value: unknown): string => {
   if (value === null || value === undefined) return '';
-  if (typeof value === 'string' || typeof value === 'number') return value;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
   try {
     return JSON.stringify(value);
   } catch {
     return String(value);
   }
+};
+
+const toPrimitiveAnswer = (value: unknown): string | number => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number') return value;
+  return toPrimitiveString(value);
 };
 
 const padOptionsToEight = (options: Array<string | number>) => {
@@ -55,12 +62,13 @@ export const normalizeQuestion = (raw: unknown): Question => {
   const normalized: Partial<Question> & Record<string, unknown> = { ...base };
 
   if (!normalized.question) {
-    normalized.question = normalized.questionText
+    const fallback = normalized.questionText
       ?? normalized.stem
       ?? normalized.prompt
       ?? normalized.q_text
       ?? normalized.text
       ?? '';
+    normalized.question = toPrimitiveString(fallback);
   }
 
   if (!normalized.options) {
@@ -87,23 +95,23 @@ export const normalizeQuestion = (raw: unknown): Question => {
     }
 
     if (normalized.answer === undefined && normalized.correctAnswer !== undefined) {
-      normalized.answer = normalized.correctAnswer as unknown;
+      normalized.answer = toPrimitiveAnswer(normalized.correctAnswer);
     }
 
     if (normalized.answer === undefined && normalized.correctOption !== undefined) {
-      normalized.answer = normalized.correctOption as unknown;
+      normalized.answer = toPrimitiveAnswer(normalized.correctOption);
     }
 
     if (normalized.answer === undefined && normalized.correct !== undefined) {
-      normalized.answer = normalized.correct as unknown;
+      normalized.answer = toPrimitiveAnswer(normalized.correct);
     }
 
     if (normalized.answer === undefined && normalized.solution !== undefined) {
       const solution = normalized.solution as Record<string, unknown> | string | number;
       if (solution && typeof solution === 'object') {
-        normalized.answer = solution.answer ?? solution.value ?? solution.result ?? solution.solution ?? solution;
+        normalized.answer = toPrimitiveAnswer(solution.answer ?? solution.value ?? solution.result ?? solution.solution ?? solution);
       } else {
-        normalized.answer = solution as unknown;
+        normalized.answer = toPrimitiveAnswer(solution);
       }
     }
   }

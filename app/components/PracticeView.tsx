@@ -41,6 +41,12 @@ export default function PracticeView({
   const [translationLoading, setTranslationLoading] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [imageExpanded, setImageExpanded] = useState(false);
+  const [questionStartAt, setQuestionStartAt] = useState(Date.now());
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [hintUsedCount, setHintUsedCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
+  const [showHint, setShowHint] = useState(false);
+  const timerRef = useRef<number | null>(null);
   
   const getSubjectKey = () => {
     const subject = currentQuestion?.subject || 'math';
@@ -168,11 +174,30 @@ export default function PracticeView({
       setShowTranslation(false);
       setTranslationTarget(getDefaultTranslationTarget());
       setImageExpanded(false);
+      setHintUsedCount(0);
+      setRetryCount(0);
+      setShowHint(false);
+      setQuestionStartAt(Date.now());
+      setElapsedMs(0);
       if (isSpeechSynthesisSupported()) {
         window.speechSynthesis.cancel();
       }
     }
   }, [currentQuestion?.id]);
+
+  useEffect(() => {
+    if (!currentQuestion) return;
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = window.setInterval(() => {
+      setElapsedMs(Date.now() - questionStartAt);
+    }, 1000);
+    return () => {
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [currentQuestion?.id, questionStartAt]);
 
   useEffect(() => {
     if (!currentQuestion) return;
@@ -229,6 +254,7 @@ export default function PracticeView({
   const handleSpeak = () => { 
       if(currentQuestion) {
         setSpeechError('');
+        setHintUsedCount((prev) => prev + 1);
         const trySpeak = () => {
           const voiceName = resolveVoiceName(activeSpeechLang);
           if (!voiceName) {
@@ -256,6 +282,18 @@ export default function PracticeView({
         }
         trySpeak();
       }
+  };
+
+  const handleUseHint = () => {
+    setShowHint(true);
+    setHintUsedCount((prev) => prev + 1);
+  };
+
+  const formatElapsed = () => {
+    const totalSeconds = Math.floor(elapsedMs / 1000);
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return `${minutes}:${seconds}`;
   };
 
   const handleExitPractice = () => {
@@ -886,6 +924,10 @@ export default function PracticeView({
                     </button>
                   </div>
                 )}
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                  <span>計時</span>
+                  <span className="font-mono">{formatElapsed()}</span>
+                </div>
               </div>
               
               <div className="text-center">
@@ -1027,14 +1069,14 @@ export default function PracticeView({
                                 ? 'border-yellow-400 focus:border-yellow-600 bg-yellow-50 focus:bg-yellow-100' 
                                 : 'border-slate-200 focus:border-indigo-500'
                             }`} 
-                            onKeyDown={(e) => !loading && e.key === 'Enter' && userAnswer && checkAnswer()} 
+                            onKeyDown={(e) => !loading && e.key === 'Enter' && userAnswer && checkAnswer(userAnswer, { timeSpentMs: Date.now() - questionStartAt, hintUsedCount, retryCount })} 
                         />
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{currentQuestion.unit}</span>
                      </div>
                   )}
                   
                   <button 
-                    onClick={() => !loading && checkAnswer()} 
+                    onClick={() => !loading && checkAnswer(userAnswer, { timeSpentMs: Date.now() - questionStartAt, hintUsedCount, retryCount })} 
                     disabled={!userAnswer || loading} 
                     className={`w-full text-white font-bold py-4 px-6 rounded-xl shadow-lg transition transform active:scale-95 mt-2 disabled:cursor-not-allowed ${
                       adhdMode 
@@ -1090,29 +1132,40 @@ export default function PracticeView({
                           <div className="flex justify-center text-red-500 mb-2"><XCircle size={56} /></div>
                           <h4 className="text-2xl font-black text-red-700">再試試看！💪</h4>
                           
-                          <div className={`p-4 rounded-xl border text-left mt-2 relative overflow-hidden shadow-sm ${
+                        <div className={`p-4 rounded-xl border text-left mt-2 relative overflow-hidden shadow-sm ${
                             adhdMode 
                               ? 'bg-yellow-50 border-2 border-yellow-300' 
                               : 'bg-white border border-red-100'
                           }`}>
-                              <p className={`text-xs font-bold uppercase mb-1 flex items-center gap-1 ${
-                                adhdMode ? 'text-yellow-900' : 'text-slate-500'
-                              }`}>
-                                <CloudLightning size={12}/> AI 提示 (Hint):
-                              </p>
-                              <p className={`font-medium ${adhdMode ? 'text-yellow-900 text-lg' : 'text-slate-700'}`}>
-                                {adhdMode ? (
-                                  <span className="inline-block">
-                                    {highlightKeywords(currentQuestion.hint || '', currentQuestion.lang || 'zh-HK')}
-                                  </span>
-                                ) : (
-                                  currentQuestion.hint
-                                )}
-                              </p>
+                              <div className="flex items-center justify-between mb-2">
+                                <p className={`text-xs font-bold uppercase flex items-center gap-1 ${
+                                  adhdMode ? 'text-yellow-900' : 'text-slate-500'
+                                }`}>
+                                  <CloudLightning size={12}/> AI 提示 (Hint):
+                                </p>
+                                <button
+                                  onClick={() => !loading && handleUseHint()}
+                                  disabled={loading}
+                                  className="text-[11px] px-2 py-1 rounded bg-amber-100 text-amber-700 font-bold hover:bg-amber-200 disabled:opacity-60"
+                                >
+                                  顯示提示
+                                </button>
+                              </div>
+                              {showHint && (
+                                <p className={`font-medium ${adhdMode ? 'text-yellow-900 text-lg' : 'text-slate-700'}`}>
+                                  {adhdMode ? (
+                                    <span className="inline-block">
+                                      {highlightKeywords(currentQuestion.hint || '', currentQuestion.lang || 'zh-HK')}
+                                    </span>
+                                  ) : (
+                                    currentQuestion.hint
+                                  )}
+                                </p>
+                              )}
                           </div>
                           
                           <div className="flex gap-2 mt-4 flex-wrap">
-                            <button onClick={() => !loading && (setFeedback(null), setUserAnswer(''))} disabled={loading} className="flex-1 min-w-[100px] bg-white border border-slate-300 text-slate-600 px-3 py-3 rounded-xl font-bold hover:bg-slate-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                            <button onClick={() => !loading && (setFeedback(null), setUserAnswer(''), setRetryCount((prev) => prev + 1))} disabled={loading} className="flex-1 min-w-[100px] bg-white border border-slate-300 text-slate-600 px-3 py-3 rounded-xl font-bold hover:bg-slate-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                 <RefreshCw size={16} className="inline mr-1" /> 重試
                             </button>
                             <button onClick={() => !loading && setShowExplanation(true)} disabled={loading} className="flex-1 min-w-[100px] bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-3 rounded-xl font-bold hover:bg-indigo-200 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">

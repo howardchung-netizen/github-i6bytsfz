@@ -11,7 +11,7 @@ export const CURRENT_VISION_MODEL_NAME = "gemini-2.0-flash"; // 用於 Vision AP
 // Pro 模型比 Flash 模型有更好的推理能力，適合用於審計任務
 export const AUDITOR_MODEL_NAME = "gemini-2.5-pro"; // 審計員模型（已驗證可用）
 // 報告生成模型（高價值輸出，必須使用 Pro 等級）
-export const REPORT_MODEL_NAME = AUDITOR_MODEL_NAME;
+export const REPORT_MODEL_NAME = "gemini-1.5-pro";
 
 // RPM (Requests Per Minute) 速率限制配置
 // 當前使用：Gemini 2.0 Flash 免費版（RPM 15）
@@ -40,17 +40,6 @@ export const ADMIN_USER = {
     age: 30,
     isPremium: true // 測試帳號設為全權限模式
 };
-
-export const INITIAL_TOPICS = [
-  { id: 'p1_basic_add', name: '10以內的加法', term: '上學期', grade: 'P1', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['加法概念', '數手指'] },
-  { id: 'p1_basic_sub', name: '10以內的減法', term: '上學期', grade: 'P1', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['減法概念', '比較多少'] },
-  { id: 'p2_add_sub_2digit', name: '兩位數加減法', term: '上學期', grade: 'P2', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['不進位加法', '進位加法', '不退位減法', '退位減法'] },
-  { id: 'p3_multiplication', name: '多位數乘法', term: '上學期', grade: 'P3', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['兩位乘一位', '三位乘一位'] },
-  { id: 'p4_division_custom', name: '除法', term: '上學期', grade: 'P4', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['三位數除法'] },
-  { id: 'p4_perimeter', name: '周界 (Perimeter)', term: '上學期', grade: 'P4', subject: 'math', type: 'geometry', lang: 'zh-HK', subTopics: ['正方形周界', '長方形周界', '不規則圖形周界'] },
-  { id: 'p5_fractions_add_sub', name: '異分母分數加減', term: '上學期', grade: 'P5', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['通分', '擴分與約分', '異分母加減'] },
-  { id: 'p6_percentages', name: '百分數應用', term: '上學期', grade: 'P6', subject: 'math', type: 'arithmetic', lang: 'zh-HK', subTopics: ['百分數與分數互換', '折扣', '單利息'] },
-];
 
 export const SAMPLE_PAST_PAPERS = [
   {

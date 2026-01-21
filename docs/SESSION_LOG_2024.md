@@ -2,6 +2,69 @@
 
 ## 📋 今天完成的主要工作
 
+### 36. ✅ 種子檢驗工作台與異常警示補強
+**功能**：
+- Factory 審核隊列支援 Split View 檢視：原圖 + 可編輯表單
+- 子單元可編輯（下拉或手動輸入）
+- 列表層級新增「答案存疑」Badge
+- UPLOAD 審核流程新增自我驗證與 mismatch 紀錄
+
+**相關文件**：
+- `app/components/admin/FactoryDashboard.tsx` - Seed Inspection Mode + UI 補強
+- `app/api/factory/audit/route.ts` - mismatch 判斷與 auditMeta.answerCheck
+- `app/lib/auditor-service.js` - UPLOAD 審核提示詞與 ai_answer 回傳
+
+---
+
+### 35. ✅ 核心憲法補檔 + 種子進貨檢驗落地
+**功能**：
+- 新增 `CORE_LOGIC.md`，正式記錄 Factory Pattern 與調度憲法
+- 種子上傳寫入 `origin/source/status`，審核隊列支援來源分區與篩選
+- 審核流程依 `origin` 分流 Prompt（UPLOAD vs AI_GEN）
+- 報告生成 Prompt 改為「教育者/觀察者」雙人設，並固定 Pro 模型設定
+
+**相關文件**：
+- `docs/CORE_LOGIC.md` - 核心規範文件
+- `app/components/admin/FactoryDashboard.tsx` - Incoming Seeds UI
+- `app/lib/db-service.js` - seed 上傳欄位補齊
+- `app/api/factory/audit/route.ts` / `app/lib/auditor-service.js` - 審核分流
+- `services/report-generator.ts` / `app/api/chat/route.ts` - 報告 Prompt 與模型設定
+
+---
+
+### 34. ✅ 後台單元/種子上傳修復與 PDF 解析強化
+**功能**：
+- 移除寫死單元與預設合併邏輯，單元只讀取 Firestore
+- 修正 admin/匿名登入狀態分離，避免顯示開發者介面但無寫入權限
+- 單元新增錯誤訊息回報（顯示 Firestore 實際錯誤）
+- 種子上傳新增「指定子單元」選擇，寫入 `subTopic`
+- PDF 轉圖流程補強：模組載入保護、worker fallback、錯誤提示
+
+**相關文件**：
+- `app/page.tsx` - admin 登入狀態修正
+- `app/lib/constants.js` - 移除寫死單元
+- `app/lib/db-service.js` - 錯誤回報機制（lastError）
+- `app/components/admin/SyllabusView.tsx` - 單元新增錯誤提示
+- `app/components/admin/FactoryDashboard.tsx` - 子單元指定與 PDF 解析強化
+
+---
+
+### 33. ✅ 開發者後台重構完成 + Build 型別修復
+**功能**：
+- DeveloperView 拆分完成：`SyllabusView` / `FactoryDashboard` / `AnalyticsView` / `SystemLogs`
+- Factory 與種子上傳/審核邏輯移出主檔，維護性提升
+- 修正 build 型別錯誤：`question-schema` 正規化與 `pdfjs-dist` 型別宣告補齊
+
+**相關文件**：
+- `app/components/DeveloperView.tsx` - 主視圖接線與精簡
+- `app/components/admin/SyllabusView.tsx` - 課程單元管理拆分
+- `app/components/admin/FactoryDashboard.tsx` - 工廠/上傳/審核拆分
+- `app/components/admin/AnalyticsView.tsx` / `SystemLogs.tsx` - 後台總覽/日誌拆分
+- `app/lib/question-schema.ts` / `pdfjs-dist.d.ts` - build 型別修復
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md` - 架構更新
+
+---
+
 ### 32. ✅ 練習/AI 試卷支援子單元選擇
 **功能**：
 - 練習題目與「開始 AI 試卷」的單元選擇支援子單元篩選

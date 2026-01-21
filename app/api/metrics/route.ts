@@ -1,16 +1,51 @@
 import { NextResponse } from 'next/server';
-import { collection, collectionGroup, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { getAdminDb } from '../../lib/firebase-admin';
 import { APP_ID } from '../../lib/constants';
 
 export const dynamic = 'force-dynamic';
 
 const toIsoDate = (date: Date) => date.toISOString();
-const getDateKey = (value: string | Date | null | undefined) => {
+const toDate = (value: any): Date | null => {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) return value;
+  if (typeof value?.toDate === 'function') return value.toDate();
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+};
+
+const getDateKey = (value: string | Date | null | undefined) => {
+  const date = toDate(value);
+  if (!date) return null;
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString().slice(0, 10);
+};
+
+const isFailedPrecondition = (error: any) =>
+  error?.code === 9 || error?.code === 'failed-precondition';
+
+const safeQuery = async (
+  label: string,
+  run: () => Promise<FirebaseFirestore.QuerySnapshot>,
+  fallback: () => Promise<FirebaseFirestore.QuerySnapshot>
+) => {
+  try {
+    return { snap: await run(), filtered: true };
+  } catch (error: any) {
+    if (isFailedPrecondition(error)) {
+      console.warn(`Metrics API: fallback to unfiltered query for ${label} due to missing index.`);
+      try {
+        return { snap: await fallback(), filtered: false };
+      } catch (fallbackError: any) {
+        console.warn(`Metrics API: fallback failed for ${label}.`, fallbackError);
+        const emptySnap = { forEach: () => {} } as unknown as FirebaseFirestore.QuerySnapshot;
+        return { snap: emptySnap, filtered: false };
+      }
+    }
+    throw error;
+  }
 };
 
 export async function GET() {
@@ -20,33 +55,55 @@ export async function GET() {
     startDate.setDate(now.getDate() - 29);
     const startIso = toIsoDate(startDate);
 
-    const visitQuery = query(
-      collection(db, 'artifacts', APP_ID, 'public', 'data', 'visit_logs'),
-      where('createdAt', '>=', startIso)
-    );
-    const userQuery = query(
-      collection(db, 'artifacts', APP_ID, 'public', 'data', 'users'),
-      where('createdAt', '>=', startIso)
-    );
-    const userAllQuery = query(
-      collection(db, 'artifacts', APP_ID, 'public', 'data', 'users')
-    );
-    const usageQuery = query(
-      collectionGroup(db, 'question_usage'),
-      where('createdAt', '>=', startIso)
-    );
-    const paperQuery = query(
-      collection(db, 'artifacts', APP_ID, 'public', 'data', 'past_papers'),
-      where('createdAt', '>=', startIso)
-    );
+    const adminDb = getAdminDb();
+    const visitQuery = adminDb
+      .collection('artifacts')
+      .doc(APP_ID)
+      .collection('public')
+      .doc('data')
+      .collection('visit_logs');
+    const userQuery = adminDb
+      .collection('artifacts')
+      .doc(APP_ID)
+      .collection('public')
+      .doc('data')
+      .collection('users');
+    const usageQuery = adminDb.collectionGroup('question_usage');
+    const paperQuery = adminDb
+      .collection('artifacts')
+      .doc(APP_ID)
+      .collection('public')
+      .doc('data')
+      .collection('past_papers');
 
-    const [visitSnap, userSnap, userAllSnap, usageSnap, paperSnap] = await Promise.all([
-      getDocs(visitQuery),
-      getDocs(userQuery),
-      getDocs(userAllQuery),
-      getDocs(usageQuery),
-      getDocs(paperQuery)
+    const [visitResult, userResult, userAllSnap, usageResult, paperResult] = await Promise.all([
+      safeQuery(
+        'visit_logs',
+        () => visitQuery.where('createdAt', '>=', startIso).get(),
+        () => visitQuery.get()
+      ),
+      safeQuery(
+        'users_recent',
+        () => userQuery.where('createdAt', '>=', startIso).get(),
+        () => userQuery.get()
+      ),
+      userQuery.get(),
+      safeQuery(
+        'question_usage',
+        () => usageQuery.where('createdAt', '>=', startIso).get(),
+        () => usageQuery.get()
+      ),
+      safeQuery(
+        'past_papers',
+        () => paperQuery.where('createdAt', '>=', startIso).get(),
+        () => paperQuery.get()
+      )
     ]);
+
+    const visitSnap = visitResult.snap;
+    const userSnap = userResult.snap;
+    const usageSnap = usageResult.snap;
+    const paperSnap = paperResult.snap;
 
     let visitCount = 0;
     let webVisitCount = 0;
@@ -56,7 +113,10 @@ export async function GET() {
     visitSnap.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const platform = data.platform || 'web';
-      const dateKey = getDateKey(data.createdAt);
+      const createdAt = toDate(data.createdAt);
+      if (!createdAt) return;
+      if (!visitResult.filtered && createdAt < startDate) return;
+      const dateKey = getDateKey(createdAt);
       visitCount += 1;
       if (platform === 'tablet') {
         tabletVisitCount += 1;
@@ -85,7 +145,10 @@ export async function GET() {
     userSnap.forEach((docSnap) => {
       const data = docSnap.data() || {};
       const platform = data.platform || 'web';
-      const dateKey = getDateKey(data.createdAt);
+      const createdAt = toDate(data.createdAt);
+      if (!createdAt) return;
+      if (!userResult.filtered && createdAt < startDate) return;
+      const dateKey = getDateKey(createdAt);
       const role = data.role || 'other';
       roleCounts[role] = (roleCounts[role] || 0) + 1;
       newUserCount += 1;
@@ -133,7 +196,10 @@ export async function GET() {
 
     usageSnap.forEach((docSnap) => {
       const data = docSnap.data() || {};
-      const createdAt = data.createdAt ? new Date(data.createdAt).getTime() : null;
+      const createdAtDate = toDate(data.createdAt);
+      if (!createdAtDate) return;
+      if (!usageResult.filtered && createdAtDate < startDate) return;
+      const createdAt = createdAtDate.getTime();
       const userId = docSnap.ref.parent.parent?.id;
       if (!userId || !createdAt) return;
       monthlyUsers.add(userId);
@@ -144,7 +210,10 @@ export async function GET() {
     let genCount = 0;
     paperSnap.forEach((docSnap) => {
       const data = docSnap.data() || {};
-      const dateKey = getDateKey(data.createdAt);
+      const createdAt = toDate(data.createdAt);
+      if (!createdAt) return;
+      if (!paperResult.filtered && createdAt < startDate) return;
+      const dateKey = getDateKey(createdAt);
       genCount += 1;
       if (dateKey) {
         if (!dailyMap[dateKey]) {

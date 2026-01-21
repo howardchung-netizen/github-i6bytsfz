@@ -44,6 +44,10 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
   };
 
   const handleAddTopic = async () => {
+     if (!isFirebaseReady) {
+         alert("Firebase is not ready. Please try again later.");
+         return;
+     }
      const topicToAdd = { 
          name: newTopic.name, grade: newTopic.grade, term: newTopic.term, subject: 'eng', 
          type: 'text', lang: 'en', 
@@ -59,7 +63,9 @@ export default function EnglishDeveloperView({ topics, setTopics, setView, isFir
          setNewTopic({...newTopic, name: ''});
          setSubTopics([]);
      } else {
-         alert("Failed to add, please check connection.");
+         const error = DB_SERVICE.getLastError?.();
+         const message = error?.message || error?.code || "Unknown error";
+         alert(`Failed to add, please check connection.\n${message}`);
      }
   };
 

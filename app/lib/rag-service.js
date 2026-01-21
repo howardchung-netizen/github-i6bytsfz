@@ -33,7 +33,12 @@ export const RAG_SERVICE = {
                 limit(50)
             );
             const mainSnap = await getDocs(mainQuery);
-            mainSnap.forEach(d => papers.push({ id: d.id, source: 'main_db', ...d.data() }));
+            mainSnap.forEach(d => {
+                const data = d.data() || {};
+                const status = data.status || 'PUBLISHED';
+                if (status !== 'PUBLISHED') return;
+                papers.push({ id: d.id, source: 'main_db', ...data, status });
+            });
             
             // 2. 如果是教學者，同時查詢機構專用庫
             if (user && user.role === 'teacher' && user.institutionName) {
@@ -44,7 +49,12 @@ export const RAG_SERVICE = {
                         limit(50)
                     );
                     const teacherSnap = await getDocs(teacherQuery);
-                    teacherSnap.forEach(d => papers.push({ id: d.id, source: 'teacher_db', institutionName: user.institutionName, ...d.data() }));
+                    teacherSnap.forEach(d => {
+                        const data = d.data() || {};
+                        const status = data.status || 'PUBLISHED';
+                        if (status !== 'PUBLISHED') return;
+                        papers.push({ id: d.id, source: 'teacher_db', institutionName: user.institutionName, ...data, status });
+                    });
                 } catch (e) {
                     console.error("Fetch Teacher Seed Questions Error:", e);
                     // 如果機構庫不存在或查詢失敗，繼續使用主庫

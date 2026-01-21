@@ -31,7 +31,7 @@ beforeEach(() => {
   global.fetch = vi.fn();
 });
 
-describe('AI_SERVICE.generateQuestion', () => {
+describe('AI_SERVICE.generateQuestionDirect', () => {
   it('標準格式：直接回傳正確題目', async () => {
     const items = [
       { question: 'Q1', answer: 'A', options: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], type: 'mcq' },
@@ -41,7 +41,7 @@ describe('AI_SERVICE.generateQuestion', () => {
     // @ts-expect-error - mock fetch
     global.fetch.mockResolvedValue(buildResponse(items));
 
-    const q = await AI_SERVICE.generateQuestion('P4', 'normal', ['t1'], topics, 'math', { institutionName: '' });
+    const q = await AI_SERVICE.generateQuestionDirect('P4', 'normal', ['t1'], topics, 'math', { institutionName: '' });
     expect(q.question).toBe('Q1');
     expect(q.answer).toBe('A');
     expect(q.options?.length).toBe(8);
@@ -56,7 +56,7 @@ describe('AI_SERVICE.generateQuestion', () => {
     // @ts-expect-error - mock fetch
     global.fetch.mockResolvedValue(buildResponse(items));
 
-    const q = await AI_SERVICE.generateQuestion('P4', 'normal', ['t2'], topics, 'math', { institutionName: '' });
+    const q = await AI_SERVICE.generateQuestionDirect('P4', 'normal', ['t2'], topics, 'math', { institutionName: '' });
     expect(q.question).toBe('AliasQ1');
     expect(q.answer).toBe('Y');
     expect(q.options?.length).toBe(8);
@@ -71,7 +71,7 @@ describe('AI_SERVICE.generateQuestion', () => {
     // @ts-expect-error - mock fetch
     global.fetch.mockResolvedValue(buildResponse(items));
 
-    const q = await AI_SERVICE.generateQuestion('P4', 'normal', ['t3'], topics, 'math', { institutionName: '' });
+    const q = await AI_SERVICE.generateQuestionDirect('P4', 'normal', ['t3'], topics, 'math', { institutionName: '' });
     expect(q.question).toBe('FewOptionsQ1');
     expect(q.options?.length).toBe(1);
   });

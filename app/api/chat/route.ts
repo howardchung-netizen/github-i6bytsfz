@@ -3,7 +3,7 @@ import { CURRENT_MODEL_NAME } from '../../lib/constants';
 
 export async function POST(request: Request) {
   try {
-    const { message, model } = await request.json();
+    const { message, model, generationConfig } = await request.json();
 
     // 👇 從環境變數讀取 API Key（安全性最佳實踐）
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
@@ -41,7 +41,8 @@ export async function POST(request: Request) {
                   { text: message }
                 ]
               }
-            ]
+            ],
+            generationConfig: generationConfig || undefined
           }),
           // 設定超時時間（30秒）
           signal: AbortSignal.timeout(30000)
