@@ -136,6 +136,15 @@ export default function FactoryDashboard({
     [filteredUnauditedQueue]
   );
 
+  const seedQueueStats = useMemo(() => {
+    const seedItems = factoryQueue.filter(q => (q.origin || 'AI_GEN') === 'SEED');
+    const auditedCount = seedItems.filter(q => q.auditMeta).length;
+    return {
+      total: seedItems.length,
+      audited: auditedCount
+    };
+  }, [factoryQueue]);
+
   const modalTopicOptions = useMemo(() => {
     const grade = inspectionForm.grade || inspectionItem?.grade || 'P4';
     const subject = inspectionItem?.subject || 'math';
@@ -365,7 +374,16 @@ export default function FactoryDashboard({
           throw new Error(data?.error || 'Publish failed');
         }
       }
-      await loadFactoryQueue();
+      setFactoryQueue(prev => {
+        const next = prev.filter(q => q.id !== item.id);
+        const nextDraftCount = next.filter(q => (q.status || 'DRAFT') === 'DRAFT').length;
+        setFactoryStats(prevStats => ({
+          ...prevStats,
+          draftCount: nextDraftCount,
+          publishedCount: (prevStats.publishedCount || 0) + 1
+        }));
+        return next;
+      });
       await loadFactoryStock();
     } catch (e) {
       console.error("Factory Publish Error:", e);
@@ -392,6 +410,7 @@ export default function FactoryDashboard({
       setFactoryDiscardLoading(prev => ({ ...prev, [item.id]: false }));
     }
   };
+
 
   const openInspection = (item) => {
     if (!item) return;
@@ -1097,7 +1116,8 @@ export default function FactoryDashboard({
                         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-600 bg-white">{subject}</summary>
                         <div className="px-3 py-2 space-y-2">
                           {subjectTopics.map((topic) => {
-                            const stock = factoryStockMap[topic.id]?.total ?? factoryStockMap[topic.name]?.total ?? 0;
+                            const stockEntry = factoryStockMap[topic.id] || factoryStockMap[topic.name] || { total: 0, seed: 0, ai: 0, subTopics: {} };
+                            const stock = stockEntry.total || 0;
                             const stockColor = stock < 10 ? 'text-red-600' : stock > 50 ? 'text-emerald-600' : 'text-slate-600';
                             const topicKey = `topic-${topic.id}`;
                             const topicSelected = factorySelections[topicKey]?.selected;
@@ -1125,7 +1145,9 @@ export default function FactoryDashboard({
                                       }}
                                     />
                                     <div className="text-sm font-semibold text-slate-700">{topic.name}</div>
-                                    <div className={`text-xs font-semibold ${stockColor}`}>庫存 {stock}</div>
+                                    <div className={`text-xs font-semibold ${stockColor}`}>
+                                      庫存 {stock}（種子 {stockEntry.seed || 0} / AI {stockEntry.ai || 0}）
+                                    </div>
                                   </div>
                                   <input
                                     type="number"
@@ -1146,9 +1168,10 @@ export default function FactoryDashboard({
                                   <div className="mt-2 space-y-1">
                                     {topic.subTopics.map((st) => {
                                       const subKey = `sub-${topic.id}-${st}`;
-                                      const subCount = factoryStockMap[topic.id]?.subTopics?.[st]
+                                      const subEntry = factoryStockMap[topic.id]?.subTopics?.[st]
                                         ?? factoryStockMap[topic.name]?.subTopics?.[st]
-                                        ?? 0;
+                                        ?? { total: 0, seed: 0, ai: 0 };
+                                      const subCount = subEntry.total || 0;
                                       const subColor = subCount < 10 ? 'text-red-600' : subCount > 50 ? 'text-emerald-600' : 'text-slate-500';
                                       const subSelected = factorySelections[subKey]?.selected;
                                       return (
@@ -1174,7 +1197,9 @@ export default function FactoryDashboard({
                                               }}
                                             />
                                             <div className="text-xs text-slate-600">{st}</div>
-                                            <div className={`text-[11px] font-semibold ${subColor}`}>庫存 {subCount}</div>
+                                            <div className={`text-[11px] font-semibold ${subColor}`}>
+                                              庫存 {subCount}（種子 {subEntry.seed || 0} / AI {subEntry.ai || 0}）
+                                            </div>
                                           </div>
                                           <input
                                             type="number"
@@ -1268,7 +1293,14 @@ export default function FactoryDashboard({
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-                    <div className="font-semibold text-slate-700 mb-2">⬅️ 待審核區</div>
+                    <div className="font-semibold text-slate-700 mb-2">
+                      ⬅️ 待審核區
+                      {(originFilter === 'ALL' || originFilter === 'SEED') && seedQueueStats.total > 0 && (
+                        <span className="ml-2 text-xs text-slate-500">
+                          （已審核 {seedQueueStats.audited}/{seedQueueStats.total}）
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500 mb-2 flex items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 font-semibold">
                         📥 人工上傳：{incomingSeedQueue.length}
@@ -1373,6 +1405,9 @@ export default function FactoryDashboard({
                                 選項：{q.options.filter(Boolean).slice(0, 8).join(' / ')}
                               </div>
                             )}
+                            <div className="text-xs text-slate-500 mb-2">
+                              分類：{q.topic || '未分類'}{q.subTopic ? ` / ${q.subTopic}` : ' / —'}
+                            </div>
                             <div className="text-xs text-slate-500">答案：{q.answer}</div>
                           </div>
                           <div className="flex flex-col gap-2 min-w-[140px]">

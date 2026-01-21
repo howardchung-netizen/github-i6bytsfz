@@ -1564,12 +1564,20 @@ export const DB_SERVICE = {
                 const data = docSnap.data() || {};
                 const topicKey = data.topic_id || data.topicId || data.topic || 'unknown';
                 if (!counts[topicKey]) {
-                    counts[topicKey] = { total: 0, subTopics: {} };
+                    counts[topicKey] = { total: 0, seed: 0, ai: 0, subTopics: {} };
                 }
                 counts[topicKey].total += 1;
+                const origin = data.origin || 'AI_GEN';
+                if (origin === 'SEED') counts[topicKey].seed += 1;
+                else counts[topicKey].ai += 1;
                 const subTopic = data.subTopic || data.sub_topic || data.subtopic || null;
                 if (subTopic) {
-                    counts[topicKey].subTopics[subTopic] = (counts[topicKey].subTopics[subTopic] || 0) + 1;
+                    if (!counts[topicKey].subTopics[subTopic]) {
+                        counts[topicKey].subTopics[subTopic] = { total: 0, seed: 0, ai: 0 };
+                    }
+                    counts[topicKey].subTopics[subTopic].total += 1;
+                    if (origin === 'SEED') counts[topicKey].subTopics[subTopic].seed += 1;
+                    else counts[topicKey].subTopics[subTopic].ai += 1;
                 }
             };
 
