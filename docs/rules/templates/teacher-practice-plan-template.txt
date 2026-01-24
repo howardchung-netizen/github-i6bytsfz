@@ -1,0 +1,7 @@
+AI 老師練習學程 提示詞 填寫表
+
+練習學程 提示詞內容
+請在內容中放入以下插入點代碼
+STRONG_TOPICS
+WEAK_TOPICS
+ERROR_PATTERN

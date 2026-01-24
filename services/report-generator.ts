@@ -1,10 +1,20 @@
 import { QuestionUsage } from '../app/lib/types/usage';
 import { REPORT_MODEL_NAME } from '../app/lib/constants';
+import { REPORT_GENERATION_RULES, TEACHER_PRACTICE_PLAN_RULES } from '../app/lib/logic-rules';
 
 export type ReportMode = 'EDUCATOR' | 'OBSERVER';
 
 export interface AnalysisData {
   usages: QuestionUsage[];
+}
+
+export interface ReportContent {
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  nextPhasePlan: string;
+  medicalRecord?: string;
 }
 
 const formatPercent = (value: number) => Math.round(value);
@@ -72,38 +82,114 @@ const computeStats = (usages: QuestionUsage[]) => {
   };
 };
 
-const buildEducatorPrompt = (data: ReturnType<typeof computeStats>) => `
-You are an experienced, empathetic primary school teacher. Your goal is to encourage the student. Focus on their effort and progress. Use warm, supportive language (Cantonese style written Chinese). Avoid technical jargon. Even if the score is low, find a highlight to praise. Structure the feedback as: 1. Encouragement, 2. Key Strength, 3. One gentle suggestion for improvement.
+const fillTemplate = (template: string, data: Record<string, string | number>) => {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const value = data[key];
+    return value === undefined || value === null ? '' : String(value);
+  });
+};
+
+const buildEducatorPrompt = (data: ReturnType<typeof computeStats>) => {
+  const template = REPORT_GENERATION_RULES?.educator?.promptTemplate;
+  const fallback = `
+You are an experienced primary school teacher. This report is for a normal student (no learning difficulties). Evaluate the last 14 days of performance and create a concrete 2-week curriculum plan.
+Use warm, supportive Cantonese-style Traditional Chinese. Avoid technical jargon.
+
+Return JSON ONLY in Traditional Chinese with this structure:
+{
+  "summary": "string",
+  "strengths": ["string", "string"],
+  "weaknesses": ["string", "string"],
+  "recommendations": ["string", "string", "string"],
+  "nextPhasePlan": "string (2-week curriculum plan)"
+}
 
 Data Summary:
-- Average Time per Question: ${data.avgTimeSec}s
-- Hint Usage Rate: ${data.hintRate}%
-- Retry Rate: ${data.retryRate}%
-- Strong Topics: ${data.strongTopics}
-- Weak Topics: ${data.weakTopics}
-- Error Pattern: ${data.errorPattern}
+- Average Time per Question: {{avgTimeSec}}s
+- Hint Usage Rate: {{hintRate}}%
+- Retry Rate: {{retryRate}}%
+- Strong Topics: {{strongTopics}}
+- Weak Topics: {{weakTopics}}
+- Error Pattern: {{errorPattern}}
 `.trim();
+  return fillTemplate(template || fallback, data as Record<string, string | number>);
+};
 
-const buildObserverPrompt = (data: ReturnType<typeof computeStats>) => `
-You are an educational data scientist and auditor. Your goal is to diagnose the student's learning gaps based strictly on the data. Be precise, concise, and clinical. No emotional fluff. Identify: 1. Error Patterns (e.g., 'Careless calculation' vs 'Concept misunderstanding'), 2. Specific weak topics, 3. Recommended intervention. Use professional, analytical language.
+const buildObserverPrompt = (data: ReturnType<typeof computeStats>) => {
+  const template = REPORT_GENERATION_RULES?.observer?.promptTemplate;
+  const fallback = `
+You are an educational clinician. Assume the student may have learning difficulties or attention deficits. Provide a formal learning record for a real doctor to reference. Be precise, concise, and clinical.
+
+Return JSON ONLY in Traditional Chinese with this structure:
+{
+  "summary": "string",
+  "strengths": ["string", "string"],
+  "weaknesses": ["string", "string"],
+  "recommendations": ["string", "string", "string"],
+  "medicalRecord": "string (formal learning record)",
+  "nextPhasePlan": "string (follow-up plan or referral suggestion)"
+}
 
 Data Summary:
-- Average Time: ${data.avgTimeSec}s
-- Hint Usage Rate: ${data.hintRate}%
-- Retry Rate: ${data.retryRate}%
-- Weak Topics: ${data.weakTopics}
-- Error Pattern: ${data.errorPattern}
-- Consistency (Time Variance): ${data.timeVariance}
+- Average Time: {{avgTimeSec}}s
+- Hint Usage Rate: {{hintRate}}%
+- Retry Rate: {{retryRate}}%
+- Weak Topics: {{weakTopics}}
+- Error Pattern: {{errorPattern}}
+- Consistency (Time Variance): {{timeVariance}}
 `.trim();
+  return fillTemplate(template || fallback, data as Record<string, string | number>);
+};
 
-export const generateReport = async (userId: string, mode: ReportMode, data: AnalysisData) => {
+export const buildPracticePlanPrompt = (data: ReturnType<typeof computeStats>) => {
+  const template = TEACHER_PRACTICE_PLAN_RULES?.promptTemplate;
+  if (!template) return '';
+  return fillTemplate(template, data as Record<string, string | number>);
+};
+
+const normalizeList = (value: unknown, fallback: string[]) => {
+  if (Array.isArray(value)) {
+    const cleaned = value.map(v => String(v || '').trim()).filter(Boolean);
+    return cleaned.length > 0 ? cleaned : fallback;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+  return fallback;
+};
+
+const parseReportJson = (text: string): ReportContent | null => {
+  try {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return null;
+    let cleanText = trimmed.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanText = jsonMatch[0];
+    }
+    const parsed = JSON.parse(cleanText);
+    return {
+      summary: String(parsed?.summary || '').trim() || '（無摘要）',
+      strengths: normalizeList(parsed?.strengths, ['（未提供）']),
+      weaknesses: normalizeList(parsed?.weaknesses, ['（未提供）']),
+      recommendations: normalizeList(parsed?.recommendations, ['（未提供）']),
+      nextPhasePlan: String(parsed?.nextPhasePlan || '').trim() || '（未提供）',
+      medicalRecord: String(parsed?.medicalRecord || '').trim() || ''
+    };
+  } catch (error) {
+    console.error('Report JSON parse failed:', error);
+    return null;
+  }
+};
+
+export const generateReport = async (userId: string, mode: ReportMode, data: AnalysisData): Promise<ReportContent> => {
   const stats = computeStats(data.usages || []);
   const prompt = mode === 'OBSERVER'
     ? buildObserverPrompt(stats)
     : buildEducatorPrompt(stats);
 
   const modelConfig = {
-    model: "gemini-1.5-pro",
+    model: REPORT_MODEL_NAME,
     temperature: 0.3,
     topP: 0.8,
     maxOutputTokens: 2048
@@ -118,7 +204,8 @@ export const generateReport = async (userId: string, mode: ReportMode, data: Ana
       generationConfig: {
         temperature: modelConfig.temperature,
         topP: modelConfig.topP,
-        maxOutputTokens: modelConfig.maxOutputTokens
+        maxOutputTokens: modelConfig.maxOutputTokens,
+        responseMimeType: "application/json"
       }
     })
   });
@@ -127,5 +214,15 @@ export const generateReport = async (userId: string, mode: ReportMode, data: Ana
   if (!response.ok) {
     throw new Error(result?.error || 'Report generation failed');
   }
-  return String(result?.response || '').trim();
+  const rawText = String(result?.response || '').trim();
+  const parsed = parseReportJson(rawText);
+  if (parsed) return parsed;
+
+  return {
+    summary: rawText || '（無摘要）',
+    strengths: ['（未提供）'],
+    weaknesses: ['（未提供）'],
+    recommendations: ['（未提供）'],
+    nextPhasePlan: '（未提供）'
+  };
 };

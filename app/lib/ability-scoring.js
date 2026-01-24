@@ -4,6 +4,7 @@
  */
 
 import { getAbilityFromUnit } from './ability-mapping';
+import { getAbilityScoringRules } from './logic-rules';
 
 /**
  * 分類題目屬於哪個能力維度（支持數學、中文、英文科）
@@ -194,6 +195,11 @@ function classifyEnglishAbility(question, questionText, topic) {
  * 獲取默認能力維度
  */
 function getDefaultAbility(subject) {
+  const rules = getAbilityScoringRules();
+  const subjectRules = rules?.subjects?.[subject];
+  if (subjectRules?.defaultAbility) {
+    return subjectRules.defaultAbility;
+  }
   const defaults = {
     math: '運算',
     chi: '文法',
@@ -211,32 +217,11 @@ function getDefaultAbility(subject) {
  * @returns {Object} 更新後的能力分數對象
  */
 export function calculateAbilityScores(sessionQuestions, subject, currentScores, topics = null) {
-  // 定義各科目的能力維度映射
-  const abilityMap = {
-    math: {
-      '運算': '運算',
-      '幾何': '幾何',
-      '邏輯': '邏輯',
-      '應用題': '應用題',
-      '數據': '數據'
-    },
-    chi: {
-      '閱讀': '閱讀',
-      '寫作': '寫作',
-      '成語': '成語',
-      '文法': '文法',
-      '修辭': '修辭'
-    },
-    eng: {
-      'Grammar': 'Grammar',
-      'Vocab': 'Vocab',
-      'Reading': 'Reading',
-      'Listening': 'Listening',
-      'Speaking': 'Speaking'
-    }
-  };
-  
-  const abilities = abilityMap[subject] || abilityMap.math;
+  const rules = getAbilityScoringRules();
+  const abilityList = rules?.subjects?.[subject]?.abilities;
+  const abilities = Array.isArray(abilityList) && abilityList.length > 0
+    ? abilityList.reduce((acc, ability) => ({ ...acc, [ability]: ability }), {})
+    : { '運算': '運算', '幾何': '幾何', '邏輯': '邏輯', '應用題': '應用題', '數據': '數據' };
   const newScores = { ...currentScores };
   
   // 初始化每個能力的分數變化
@@ -245,6 +230,11 @@ export function calculateAbilityScores(sessionQuestions, subject, currentScores,
     changes[ability] = 0;
   });
   
+  const scoringRules = rules?.scoring || {};
+  const correctBase = typeof scoringRules.correctBase === 'number' ? scoringRules.correctBase : 2;
+  const incorrectBase = typeof scoringRules.incorrectBase === 'number' ? scoringRules.incorrectBase : -1;
+  const applyDifficulty = scoringRules.difficultyMultiplier !== false;
+
   // 遍歷試卷中的所有題目
   sessionQuestions.forEach(question => {
     // 使用統一分類函數（支持所有科目）
@@ -259,18 +249,22 @@ export function calculateAbilityScores(sessionQuestions, subject, currentScores,
     const difficulty = question.difficulty || 1; // 1=簡單, 1.5=中等, 2=困難
     
     // 計算分數變化
+    const multiplier = applyDifficulty ? difficulty : 1;
+
     if (isCorrect) {
-      changes[ability] += 2 * difficulty;
+      changes[ability] += correctBase * multiplier;
     } else {
-      changes[ability] -= 1 * difficulty;
+      changes[ability] += incorrectBase * multiplier;
     }
   });
   
   // 更新能力分數（限制在 0-100 範圍內）
+  const minScore = typeof rules?.scoring?.minScore === 'number' ? rules.scoring.minScore : 0;
+  const maxScore = typeof rules?.scoring?.maxScore === 'number' ? rules.scoring.maxScore : 100;
   Object.keys(abilities).forEach(ability => {
     const currentScore = newScores[ability] || 50;
     const change = changes[ability] || 0;
-    newScores[ability] = Math.max(0, Math.min(100, currentScore + change));
+    newScores[ability] = Math.max(minScore, Math.min(maxScore, currentScore + change));
   });
   
   return newScores;
@@ -283,13 +277,10 @@ export function calculateAbilityScores(sessionQuestions, subject, currentScores,
  * @returns {Array} 雷達圖數據數組
  */
 export function formatScoresForRadar(scores, subject) {
-  const abilityMap = {
-    math: ['運算', '幾何', '邏輯', '應用題', '數據'],
-    chi: ['閱讀', '寫作', '成語', '文法', '修辭'],
-    eng: ['Grammar', 'Vocab', 'Reading', 'Listening', 'Speaking']
-  };
-  
-  const abilities = abilityMap[subject] || abilityMap.math;
+  const rules = getAbilityScoringRules();
+  const abilities = rules?.subjects?.[subject]?.abilities
+    || rules?.subjects?.math?.abilities
+    || ['運算', '幾何', '邏輯', '應用題', '數據'];
   
   return abilities.map(ability => ({
     subject: ability,

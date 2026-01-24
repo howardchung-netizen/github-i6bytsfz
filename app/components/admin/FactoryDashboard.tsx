@@ -492,6 +492,44 @@ export default function FactoryDashboard({
     setInspectionItem(null);
   };
 
+  const normalizeText = (value: any) => String(value ?? '').trim();
+  const findSyllabusTopic = (grade: string, subject: string, topicName: string) => {
+    if (!topicName) return null;
+    return topics.find(t =>
+      t.grade === grade
+      && t.subject === subject
+      && (t.name === topicName || t.topic === topicName)
+    ) || null;
+  };
+
+  const validateSuggestedClassification = (item: any, suggestedTopic?: string, suggestedSubTopic?: string) => {
+    const grade = normalizeText(item?.grade || inspectionForm.grade);
+    const subject = normalizeText(item?.subject || inspectionForm.subject || 'math');
+    const cleanedTopic = normalizeText(suggestedTopic);
+    const cleanedSubTopic = normalizeText(suggestedSubTopic);
+
+    let validTopic = cleanedTopic;
+    if (cleanedTopic) {
+      const topicMatch = findSyllabusTopic(grade, subject, cleanedTopic);
+      if (!topicMatch) {
+        return { topic: '', subTopic: '', error: `審核建議的單元不存在：${cleanedTopic}` };
+      }
+      validTopic = topicMatch.name || cleanedTopic;
+    }
+
+    const baseTopicName = validTopic || normalizeText(item?.topic || inspectionForm.topic);
+    let validSubTopic = cleanedSubTopic;
+    if (cleanedSubTopic) {
+      const baseTopic = findSyllabusTopic(grade, subject, baseTopicName);
+      if (!baseTopic || !Array.isArray(baseTopic.subTopics) || !baseTopic.subTopics.includes(cleanedSubTopic)) {
+        return { topic: validTopic, subTopic: '', error: `審核建議的子單元不存在：${cleanedSubTopic}` };
+      }
+      validSubTopic = cleanedSubTopic;
+    }
+
+    return { topic: validTopic, subTopic: validSubTopic, error: '' };
+  };
+
   const applySuggestedFix = (item, auditReport) => {
     const suggestedTopic = auditReport?.suggested_topic
       || auditReport?.suggestedTopic
@@ -502,11 +540,16 @@ export default function FactoryDashboard({
       || auditReport?.suggestedSubTopic
       || auditReport?.suggested_fix?.subTopic
       || auditReport?.suggested_fix?.sub_topic;
+    const validated = validateSuggestedClassification(item, suggestedTopic, suggestedSubTopic);
+    if (validated.error) {
+      alert(validated.error);
+      return;
+    }
     openInspection(item);
     setInspectionForm(prev => ({
       ...prev,
-      topic: suggestedTopic ?? prev.topic,
-      subTopic: suggestedSubTopic ?? prev.subTopic
+      topic: validated.topic || prev.topic,
+      subTopic: validated.subTopic || prev.subTopic
     }));
   };
 
@@ -525,10 +568,19 @@ export default function FactoryDashboard({
       alert('審核報告沒有提供可套用的分類建議');
       return;
     }
+    const validated = validateSuggestedClassification(item, suggestedTopic, suggestedSubTopic);
+    if (validated.error) {
+      alert(validated.error);
+      return;
+    }
+    if (!validated.topic && !validated.subTopic) {
+      alert('審核建議不在既有子單元範圍內');
+      return;
+    }
     const nowIso = new Date().toISOString();
     const updates: any = {
-      topic: suggestedTopic ?? item.topic ?? '未分類',
-      subTopic: suggestedSubTopic ?? item.subTopic ?? null,
+      topic: validated.topic || item.topic || '未分類',
+      subTopic: validated.subTopic || item.subTopic || null,
       status: 'DRAFT',
       auditMeta: {
         ...(item.auditMeta || {}),

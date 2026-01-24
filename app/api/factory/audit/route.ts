@@ -8,6 +8,91 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 const CONCURRENCY = 5;
 
+const normalizeText = (value: unknown) => String(value ?? '').trim();
+const normalizeSubject = (value: unknown) => {
+  const raw = normalizeText(value).toLowerCase();
+  if (!raw) return 'math';
+  if (raw.startsWith('chi') || raw.includes('chinese')) return 'chi';
+  if (raw.startsWith('eng') || raw.includes('english')) return 'eng';
+  if (raw.startsWith('math')) return 'math';
+  return raw;
+};
+
+const createSyllabusBucket = () => ({
+  topics: new Set<string>(),
+  subTopicsByTopic: new Map<string, Set<string>>(),
+  subTopicsAll: new Set<string>()
+});
+
+const buildSyllabusIndex = (docs: Array<Record<string, any>>) => {
+  const index = new Map<string, ReturnType<typeof createSyllabusBucket>>();
+  const addToBucket = (key: string, topicName: string, subTopics: string[]) => {
+    if (!topicName) return;
+    if (!index.has(key)) index.set(key, createSyllabusBucket());
+    const bucket = index.get(key)!;
+    bucket.topics.add(topicName);
+    if (!bucket.subTopicsByTopic.has(topicName)) {
+      bucket.subTopicsByTopic.set(topicName, new Set());
+    }
+    const subTopicSet = bucket.subTopicsByTopic.get(topicName)!;
+    subTopics.forEach((st) => {
+      if (!st) return;
+      subTopicSet.add(st);
+      bucket.subTopicsAll.add(st);
+    });
+  };
+
+  docs.forEach((doc) => {
+    const subject = normalizeSubject(doc.subject);
+    const grade = normalizeText(doc.grade || doc.gradeLevel || doc.level);
+    const topicName = normalizeText(doc.name || doc.topic || doc.title);
+    const subTopics = Array.isArray(doc.subTopics)
+      ? doc.subTopics.map((st) => normalizeText(st)).filter(Boolean)
+      : [];
+    if (!subject || !topicName) return;
+    addToBucket(`${subject}::${grade || 'all'}`, topicName, subTopics);
+    addToBucket(`${subject}::all`, topicName, subTopics);
+  });
+
+  return index;
+};
+
+const getSyllabusBucket = (index: Map<string, ReturnType<typeof createSyllabusBucket>>, subject: string, grade?: string) => {
+  const gradeKey = normalizeText(grade);
+  return index.get(`${subject}::${gradeKey || 'all'}`) || index.get(`${subject}::all`) || null;
+};
+
+const validateSuggestedClassification = (bucket: ReturnType<typeof createSyllabusBucket> | null, suggestedTopic: string, suggestedSubTopic: string, fallbackTopic: string) => {
+  if (!bucket) {
+    return { topic: suggestedTopic, subTopic: suggestedSubTopic, warning: '' };
+  }
+
+  const cleanedTopic = normalizeText(suggestedTopic);
+  const cleanedSubTopic = normalizeText(suggestedSubTopic);
+  let validTopic = cleanedTopic;
+  if (cleanedTopic && !bucket.topics.has(cleanedTopic)) {
+    validTopic = '';
+  }
+
+  const topicForSubTopic = validTopic || normalizeText(fallbackTopic);
+  let validSubTopic = cleanedSubTopic;
+  if (cleanedSubTopic) {
+    const subSet = topicForSubTopic ? bucket.subTopicsByTopic.get(topicForSubTopic) : null;
+    const isValid = (subSet && subSet.has(cleanedSubTopic)) || bucket.subTopicsAll.has(cleanedSubTopic);
+    if (!isValid) {
+      validSubTopic = '';
+    }
+  }
+
+  let warning = '';
+  if (cleanedTopic && !validTopic) warning = `建議單元不存在：${cleanedTopic}`;
+  if (cleanedSubTopic && !validSubTopic) {
+    warning = warning ? `${warning}；建議子單元不存在：${cleanedSubTopic}` : `建議子單元不存在：${cleanedSubTopic}`;
+  }
+
+  return { topic: validTopic, subTopic: validSubTopic, warning };
+};
+
 const normalizeAuditResult = (raw: any) => {
   const statusRaw = String(raw?.status || '').trim().toUpperCase();
   const normalizedStatus = statusRaw === 'VERIFIED' ? 'PASS'
@@ -37,6 +122,14 @@ export async function POST(request: Request) {
     }
 
     const collectionName = collection === 'seed_questions' ? 'seed_questions' : 'past_papers';
+    const syllabusSnap = await adminDb
+      .collection('artifacts')
+      .doc(APP_ID)
+      .collection('public')
+      .doc('data')
+      .collection('syllabus')
+      .get();
+    const syllabusIndex = buildSyllabusIndex(syllabusSnap.docs.map(doc => doc.data() || {}));
     const questionRefs = questionIds.map((qid: string) =>
       adminDb
         .collection('artifacts')
@@ -69,14 +162,29 @@ export async function POST(request: Request) {
         try {
           const logicSupplement = (question as any)?.logic_supplement || null;
           const origin = (question as any)?.origin;
-          const auditResult = await auditQuestion(question, logicSupplement, { origin });
+          const subject = normalizeSubject((question as any)?.subject);
+          const grade = normalizeText((question as any)?.grade || (question as any)?.gradeLevel || (question as any)?.level);
+          const bucket = getSyllabusBucket(syllabusIndex, subject, grade);
+          const allowedTopics = bucket ? Array.from(bucket.topics) : [];
+          const allowedSubTopics = bucket
+            ? Array.from(bucket.subTopicsByTopic.get(normalizeText((question as any)?.topic)) || bucket.subTopicsAll)
+            : [];
+          const auditResult = await auditQuestion(question, logicSupplement, { origin, allowedTopics, allowedSubTopics });
           const normalized = normalizeAuditResult(auditResult);
           const isUpload = origin === 'SEED';
 
           const correctedAnswer = normalized.correctedAnswer;
           const suggestedTopic = normalized.suggestedTopic;
           const suggestedSubTopic = normalized.suggestedSubTopic;
-          const hasSuggestedClassification = Boolean(suggestedTopic || suggestedSubTopic);
+          const validatedSuggestion = validateSuggestedClassification(
+            bucket,
+            suggestedTopic,
+            suggestedSubTopic,
+            normalizeText((question as any)?.topic)
+          );
+          const validSuggestedTopic = validatedSuggestion.topic;
+          const validSuggestedSubTopic = validatedSuggestion.subTopic;
+          const hasSuggestedClassification = Boolean(validSuggestedTopic || validSuggestedSubTopic);
           const shouldAutoFixAnswer = Boolean(correctedAnswer);
           const autoFixed = Boolean(hasSuggestedClassification || shouldAutoFixAnswer);
 
@@ -127,9 +235,13 @@ export async function POST(request: Request) {
             };
           }
 
+          if (validatedSuggestion.warning) {
+            updatePayload.auditMeta.classificationWarning = validatedSuggestion.warning;
+          }
+
           if (hasSuggestedClassification) {
-            updatePayload.topic = suggestedTopic || (question as any)?.topic || '未分類';
-            updatePayload.subTopic = suggestedSubTopic || (question as any)?.subTopic || null;
+            updatePayload.topic = validSuggestedTopic || (question as any)?.topic || '未分類';
+            updatePayload.subTopic = validSuggestedSubTopic || (question as any)?.subTopic || null;
           }
           if (shouldAutoFixAnswer) {
             updatePayload.answer = correctedAnswer;

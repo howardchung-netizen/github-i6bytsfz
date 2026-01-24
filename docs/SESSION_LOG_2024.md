@@ -2,6 +2,52 @@
 
 ## 📋 今天完成的主要工作
 
+### 42. ✅ 規則檔文件化與審核分類白名單
+**功能**：
+- 規則檔改由 `docs/rules/*.json` 驅動（能力評分、單元映射、報告提示詞、練習學程提示詞）
+- 新增純文字填表範本，避免手動編寫 JSON 格式
+- 工廠審核分類限制為 syllabus 既有單元/子單元，無效建議寫入 `auditMeta.classificationWarning`
+- 前端套用審核建議時也檢查子單元是否存在
+
+**相關文件**：
+- `app/lib/logic-rules.js` - 規則載入器
+- `app/lib/ability-scoring.js` / `app/lib/ability-mapping.js` - 規則化能力評分
+- `services/report-generator.ts` - 報告提示詞讀規則檔
+- `app/api/factory/audit/route.ts` - 分類白名單驗證
+- `app/components/admin/FactoryDashboard.tsx` - 前端分類驗證
+- `docs/rules/*.json` - 規則檔
+- `docs/rules/templates/*.txt` - 填表範本
+
+---
+
+### 41. ✅ AI 老師/醫生報告規格調整與錯誤回報
+**功能**：
+- 老師報告：面向一般學生，評估近 2 週表現並產出下一個 2 週課程安排
+- 醫生報告：假設有學習困難/專注力不足，輸出可供真實醫師參考的學習紀錄
+- 報告 JSON 解析支援 `medicalRecord` 欄位並於 UI 顯示
+- 報告失敗時顯示具體錯誤訊息
+
+**相關文件**：
+- `services/report-generator.ts` - Prompt 規格更新、medicalRecord 欄位
+- `app/lib/db-service.js` - 報告失敗改為拋錯回傳
+- `app/components/ParentView.tsx` - 醫生紀錄顯示、錯誤訊息提示
+
+---
+
+### 40. ✅ AI 報告改為「老師/醫生」雙視角 + 14 天資料
+**功能**：
+- 報告生成改用 AI（Educator/Observer）雙模式，輸出 JSON 結構
+- 報告解析具容錯，確保 summary/strengths/weaknesses/recommendations/nextPhasePlan 完整
+- 家長後台一鍵生成「老師+醫生」兩份報告，並顯示模式標籤
+- 模擬學生按鈕文字修正為 14 天資料
+
+**相關文件**：
+- `services/report-generator.ts` - JSON prompt + 解析容錯
+- `app/lib/db-service.js` - 報告生成改用 AI + 14 天 logs
+- `app/components/ParentView.tsx` - 生成按鈕/模式標籤/文案更新
+
+---
+
 ### 39. ✅ 審核員修復：Prompt 思考+解析可視化
 **功能**：
 - 審核 Prompt 改為含 `analysis` 的驗算流程（先解題、再比對答案、輸出 JSON）

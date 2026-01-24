@@ -41,6 +41,8 @@
   - 種子題上傳支援 PDF 轉圖（批次轉頁 → Vision 解析）
   - 種子題上傳支援指定子單元（不指定則 AI 分類）
 - **ParentView**：家長視圖（子女切換、趨勢圖、AI 報告、錯題分佈、多子女比較/排行）
+  - AI 報告支援「老師/醫生」雙模式，一鍵生成兩份報告
+  - 醫生報告包含醫師參考紀錄（medicalRecord）區塊
 - **StudentView**：學生學習數據視圖（趨勢、分佈、弱項、平均用時、近期錯題）
 - **DeveloperView / ChineseDeveloperView / EnglishDeveloperView**：開發者工具（題庫管理、回饋通知、後台總覽）
   - 課程單元管理：既有單元可改名/刪除/新增與改名子單元，所有變更即時同步 Firestore
@@ -74,6 +76,7 @@
 - `/api/factory/audit`：工廠審核線（Gemini 2.5 Pro）
   - 改用 Admin SDK 讀寫 `past_papers` / `audit_reports`，避免權限阻擋造成審核找不到 DRAFT
   - 審核並發：每批 5 題 Promise.all，加速審核
+  - 審核分類限制：AI 建議的 Topic/SubTopic 只允許 syllabus 內既有範圍
 - `/api/factory/publish`：工廠發布（DRAFT/AUDITED → PUBLISHED）
 - `/api/dispatch`：混合調度（TEXT 即時生題 / IMAGE 回收）
 - `/api/vision`：圖像題識別與結構化輸出（Vision API）
@@ -89,6 +92,20 @@
 - `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
 - `services/report-generator.ts`：雙週學習報告生成核心（Educator/Observer）
   - 報告模型強制使用 Pro 等級（避免 Flash 幻覺）
+  - AI 報告改為 JSON 結構輸出並具解析容錯
+  - 老師報告：正常學生評估 + 下 2 週課程安排
+  - 醫生報告：學習困難/專注力假設 + 醫師參考學習紀錄
+- `app/lib/logic-rules.js`：規則文件載入器（docs/rules → 功能邏輯）
+  - 能力評分規則：`docs/rules/ability-scoring-rules.json`
+  - 單元/子單元 → 能力映射：`docs/rules/unit-ability-mapping.json`
+  - AI 老師/醫生報告提示詞：`docs/rules/report-generation-rules.json`
+  - AI 老師練習學程提示詞：`docs/rules/teacher-practice-plan-rules.json`
+- **規則文件 → 邏輯連動（可查）**
+  - 能力評分已吃規則檔：`app/lib/ability-scoring.js` + `app/lib/ability-mapping.js`
+  - 報告提示詞已吃規則檔：`services/report-generator.ts`（含 `buildPracticePlanPrompt`）
+  - 審核分類限制：`app/api/factory/audit/route.ts` 以 syllabus 白名單驗證建議分類，不在清單則拒絕並寫入 `auditMeta.classificationWarning`
+  - 前端套用建議也會檢查：`app/components/admin/FactoryDashboard.tsx` 自動修正/套用建議時阻擋不存在子單元
+  - **注意**：規則檔屬文件驅動，修改後需重新 build/deploy；若需即時生效可改為 Firestore + 後台編輯
 - `question-schema.ts` / `types.ts`：Question 型別、normalizeQuestion、Zod 驗證（處理欄位飄移與標準化）
 - `vitest.config.ts` / `app/lib/__tests__/ai-service.test.ts`：Vitest 單元測試（涵蓋標準、alias、容錯案例）
 - `db-service.js`：Firestore 讀寫（題目、回饋、作業、能力分數、審計狀態、訪問紀錄、daily_stats 快取、年級自動升班）
@@ -227,6 +244,8 @@
 
 **P4（商業化 / 規模）**
 - **收費 / 訂價**
+- **美化主介面**
+- **微調ai學習報告人設**
 - **壓測**
 - **資助申請**
 - **優惠條碼**：個人帳號介面入口
@@ -635,4 +654,5 @@
 - `docs/VISION_API.md`：圖像題處理
 - `docs/PAYMENT_STRIPE.md`：Stripe 支付
 - `docs/ABILITY_SCORING_LOGIC.md`：能力評分邏輯
+- `docs/rules/*.json`：可調整的生成/分類規則文件
 - `docs/TROUBLESHOOTING_AND_FIXES.md`：常見問題與修復

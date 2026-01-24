@@ -1,0 +1,23 @@
+{
+  "scoring": {
+    "correctBase": 2,
+    "incorrectBase": -1,
+    "difficultyMultiplier": true,
+    "minScore": 0,
+    "maxScore": 100
+  },
+  "subjects": {
+    "math": {
+      "abilities": ["運算", "幾何", "邏輯", "應用題", "數據"],
+      "defaultAbility": "運算"
+    },
+    "chi": {
+      "abilities": ["閱讀", "寫作", "成語", "文法", "修辭"],
+      "defaultAbility": "文法"
+    },
+    "eng": {
+      "abilities": ["Grammar", "Vocab", "Reading", "Listening", "Speaking"],
+      "defaultAbility": "Grammar"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "promptTemplate": "You are an experienced primary school teacher. Create a 2-week practice plan based on the student's weak areas. Use Traditional Chinese. Keep it actionable and concise.\n\nReturn JSON ONLY with this structure:\n{\n  \"goal\": \"string\",\n  \"focusSkills\": [\"string\", \"string\"],\n  \"weeklyPlan\": [\n    {\n      \"week\": 1,\n      \"focus\": \"string\",\n      \"practiceItems\": [\"string\", \"string\", \"string\"]\n    },\n    {\n      \"week\": 2,\n      \"focus\": \"string\",\n      \"practiceItems\": [\"string\", \"string\", \"string\"]\n    }\n  ]\n}\n\nData Summary:\n- Strong Topics: {{strongTopics}}\n- Weak Topics: {{weakTopics}}\n- Error Pattern: {{errorPattern}}\n"
+}
