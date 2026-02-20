@@ -15,7 +15,8 @@ import {
     updateDoc,
     setDoc,
     serverTimestamp,
-    increment
+    increment,
+    limit
 } from "firebase/firestore";
 
 // 👇 2. 這裡是修正重點：Auth 相關函數必須從 'firebase/auth' 引入
@@ -27,6 +28,7 @@ import {
 } from "firebase/auth";
 
 import { APP_ID, SAMPLE_PAST_PAPERS } from './constants';
+import { generateReport } from '../../services/report-generator';
 
 const buildInstructionFromFeedback = (text = '') => {
     const trimmed = String(text || '').trim();
@@ -37,7 +39,8 @@ const buildInstructionFromFeedback = (text = '') => {
 
 const normalizeQuestionRecord = (data = {}) => {
     const status = data.status || 'PUBLISHED';
-    const poolType = data.poolType || (data.image ? 'IMAGE_STATIC' : 'TEXT');
+    const hasImage = Boolean(data.imageUrl || data.image || data.originalImage);
+    const poolType = data.poolType || (hasImage ? 'IMAGE_STATIC' : 'TEXT');
     return { ...data, status, poolType };
 };
 
@@ -291,7 +294,7 @@ export const DB_SERVICE = {
             papers.forEach(paper => { 
                 const docRef = doc(collectionRef); 
                 const derivedPoolType = paper.poolType
-                    || (paper.image || paper.originalImage ? 'IMAGE_STATIC' : 'TEXT');
+                    || (paper.imageUrl || paper.image || paper.originalImage ? 'IMAGE_STATIC' : 'TEXT');
                 const derivedSource = paper.source || paper.imageFileName || paper.fileName || 'seed_upload';
                 batch.set(docRef, { 
                     ...paper, 
@@ -646,6 +649,25 @@ export const DB_SERVICE = {
             return null;
         }
     },
+
+    getStudentLearningLogsRange: async (studentUid, days = 14) => {
+        try {
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            const startDateStr = startDate.toISOString();
+            const q = query(
+                collection(db, "artifacts", APP_ID, "users", studentUid, "logs"),
+                where("timestamp", ">=", startDateStr)
+            );
+            const snap = await getDocs(q);
+            const logs = [];
+            snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
+            return logs;
+        } catch (e) {
+            console.error("Get Student Learning Logs Error:", e);
+            return [];
+        }
+    },
     
     // === ?師?能 ===
     createClass: async (teacherUid, className, grade) => {
@@ -895,51 +917,38 @@ export const DB_SERVICE = {
     // === AI ?��??�能 ===
     generateProgressReport: async (studentUid, periodDays = 14) => {
         try {
-            const stats = await DB_SERVICE.getStudentLearningStats(studentUid, periodDays);
-            if (!stats) return null;
-            
-            // 調用 AI ?��??��?
-            const reportPrompt = `
-                作為專業?��??�顧?��?請為學�??��?一?${periodDays} 天�?學�??�度?��???                
-                學�??��??                - 總�??��?${stats.totalQuestions}
-                - 答�??{stats.correctAnswers}
-                - 答錯?{stats.wrongAnswers}
-                - ?��?��?${stats.totalQuestions > 0 ? Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0}%
-                - ?��??��??��??�學 ${stats.subjects.math}，中??${stats.subjects.chi}，英??${stats.subjects.eng}
-                - ?��??��?${stats.mistakes.length}
-                
-                請�??��?份�??�以下內容�? JSON ?��??                {
-                    "summary": "總�?學�??��??��??0字以?��?",
-                    "strengths": ["強�?1", "強�?2"],
-                    "weaknesses": ["弱�?1", "弱�?2"],
-                    "recommendations": ["建議1", "建議2", "建議3"],
-                    "nextPhasePlan": "下�??�段?�學習�??��?100字以?��?"
-                }
-            `;
-            
-            // 這裡應該調用 AI API，但為了簡化，先返回結構化數據
-            const report = {
+            const logs = await DB_SERVICE.getStudentLearningLogsRange(studentUid, periodDays);
+            const usages = logs
+                .filter(log => log.action === 'answer_correct' || log.action === 'answer_wrong')
+                .map(log => ({
+                    isCorrect: log.action === 'answer_correct',
+                    timeSpentMs: log.timeSpent || 0,
+                    hintUsedCount: log.hintUsedCount || log.hint_used_count || 0,
+                    retryCount: log.retryCount || 0,
+                    topic: log.topic || log.subject || ''
+                }));
+
+            const generatedAt = new Date().toISOString();
+            const educatorReport = await generateReport(studentUid, 'EDUCATOR', { usages });
+            const observerReport = await generateReport(studentUid, 'OBSERVER', { usages });
+
+            const reportDocs = [
+                { mode: 'EDUCATOR', ...educatorReport },
+                { mode: 'OBSERVER', ...observerReport }
+            ].map(report => ({
                 periodDays: periodDays,
-                generatedAt: new Date().toISOString(),
-                summary: `在過去 ${periodDays} 天中，學生完成了 ${stats.totalQuestions} 道題目，正確率為 ${stats.totalQuestions > 0 ? Math.round((stats.correctAnswers / stats.totalQuestions) * 100) : 0}%。`,
-                strengths: stats.correctAnswers > stats.wrongAnswers ? ['基礎知識掌握良好', '答題速度穩定'] : ['學習態度積極'],
-                weaknesses: stats.mistakes.length > 0 ? ['需要加強錯題練習', '部分概念理解不足'] : ['無明顯弱項'],
-                recommendations: [
-                    '繼續保持每日練習習慣',
-                    '重點複習錯題本中的題目',
-                    '加強弱項科目的練習'
-                ],
-                nextPhasePlan: `建議在接下來 ${periodDays} 天中，重點加強弱項科目的練習，並定期複習錯題本。目標是將正確率提升到 80% 以上。`,
-                stats: stats
-            };
-            
-            // 保存報告
-            await addDoc(collection(db, "artifacts", APP_ID, "users", studentUid, "reports"), report);
-            
-            return report;
+                generatedAt,
+                ...report
+            }));
+
+            for (const report of reportDocs) {
+                await addDoc(collection(db, "artifacts", APP_ID, "users", studentUid, "reports"), report);
+            }
+
+            return reportDocs;
         } catch(e) {
             console.error("Generate Progress Report Error:", e);
-            return null;
+            throw e;
         }
     },
     
@@ -1511,6 +1520,92 @@ export const DB_SERVICE = {
         } catch (e) {
             console.error("❌ Fetch Seed Queue Error:", e);
             return [];
+        }
+    },
+
+    fetchQuestionManagerItems: async ({
+        collectionName = 'past_papers',
+        status = 'ALL',
+        origin = 'ALL',
+        grade = '',
+        subject = '',
+        topic = '',
+        subTopic = '',
+        max = 200
+    } = {}) => {
+        try {
+            const colRef = collection(db, "artifacts", APP_ID, "public", "data", collectionName);
+            const conditions = [];
+            if (origin && origin !== 'ALL') conditions.push(where("origin", "==", origin));
+            if (grade) conditions.push(where("grade", "==", grade));
+            if (subject) conditions.push(where("subject", "==", subject));
+            if (topic) conditions.push(where("topic", "==", topic));
+            if (subTopic) conditions.push(where("subTopic", "==", subTopic));
+            const pageLimit = Math.max(1, Number(max || 200));
+            const fetchDocs = async (extraConditions = []) => {
+                const q = query(colRef, ...conditions, ...extraConditions, limit(pageLimit));
+                return getDocs(q);
+            };
+
+            const itemsMap = new Map();
+            if (status && status !== 'ALL') {
+                if (status === 'PUBLISHED') {
+                    const [publishedSnap, legacySnap] = await Promise.all([
+                        fetchDocs([where("status", "==", "PUBLISHED")]),
+                        fetchDocs([where("status", "==", null)])
+                    ]);
+                    publishedSnap.forEach(docSnap => {
+                        itemsMap.set(docSnap.id, normalizeQuestionRecord({ id: docSnap.id, ...docSnap.data(), __collection: collectionName }));
+                    });
+                    legacySnap.forEach(docSnap => {
+                        itemsMap.set(docSnap.id, normalizeQuestionRecord({ id: docSnap.id, ...docSnap.data(), __collection: collectionName }));
+                    });
+                } else {
+                    const snap = await fetchDocs([where("status", "==", status)]);
+                    snap.forEach(docSnap => {
+                        itemsMap.set(docSnap.id, normalizeQuestionRecord({ id: docSnap.id, ...docSnap.data(), __collection: collectionName }));
+                    });
+                }
+            } else {
+                const snap = await fetchDocs();
+                snap.forEach(docSnap => {
+                    itemsMap.set(docSnap.id, normalizeQuestionRecord({ id: docSnap.id, ...docSnap.data(), __collection: collectionName }));
+                });
+            }
+
+            const items = Array.from(itemsMap.values());
+            items.sort((a, b) => {
+                const ta = new Date(a.updatedAt || a.createdAt || a.uploadedAt || 0).getTime();
+                const tb = new Date(b.updatedAt || b.createdAt || b.uploadedAt || 0).getTime();
+                return tb - ta;
+            });
+            return items.slice(0, pageLimit);
+        } catch (e) {
+            console.error("❌ Fetch Question Manager Items Error:", e);
+            return [];
+        }
+    },
+
+    batchDeleteQuestions: async (questionIds = [], collectionName = 'past_papers') => {
+        try {
+            if (!Array.isArray(questionIds) || questionIds.length === 0) return { deleted: 0 };
+            let deleted = 0;
+            const chunkSize = 450;
+            for (let i = 0; i < questionIds.length; i += chunkSize) {
+                const batch = writeBatch(db);
+                const chunk = questionIds.slice(i, i + chunkSize);
+                chunk.forEach((qid) => {
+                    if (!qid) return;
+                    const ref = doc(db, "artifacts", APP_ID, "public", "data", collectionName, qid);
+                    batch.delete(ref);
+                });
+                await batch.commit();
+                deleted += chunk.length;
+            }
+            return { deleted };
+        } catch (e) {
+            console.error("❌ Batch Delete Questions Error:", e);
+            return { deleted: 0, error: e.message || '未知錯誤' };
         }
     },
 

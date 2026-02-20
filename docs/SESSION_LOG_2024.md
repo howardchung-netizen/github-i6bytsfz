@@ -2,6 +2,21 @@
 
 ## 📋 今天完成的主要工作
 
+### 43. ✅ 題庫清理介面（Question Manager）
+**功能**：
+- 新增 DeveloperView 分頁「2.5 題庫清理」，不需進 Firebase 即可管理題目
+- 支援篩選：collection、status、origin、grade、subject、topic、subTopic
+- PUBLISHED 查詢包含舊資料（status 為空）
+- 批量勾選刪除
+- 支援「只顯示格式不全」與一鍵選取不完整
+
+**相關文件**：
+- `app/components/admin/QuestionManager.tsx`
+- `app/components/DeveloperView.tsx`
+- `app/lib/db-service.js`
+
+---
+
 ### 42. ✅ 規則檔文件化與審核分類白名單
 **功能**：
 - 規則檔改由 `docs/rules/*.json` 驅動（能力評分、單元映射、報告提示詞、練習學程提示詞）
@@ -2044,5 +2059,34 @@ const newScores = calculateAbilityScores(
 
 ---
 
-**最後更新**：2026年1月20日
+### 43. ✅ 模型與 Vision 重構（JSON 模式 + imageUrl 流程）
+
+**日期**：2026年1月24日
+
+**功能描述**：
+- 生題模型改為 `gemini-2.5-flash`
+- 審核 / Vision / 報告模型改為 `gemini-3-flash-preview`
+- 生題(0.7)、審核(0.0)、Vision(0.1) 全面啟用 JSON 模式
+- Vision 改為「文字萃取 + imageUrl」，移除 shape/params 依賴
+- 上傳流程先存 Storage 取 `imageUrl`，DB 僅存 `imageUrl + JSON`
+- 前端顯示改為 `imageUrl` 優先，fallback 舊 `image`
+- 審核報告欄位改為 `error_report/report` 以對齊 UI
+
+**相關文件**：
+- `app/lib/constants.js`
+- `app/api/vision/route.ts`
+- `app/lib/ai-service.js`
+- `app/lib/auditor-service.js`
+- `app/api/factory/audit/route.ts`
+- `app/api/factory/generate/route.ts`
+- `app/components/TeacherView.tsx`
+- `app/components/admin/FactoryDashboard.tsx`
+- `app/components/PracticeView.tsx`
+- `app/lib/db-service.js`
+- `app/lib/firebase.js`
+- `docs/PROJECT_FUNCTIONS_ARCH_TODO.md`
+
+---
+
+**最後更新**：2026年1月24日
 **項目路徑**：`C:\ai totur\github-i6bytsfz`

@@ -5,6 +5,7 @@ import { DB_SERVICE } from '../lib/db-service';
 import SystemLogs from './admin/SystemLogs';
 import AnalyticsView from './admin/AnalyticsView';
 import FactoryDashboard from './admin/FactoryDashboard';
+import QuestionManager from './admin/QuestionManager';
 import SyllabusView from './admin/SyllabusView';
 
 // 👇 注意這裡 props 接收了 setTopics
@@ -134,6 +135,11 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
             <button onClick={() => setActiveTab('past_papers')} className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'past_papers' ? 'text-green-600 border-b-2 border-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
                 2. 試卷庫 & 種子管理
             </button>
+            {isAdminReviewer && (
+                <button onClick={() => setActiveTab('question_manager')} className={`pb-2 px-4 font-bold text-sm transition-colors ${activeTab === 'question_manager' ? 'text-rose-600 border-b-2 border-rose-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                    2.5 題庫清理
+                </button>
+            )}
             {user && user.email === 'admin@test.com' && (
                 <button 
                     onClick={async () => {
@@ -203,6 +209,10 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
                 user={user}
                 mode="past_papers"
             />
+        )}
+
+        {activeTab === 'question_manager' && isAdminReviewer && (
+            <QuestionManager isFirebaseReady={isFirebaseReady} />
         )}
 
         {/* 教學者試題管理標籤頁 */}

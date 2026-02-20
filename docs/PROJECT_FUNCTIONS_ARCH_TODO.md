@@ -1,8 +1,24 @@
 # 專案功能架構與待辦整合總覽
 
 > **用途**：提供完整的「已完成功能架構 + To-Do + 後續建議」，可直接交給另一個 AI 進行技術分析。  
-> **更新日期**：2026年1月19日  
+> **更新日期**：2026年1月24日  
 > **專案路徑**：`C:\ai totur\github-i6bytsfz`
+
+---
+
+## 最新更新紀錄（2026-01-24）
+
+- **模型配置**：生題 `gemini-2.5-flash`；審核/Vision/報告 `gemini-3-flash-preview`
+- **JSON 模式**：生題(temperature=0.7)、審核(0.0)、Vision(0.1) 全面加 `responseMimeType: "application/json"`
+- **審核原因欄位**：審核 prompt 強制輸出 `error_report`/`report`，UI 直接可讀
+- **Vision 重構**：只萃取文字 JSON；`explanation` 改為可選；移除 `shape/params` 依賴
+- **imageUrl 流程**：上傳先存 Storage 拿 `imageUrl`，DB 只存 `imageUrl + JSON`；前端顯示優先 `imageUrl`，fallback 舊 `image`
+- **相容性**：舊庫存仍可讀 `image`（base64），不影響既有題目
+- **題庫清理頁**：新增「2.5 題庫清理」分頁（獨立管理介面）
+  - 查詢支援 seed/past、狀態/來源/年級/科目/單元/子單元
+  - PUBLISHED 查詢包含舊資料（status 為空）
+  - 支援批量勾選刪除
+  - 支援「只顯示格式不全」與一鍵選取不完整
 
 ---
 
@@ -71,9 +87,9 @@
 
 ### 1.2 API 路由層（Next.js API）
 
-- `/api/chat`：AI 題目生成（Gemini 2.0 Flash）
+- `/api/chat`：AI 題目生成（gemini-2.5-flash）
 - `/api/factory/generate`：工廠生產線（批量產生 DRAFT 題目）
-- `/api/factory/audit`：工廠審核線（Gemini 2.5 Pro）
+- `/api/factory/audit`：工廠審核線（gemini-3-flash-preview）
   - 改用 Admin SDK 讀寫 `past_papers` / `audit_reports`，避免權限阻擋造成審核找不到 DRAFT
   - 審核並發：每批 5 題 Promise.all，加速審核
   - 審核分類限制：AI 建議的 Topic/SubTopic 只允許 syllabus 內既有範圍
@@ -91,7 +107,7 @@
   - `fetchQuestionBatch`：前端批次調度（3 題並行呼叫 `/api/dispatch`）
 - `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
 - `services/report-generator.ts`：雙週學習報告生成核心（Educator/Observer）
-  - 報告模型強制使用 Pro 等級（避免 Flash 幻覺）
+  - 報告模型改用 `gemini-3-flash-preview`（JSON 模式）
   - AI 報告改為 JSON 結構輸出並具解析容錯
   - 老師報告：正常學生評估 + 下 2 週課程安排
   - 醫生報告：學習困難/專注力假設 + 醫師參考學習紀錄
@@ -116,7 +132,7 @@
   - 種子入庫拆分：`seed_questions`（上傳/審核）→ `publishSeedToPool` 複製入 `past_papers`
   - 新增 `fetchSeedQueue` / `updateSeedQuestionStatus` / `deleteSeedQuestion` 支援種子審核流程
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
-  - 審核 JSON 模式：Prompt 加入 `analysis` 驗算流程，`generationConfig`（temperature=0.1、maxOutputTokens=1000）
+  - 審核 JSON 模式：Prompt 加入 `analysis` 驗算流程，`generationConfig`（temperature=0.0、maxOutputTokens=1000）
   - `parseAuditResult`：analysis 併入 reason，解析失敗回傳原始片段供除錯
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
@@ -138,7 +154,7 @@
 **A. 題目生成流程**
 1. 使用者選單元 → 觸發 `startPracticeSession`
 2. `ai-service` 組裝 prompt（含種子題/回饋）
-3. `/api/chat` 生成題目 JSON（Gemini 2.0 Flash）
+3. `/api/chat` 生成題目 JSON（gemini-2.5-flash）
 4. UI 顯示並進入練習流程
 
 **B. 練習流程**
@@ -157,7 +173,7 @@
 
 **D. 審計流程（手動）**
 1. 呼叫 `/api/audit/single?questionId=xxx`
-2. `auditor-service` 使用 `gemini-2.5-pro`（審核生成題）
+2. `auditor-service` 使用 `gemini-3-flash-preview`（審核生成題）
 3. 回寫 `audit_status/audit_report/audit_score/...`
 
 **E. 後台回饋審核流程**
@@ -208,6 +224,232 @@
   - `school` / `institutionName`
   - `institutionRole` / `institutionStatus`
   - `lastPromotionYear` / `lastPromotedAt`
+
+---
+
+### 1.7 系統規格補充（整合其他 Docs）
+
+#### 1.7.1 專案結構概要
+```
+app/
+├── api/                 # API 路由層
+├── components/          # UI 組件層
+├── lib/                 # 核心服務層
+├── page.tsx             # 主入口
+└── layout.tsx           # 應用佈局
+```
+
+#### 1.7.2 題目生成入口與流程（補充）
+- 入口：`TopicSelectionView`（`CommonViews.tsx`）、`DashboardView`、`DailyTaskView`
+- 流程：`startPracticeSession()` → `ai-service.js` 組裝 prompt → `/api/chat` 生成 → 解析後寫入 `past_papers`
+
+#### 1.7.3 Prompt 組成與輸出欄位（補充）
+- 組成要素：
+  - 角色與任務
+  - 種子題與主題
+  - JSON 輸出格式
+  - LaTeX 格式要求
+  - 選項唯一性（Math 8 選項 / 其他 4 選項）
+  - 教學者回饋（如有）
+- 核心輸出欄位：
+  - `question`, `type`, `options`, `answer`, `explanation`, `hint`
+  - 幾何題可包含 `shape`, `params`, `mapData`（僅手動建檔使用）
+
+#### 1.7.4 題目儲存結構（示意）
+```javascript
+{
+  grade: "P4",
+  subject: "math",
+  topic_id: "p4_division",
+  question: "...",
+  options: [...],
+  answer: "...",
+  explanation: "...",
+  source: "ai_next_api",
+  created_at: "ISO"
+}
+```
+
+#### 1.7.5 種子題 JSON 格式指南（整合）
+- **註**：現已棄用 AI 自動生成 `shape/params/mapData` 座標，全面改採 `imageUrl` 原圖顯示；以下內容僅供手動建檔參考。
+- **基本格式**：JSON 必須是陣列，每個元素是一題
+```json
+[
+  {
+    "question": "題目文字",
+    "answer": "答案",
+    "topic": "單元名稱",
+    "explanation": "解釋（選填）",
+    "hint": "提示（選填）"
+  }
+]
+```
+- **幾何題加圖形欄位**：在題目物件加入 `shape` 與 `params`
+```json
+{
+  "question": "計算這個長方形的面積。",
+  "answer": "15",
+  "topic": "面積",
+  "type": "geometry",
+  "shape": "rectangle",
+  "params": { "w": 5, "h": 3 }
+}
+```
+- **圖形類型與參數摘要**
+  - `rectangle`: `{ "w": 5, "h": 3 }`
+  - `square`: `{ "s": 8 }`
+  - `triangle`: `{ "base": 6, "height": 4 }`
+  - `circle`: `{ "radius": 5 }`
+  - `trapezoid`: `{ "top": 4, "bottom": 8, "height": 5 }`
+  - `parallelogram`: `{ "base": 8, "height": 4 }`
+  - `irregular`: `{ "points": [{ "x": -2, "y": -1 }, ...] }`
+  - `composite`: `{ "shapes": [{ "type": "rectangle", "params": {...}, "offset": {"x": 0, "y": 0} }, ...] }`
+  - `map_grid`：使用 `mapData`（見下）
+- **地圖/方向題（map_grid）**
+```json
+{
+  "question": "從起點向北走 2 格，再向東走 3 格，你會到達哪裡？",
+  "answer": "公園",
+  "topic": "方向",
+  "type": "geometry",
+  "shape": "map_grid",
+  "mapData": {
+    "gridSize": { "rows": 5, "cols": 5 },
+    "startPos": { "row": 2, "col": 2 },
+    "path": [
+      { "direction": "north", "steps": 2 },
+      { "direction": "east", "steps": 3 }
+    ],
+    "landmarks": [
+      { "row": 1, "col": 1, "label": "學校" },
+      { "row": 4, "col": 4, "label": "公園" }
+    ]
+  }
+}
+```
+- **操作步驟**
+  1. 建立 `.json` 檔（整體為陣列）
+  2. 有圖形題加 `shape/params`（手動建檔時）
+  3. 使用 JSONLint 驗證格式
+  4. 後台「試卷庫 & 種子管理」貼上 → 批量上傳
+- **注意事項**
+  - LaTeX 使用 `$...$`
+  - 長度單位建議用 `cm`
+  - 可選欄位：`explanation`, `hint`, `type`
+
+#### 1.7.6 Vision API（圖像題處理）
+- 流程：`圖像題 → Storage(imageUrl) → /api/vision(文字萃取) → JSON + imageUrl → seed_questions`
+- 成本策略：優先 Flash、壓縮與快取降低成本
+- 相關檔案：`app/api/vision/route.ts`、`TeacherView` 統一上傳
+
+#### 1.7.7 能力評分邏輯（整合）
+- **科目**：數學/中文/英文，每科 5 個能力維度，初始 50/100
+- **分類優先順序**：
+  1. 單元/子單元映射（最準確）
+  2. 文本分析（後備）
+- **數學能力維度**：
+  - 運算：加減乘除/分數/小數/混合運算
+  - 幾何：周界/面積/體積/角度/對稱
+  - 邏輯：推理/模式/序列/比較/排序
+  - 應用題：情境/多步驟/購物/時間/距離
+  - 數據：統計/圖表/平均/概率
+- **評分規則**：
+  - 答對：+2；答錯：-1
+  - 難度係數：簡單 1x / 中等 1.5x / 困難 2x
+  - 多步驟題：2 步 1.2x、3 步以上 1.5x
+- **更新時機**：完成整份試卷後更新
+- **存儲位置**：`artifacts/{APP_ID}/users/{userId}/ability_scores`
+- **中文科維度**：閱讀 / 寫作 / 成語 / 文法 / 修辭
+- **英文科維度**：Grammar / Vocab / Reading / Listening / Speaking
+
+#### 1.7.8 背景審計員系統（AI-as-a-Judge）
+- 目標：審查正確性、`logic_supplement` 遵守度、格式一致性
+- 流程：
+  - 生成題 → `past_papers`（`audit_status=unchecked`）
+  - 手動觸發審計 → 更新 `audit_status/audit_report/audit_score/...`
+- 模型：
+  - Creator：`gemini-2.5-flash`
+  - Auditor：`gemini-3-flash-preview`
+- 資料欄位：
+```javascript
+{
+  audit_status: "unchecked" | "verified" | "flagged",
+  audit_report: string | null,
+  auditor_model_used: string | null,
+  audit_timestamp: string | null,
+  audit_issues: string[] | null,
+  audit_score: number | null,
+  logic_supplement: string | null
+}
+```
+- 手動觸發 API：`/api/audit/single`（GET/POST 皆可）
+- Vercel 防超時配置：`maxDuration = 60`, `dynamic = "force-dynamic"`
+- 後續待做：背景批次審核、Cron、審計監控面板
+
+#### 1.7.9 技術實作路徑與風險評估（摘要）
+- **Auto-Classification**：PDF 轉圖 → Vision Layout Analysis → 題目區塊切割 → A/B/C 分類
+  - 風險：題目與圖片排版緊密 → 需信心閾值與人工裁切後備
+- **生題者成本優化**：Few-shot + Rationale Summary + 圖像引用機制
+- **審題者報告**：輸出 `AuditResult` JSON（status/error_report/suggested_fix/confidence）
+- **Human-in-the-loop**：`GENERATED → AUDITED → PENDING_APPROVAL → PUBLISHED`
+  - `FIXED/NEEDS_REVIEW` 需人工確認
+- **綜合風險**：成本/延遲/幻覺（地圖/圖表題最高風險）
+  - 防線：Type B 沿用原圖 + 低信心人工確認
+- **分階段落地**：Phase 1（A/B）→ Phase 2（有限 C）→ Phase 3（進階重繪）
+
+#### 1.7.10 維運 / 部署 / 配額
+- **CI/CD 閉環**：
+  - Observer：Sentry（已配置）
+  - Broker：GitHub Issues（自動建立）
+  - Fixer：Ellipsis（暫停）
+  - Deployer：Vercel（自動部署）
+- **必要環境變數**：
+  - Gemini：`GOOGLE_GEMINI_API_KEY`
+  - Firebase：`NEXT_PUBLIC_FIREBASE_*`
+  - Stripe：`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`
+- **Vercel 部署**：GitHub → Vercel Import → 設定環境變數 → Deploy
+- **本地測試**：`npm run dev`；測試端點 `/api/test-google-api`, `/api/check-quota`
+- **API 配額**：
+  - `/api/test-google-api` 檢查 key
+  - `/api/check-quota` 查看配額
+  - 429 需加入 API 路由重試與退避
+- **模型遷移重點**：
+  - 模型名稱集中於 `constants.js`
+  - API 路由層需統一重試/節流
+
+#### 1.7.11 效能優化與擴展（摘要）
+- 已完成：增加 `subject`、伺服器端過濾、複合索引建議
+- 建議：伺服器端過濾優先、客戶端僅補不足
+- 擴展：快取層、熱/冷資料分離、重試/併發控制
+
+#### 1.7.12 Stripe 支付
+- Keys：`pk_test_...` / `sk_test_...`
+- Webhook：`STRIPE_WEBHOOK_SECRET`
+- API Routes：
+  - `app/api/payment/create-checkout/route.ts`
+  - `app/api/webhooks/stripe/route.ts`
+- 測試卡號：
+  - 成功：`4242 4242 4242 4242`
+  - 需 3DS：`4000 0025 0000 3155`
+  - 失敗：`4000 0000 0000 0002`
+- 待辦：正式金鑰、訂閱權限鎖定
+
+#### 1.7.13 Troubleshooting（摘要）
+- LaTeX 顯示錯誤：清理錯誤反斜線（`\350` → `350`）
+- 文字溢出：`break-words` / `overflow-wrap` / `max-w-full`
+- LaTeX 僅允許合法 `$...$` 片段
+- 相關檔案：`PracticeView.tsx`、`CommonViews.tsx`、`ai-service.js`
+
+#### 1.7.14 Firebase 索引
+- `grade_subject_topic_id_source`（主查詢）
+- `grade_source_created_at`（時間排序）
+- `subject_topic_id_grade`（跨年級）
+
+#### 1.7.15 DeveloperView 重構評估（摘要）
+- 需拆出：`FactoryDashboard` / `AnalyticsView` / `SystemLogs`
+- 高風險區：Factory 即時庫存更新、Seed Upload、Seed Inspection
+- 建議：`loadFactoryQueue/loadFactoryStock` 下放至 `FactoryDashboard`
+- 可考慮 `AdminContext` 降低 props drilling
 
 ---
 
