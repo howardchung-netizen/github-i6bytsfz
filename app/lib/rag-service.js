@@ -21,9 +21,13 @@ export const RAG_SERVICE = {
             return null;
         } catch (e) { return null; }
     },
-    fetchSeedQuestion: async (level, selectedTopics, allTopicsList, user = null) => {
+    fetchSeedQuestion: async (level, selectedTopics, allTopicsList, user = null, selectedSubTopics = {}) => {
         try {
             const targetTopicObjs = allTopicsList.filter(t => selectedTopics.includes(t.id));
+            const targetTopicId = selectedTopics && selectedTopics.length > 0 ? selectedTopics[0] : null;
+            const allowedSubTopics = targetTopicId && Array.isArray(selectedSubTopics?.[targetTopicId])
+                ? selectedSubTopics[targetTopicId].filter(Boolean)
+                : [];
             const papers = [];
             
             // 1. 查詢主資料庫（開發者上傳的種子題目）
@@ -70,10 +74,25 @@ export const RAG_SERVICE = {
                     return (p.topic && t.name.includes(p.topic)) || (p.question && p.question.includes(t.name.split(' ')[0]));
                 });
             });
+
+            if (allowedSubTopics.length > 0) {
+                const subTopicSeeds = seeds.filter(p => {
+                    const st = p.subTopic || p.sub_topic || p.subtopic || '';
+                    return st && allowedSubTopics.includes(st);
+                });
+                if (subTopicSeeds.length > 0) return subTopicSeeds[Math.floor(Math.random() * subTopicSeeds.length)];
+            }
             
             if (seeds.length === 0) {
                  const autoSeeds = papers.filter(p => p.source === 'seed_init' || p.source === 'teacher_db');
                  const relevantAutoSeeds = autoSeeds.filter(p => targetTopicObjs.some(t => p.topic && t.name.includes(p.topic)));
+                 if (allowedSubTopics.length > 0) {
+                    const subTopicAutoSeeds = relevantAutoSeeds.filter(p => {
+                        const st = p.subTopic || p.sub_topic || p.subtopic || '';
+                        return st && allowedSubTopics.includes(st);
+                    });
+                    if (subTopicAutoSeeds.length > 0) return subTopicAutoSeeds[Math.floor(Math.random() * subTopicAutoSeeds.length)];
+                 }
                  if(relevantAutoSeeds.length > 0) return relevantAutoSeeds[Math.floor(Math.random() * relevantAutoSeeds.length)];
             }
             if (seeds.length > 0) return seeds[Math.floor(Math.random() * seeds.length)];

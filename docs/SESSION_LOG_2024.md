@@ -2,6 +2,19 @@
 
 ## 📋 今天完成的主要工作
 
+### 44. ✅ 兩段式抽題（topic-only 均衡）
+**功能**：
+- 當只選 topic 時，先等距抽子單元（subTopic），再抽題/生題
+- 抽題與生題流程都會套用同一個 subTopic，避免 1:98 的失衡
+
+**相關文件**：
+- `services/question-dispatcher.ts`
+- `app/api/dispatch/route.ts`
+- `app/lib/ai-service.js`
+- `app/lib/rag-service.js`
+
+---
+
 ### 43. ✅ 題庫清理介面（Question Manager）
 **功能**：
 - 新增 DeveloperView 分頁「2.5 題庫清理」，不需進 Firebase 即可管理題目

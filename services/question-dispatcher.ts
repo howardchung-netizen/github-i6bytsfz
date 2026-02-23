@@ -12,6 +12,7 @@ export interface DispatchRequest {
   grade: string;
   subject?: string | null;
   topicId?: string | null;
+  subTopic?: string | null;
   mode: DispatchMode;
   poolTypes?: PoolType[];
   topics?: Array<Record<string, any>>;
@@ -71,16 +72,19 @@ const fetchPoolQuestions = async ({
   grade,
   subject,
   topicId,
+  subTopic,
   batchSize = 120
 }: {
   grade: string;
   subject?: string | null;
   topicId?: string | null;
+  subTopic?: string | null;
   batchSize?: number;
 }) => {
   const conditions = [where('grade', '==', grade)];
   if (subject) conditions.push(where('subject', '==', subject));
   if (topicId) conditions.push(where('topic_id', '==', topicId));
+  if (subTopic) conditions.push(where('subTopic', '==', subTopic));
 
   const poolQuery = query(
     collection(db, 'artifacts', APP_ID, 'public', 'data', 'past_papers'),
@@ -99,7 +103,7 @@ const filterByPoolTypes = (questions: Record<string, any>[], poolTypes: PoolType
 };
 
 export const dispatchQuestion = async (request: DispatchRequest): Promise<DispatchResult> => {
-  const { userId, grade, subject = null, topicId = null, mode, poolTypes, topics, userContext } = request;
+  const { userId, grade, subject = null, topicId = null, subTopic = null, mode, poolTypes, topics, userContext } = request;
   const usedIds = await fetchUserUsedQuestionIds(userId);
 
   const desiredPoolTypes: PoolType[] =
@@ -109,7 +113,15 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
         ? ['TEXT']
         : ['IMAGE_STATIC', 'IMAGE_CANVAS'];
 
-  const poolCandidates = await fetchPoolQuestions({ grade, subject, topicId });
+  const topicsList = topics && topics.length > 0 ? topics : await DB_SERVICE.fetchTopics();
+  let resolvedSubTopic = subTopic;
+  if (!resolvedSubTopic && topicId && topicsList.length > 0) {
+    const topic = topicsList.find((t) => t.id === topicId);
+    const subTopics = Array.isArray(topic?.subTopics) ? topic.subTopics.filter(Boolean) : [];
+    resolvedSubTopic = pickRandom(subTopics);
+  }
+
+  const poolCandidates = await fetchPoolQuestions({ grade, subject, topicId, subTopic: resolvedSubTopic });
   const normalizedCandidates = poolCandidates.map(withDefaultStatus);
   const typedCandidates = filterByPoolTypes(normalizedCandidates, desiredPoolTypes);
   const publishedCandidates = typedCandidates.filter((q) => q.status === 'PUBLISHED');
@@ -126,14 +138,16 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
   }
 
   if (mode === 'TEXT') {
-    const topicsList = topics && topics.length > 0 ? topics : await DB_SERVICE.fetchTopics();
+    const subTopicFocus = resolvedSubTopic && topicId ? { [topicId]: [resolvedSubTopic] } : {};
     const generated = await AI_SERVICE.generateQuestionDirect(
       grade,
       'normal',
       topicId ? [topicId] : [],
       topicsList,
       subject || null,
-      userContext || null
+      userContext || null,
+      null,
+      subTopicFocus
     );
 
     return {

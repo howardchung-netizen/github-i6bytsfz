@@ -154,6 +154,12 @@ export const AI_SERVICE = {
     const resolvedSubject = resolveSubject(level, selectedTopicIds, allTopicsList, subjectHint);
     const modes = buildDispatchPlan(resolvedSubject, count);
     const userId = user?.uid || user?.id || user?.userId || null;
+    const subTopicCandidates = topicId && selectedSubTopics?.[topicId]?.length > 0
+        ? selectedSubTopics[topicId]
+        : [];
+    const chosenSubTopic = subTopicCandidates.length > 0
+        ? subTopicCandidates[Math.floor(Math.random() * subTopicCandidates.length)]
+        : null;
 
     if (!userId) {
         console.warn('⚠️ fetchQuestionBatch: Missing userId, fallback to direct generation');
@@ -176,6 +182,7 @@ export const AI_SERVICE = {
             grade: level,
             subject: resolvedSubject,
             topicId,
+            subTopic: chosenSubTopic,
             mode,
             poolTypes: mode === 'TEXT' ? ['TEXT'] : ['IMAGE_STATIC', 'IMAGE_CANVAS'],
             topics: allTopicsList,
@@ -336,9 +343,21 @@ export const AI_SERVICE = {
             finalTopicIds = [randomTopic.id];
         }
     }
+
+    // 如果沒有子單元焦點，則在該單元內等距隨機挑一個子單元
+    let subTopicFocusMap = selectedSubTopics || {};
+    const hasSubTopicFocus = Object.values(subTopicFocusMap || {}).some(list => Array.isArray(list) && list.length > 0);
+    if (!hasSubTopicFocus && finalTopicIds.length > 0) {
+        const topicForSub = allTopicsList.find(t => t.id === finalTopicIds[0]);
+        const subTopics = Array.isArray(topicForSub?.subTopics) ? topicForSub.subTopics.filter(Boolean) : [];
+        if (subTopics.length > 0) {
+            const picked = subTopics[Math.floor(Math.random() * subTopics.length)];
+            subTopicFocusMap = { [finalTopicIds[0]]: [picked] };
+        }
+    }
     
     // 2. 先嘗試找種子題目 (RAG) - 支持混合查詢（主庫 + 教學者機構庫）
-    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, finalTopicIds, allTopicsList, user);
+    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, finalTopicIds, allTopicsList, user, subTopicFocusMap);
     // Fallback seed logic if none found in RAG
     const activeSeed = seedQuestion || {
         question: targetSubject === 'math' ? "基礎數學運算" : targetSubject === 'chi' ? "基礎中文練習" : "Basic English Practice",
@@ -399,7 +418,7 @@ export const AI_SERVICE = {
         ? 'Language: English (US). All text must be in English. Set "lang": "en-US".'
         : 'Language: 繁體中文（香港）。All text must be in Traditional Chinese. Set "lang": "zh-HK".';
 
-    const subTopicFocusText = Object.entries(selectedSubTopics || {})
+    const subTopicFocusText = Object.entries(subTopicFocusMap || {})
         .filter(([, list]) => Array.isArray(list) && list.length > 0)
         .map(([topicId, list]) => {
             const topicName = allTopicsList.find(t => t.id === topicId)?.name || topicId;
@@ -411,6 +430,12 @@ export const AI_SERVICE = {
 
     const promptText = `
         Role: Professional HK Primary Math Teacher.
+        System: You are a top-tier primary education expert and exam item designer.
+        Rules:
+        - Ensure question diversity; avoid high similarity with recent outputs.
+        - Distractors must be plausible (common student mistakes), never absurd.
+        - Output strict JSON only (no markdown or extra text).
+        - For calculations, verify the answer twice before finalizing.
         Task: Create ${BATCH_SIZE} NEW variations of the following seed question. Each variation must be DISTINCT with different numbers, names, and contexts.
         Seed: "${activeSeed.question}" (Topic: ${activeSeed.topic})
         ${subTopicFocusText ? `Sub-topic focus: ${subTopicFocusText}` : ''}
@@ -475,7 +500,13 @@ export const AI_SERVICE = {
         const response = await fetch(buildApiUrl('/api/chat'), { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: promptText }),
+            body: JSON.stringify({ 
+                message: promptText,
+                generationConfig: {
+                    temperature: 0.7,
+                    responseMimeType: "application/json"
+                }
+            }),
         });
 
         if (!response.ok) {
@@ -794,6 +825,12 @@ export const AI_SERVICE = {
     // 建構 Prompt - 基於錯題生成新題目
     const promptText = `
         Role: Professional HK Primary ${targetSubject === 'math' ? 'Math' : targetSubject === 'chi' ? 'Chinese' : 'English'} Teacher.
+        System: You are a top-tier primary education expert and exam item designer.
+        Rules:
+        - Ensure question diversity; avoid high similarity with recent outputs.
+        - Distractors must be plausible (common student mistakes), never absurd.
+        - Output strict JSON only (no markdown or extra text).
+        - For calculations, verify the answer twice before finalizing.
         Task: Create a NEW variation question based on the original question. This is a "舉一反三" (Learn by Analogy) exercise.
         ${feedbackText ? `\n        IMPORTANT FEEDBACK: Please incorporate the following feedback when generating the improved question:\n        "${feedbackText}"\n        The improved question should address or implement the suggestions in this feedback.\n` : ''}
         Original Question: "${originalQuestion}"
@@ -846,7 +883,13 @@ export const AI_SERVICE = {
         const response = await fetch(buildApiUrl('/api/chat'), { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: promptText }),
+            body: JSON.stringify({ 
+                message: promptText,
+                generationConfig: {
+                    temperature: 0.7,
+                    responseMimeType: "application/json"
+                }
+            }),
         });
 
         if (!response.ok) {

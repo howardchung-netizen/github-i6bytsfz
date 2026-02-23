@@ -19,6 +19,7 @@
   - PUBLISHED 查詢包含舊資料（status 為空）
   - 支援批量勾選刪除
   - 支援「只顯示格式不全」與一鍵選取不完整
+- **兩段式抽題（topic-only）**：先等距抽子單元，再抽題/生題，避免種子分佈失衡
 
 ---
 
@@ -95,6 +96,7 @@
   - 審核分類限制：AI 建議的 Topic/SubTopic 只允許 syllabus 內既有範圍
 - `/api/factory/publish`：工廠發布（DRAFT/AUDITED → PUBLISHED）
 - `/api/dispatch`：混合調度（TEXT 即時生題 / IMAGE 回收）
+  - 支援 `subTopic`，topic-only 時先抽子單元
 - `/api/vision`：圖像題識別與結構化輸出（Vision API）
 - `/api/payment`、`/api/webhooks/stripe`：Stripe 支付與 Webhook
 - `/api/check-env`、`/api/check-quota`、`/api/test-google-api`：環境檢測、配額檢測
@@ -106,6 +108,7 @@
 - `ai-service.js`：題目生成、提示詞建構、JSON 清理與解析（含教學者回饋指令）
   - `fetchQuestionBatch`：前端批次調度（3 題並行呼叫 `/api/dispatch`）
 - `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
+  - 兩段式抽題：topic-only 先抽 subTopic，再抽題/生題
 - `services/report-generator.ts`：雙週學習報告生成核心（Educator/Observer）
   - 報告模型改用 `gemini-3-flash-preview`（JSON 模式）
   - AI 報告改為 JSON 結構輸出並具解析容錯
