@@ -2,16 +2,16 @@
 // 統一管理模型名稱，方便切換不同版本
 // 當前使用：Gemini 2.0 Flash（免費版，RPM 15, RPD 1,500）
 // 注意：如果遇到 limit: 0 錯誤，表示 API Key 對 2.0 Flash 沒有免費層配額，需要升級到付費方案
-export const CURRENT_MODEL_NAME = "gemini-2.0-flash"; // 主要用於文字生成（2.0 Flash 免費版）
-export const CURRENT_VISION_MODEL_NAME = "gemini-2.0-flash"; // 用於 Vision API（2.0 Flash 支持 Vision）
+export const CURRENT_MODEL_NAME = "gemini-2.5-flash"; // 主要用於文字生成
 
 // Auditor Model Configuration
 // 審計員模型（用於背景審計系統，需要更好的推理能力）
 // 已驗證：gemini-2.5-pro 可用（2025年1月8日驗證）
 // Pro 模型比 Flash 模型有更好的推理能力，適合用於審計任務
-export const AUDITOR_MODEL_NAME = "gemini-2.5-pro"; // 審計員模型（已驗證可用）
-// 報告生成模型（高價值輸出，必須使用 Pro 等級）
-export const REPORT_MODEL_NAME = "gemini-1.5-pro";
+export const CURRENT_VISION_MODEL_NAME = "gemini-3-flash-preview"; // 用於 Vision API
+export const AUDITOR_MODEL_NAME = "gemini-3-flash-preview"; // 審計員模型
+// 報告生成模型
+export const REPORT_MODEL_NAME = "gemini-3-flash-preview";
 
 // RPM (Requests Per Minute) 速率限制配置
 // 當前使用：Gemini 2.0 Flash 免費版（RPM 15）

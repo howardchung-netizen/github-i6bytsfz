@@ -157,9 +157,6 @@ export const AI_SERVICE = {
     const subTopicCandidates = topicId && selectedSubTopics?.[topicId]?.length > 0
         ? selectedSubTopics[topicId]
         : [];
-    const chosenSubTopic = subTopicCandidates.length > 0
-        ? subTopicCandidates[Math.floor(Math.random() * subTopicCandidates.length)]
-        : null;
 
     if (!userId) {
         console.warn('⚠️ fetchQuestionBatch: Missing userId, fallback to direct generation');
@@ -176,7 +173,10 @@ export const AI_SERVICE = {
         return fallbackQuestion ? [fallbackQuestion] : [];
     }
 
-    const requests = modes.map((mode) => {
+    const requests = modes.map((mode, idx) => {
+        const chosenSubTopic = subTopicCandidates.length > 0
+            ? subTopicCandidates[idx % subTopicCandidates.length]
+            : null;
         const payload = {
             userId,
             grade: level,
@@ -265,7 +265,17 @@ export const AI_SERVICE = {
     return firstQuestion;
   },
 
-  generateQuestionDirect: async (level, difficulty, selectedTopicIds = [], allTopicsList, subjectHint = null, user = null, languagePreference = null, selectedSubTopics = {}) => {
+  generateQuestionDirect: async (
+    level,
+    difficulty,
+    selectedTopicIds = [],
+    allTopicsList,
+    subjectHint = null,
+    user = null,
+    languagePreference = null,
+    selectedSubTopics = {},
+    dispatchMeta = {}
+  ) => {
     // ===== 階段 1: 緩存鍵生成與失效檢查 =====
     const currentCacheKey = generateCacheKey(level, selectedTopicIds, subjectHint, user, difficulty, languagePreference, selectedSubTopics);
     
@@ -357,7 +367,21 @@ export const AI_SERVICE = {
     }
     
     // 2. 先嘗試找種子題目 (RAG) - 支持混合查詢（主庫 + 教學者機構庫）
-    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(level, finalTopicIds, allTopicsList, user, subTopicFocusMap);
+    const seedQuestion = await RAG_SERVICE.fetchSeedQuestion(
+        level,
+        finalTopicIds,
+        allTopicsList,
+        user,
+        subTopicFocusMap,
+        {
+            strictSubTopicLock: Boolean(dispatchMeta?.strictMathSeedLock),
+            subject: targetSubject
+        }
+    );
+    if (dispatchMeta?.strictMathSeedLock && !seedQuestion) {
+        console.warn('⚠️ Strict math seed lock: no seed found for requested subTopic');
+        return null;
+    }
     // Fallback seed logic if none found in RAG
     const activeSeed = seedQuestion || {
         question: targetSubject === 'math' ? "基礎數學運算" : targetSubject === 'chi' ? "基礎中文練習" : "Basic English Practice",
@@ -436,6 +460,7 @@ export const AI_SERVICE = {
         - Distractors must be plausible (common student mistakes), never absurd.
         - Output strict JSON only (no markdown or extra text).
         - For calculations, verify the answer twice before finalizing.
+        - If the question involves measurement units, include unit-based distractors (e.g., mix cm/m/mm or m²/cm²) so only one option is correct after unit conversion.
         Task: Create ${BATCH_SIZE} NEW variations of the following seed question. Each variation must be DISTINCT with different numbers, names, and contexts.
         Seed: "${activeSeed.question}" (Topic: ${activeSeed.topic})
         ${subTopicFocusText ? `Sub-topic focus: ${subTopicFocusText}` : ''}
@@ -719,7 +744,11 @@ export const AI_SERVICE = {
             console.log(`💾 已將 ${remainingQuestions.length} 題存入緩存（緩存鍵: ${currentCacheKey.substring(0, 50)}...）`);
         }
         
-        return firstQuestion;
+        return {
+            ...firstQuestion,
+            requestedSubTopic: dispatchMeta?.requestedSubTopic || null,
+            actualSubTopic: firstQuestion?.subTopic || dispatchMeta?.requestedSubTopic || null
+        };
 
     } catch (err) {
         console.error("AI Batch Generation Failed:", err);
@@ -831,6 +860,7 @@ export const AI_SERVICE = {
         - Distractors must be plausible (common student mistakes), never absurd.
         - Output strict JSON only (no markdown or extra text).
         - For calculations, verify the answer twice before finalizing.
+        - If the question involves measurement units, include unit-based distractors (e.g., mix cm/m/mm or m²/cm²) so only one option is correct after unit conversion.
         Task: Create a NEW variation question based on the original question. This is a "舉一反三" (Learn by Analogy) exercise.
         ${feedbackText ? `\n        IMPORTANT FEEDBACK: Please incorporate the following feedback when generating the improved question:\n        "${feedbackText}"\n        The improved question should address or implement the suggestions in this feedback.\n` : ''}
         Original Question: "${originalQuestion}"

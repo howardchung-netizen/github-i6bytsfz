@@ -212,7 +212,7 @@ export default function DeveloperView({ topics, setTopics, setView, isFirebaseRe
         )}
 
         {activeTab === 'question_manager' && isAdminReviewer && (
-            <QuestionManager isFirebaseReady={isFirebaseReady} />
+            <QuestionManager isFirebaseReady={isFirebaseReady} topics={topics} />
         )}
 
         {/* 教學者試題管理標籤頁 */}

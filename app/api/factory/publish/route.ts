@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { DB_SERVICE } from '../../../lib/db-service';
+import { getAdminDb } from '../../../lib/firebase-admin';
+import { APP_ID } from '../../../lib/constants';
 
 export async function POST(request: Request) {
   try {
@@ -10,11 +11,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Missing questionIds' }, { status: 400 });
     }
 
-    const results = await Promise.all(questionIds.map(async (questionId: string) => {
-      const ok = await DB_SERVICE.updateQuestionFactoryStatus(questionId, { status: 'PUBLISHED' });
-      return { questionId, success: ok };
-    }));
+    const adminDb = getAdminDb();
+    const nowIso = new Date().toISOString();
+    const refs = questionIds
+      .filter(Boolean)
+      .map((questionId: string) => ({
+        id: questionId,
+        ref: adminDb
+          .collection('artifacts')
+          .doc(APP_ID)
+          .collection('public')
+          .doc('data')
+          .collection('past_papers')
+          .doc(questionId)
+      }));
 
+    const batch = adminDb.batch();
+    refs.forEach(({ ref }) => {
+      batch.update(ref, { status: 'PUBLISHED', publishedAt: nowIso, updatedAt: nowIso });
+    });
+    await batch.commit();
+
+    const verifySnaps = await Promise.all(refs.map(item => item.ref.get()));
+    const failedIds = refs
+      .filter((item, idx) => {
+        const snap = verifySnaps[idx];
+        if (!snap.exists) return true;
+        const data = snap.data() || {};
+        return data.status !== 'PUBLISHED';
+      })
+      .map(item => item.id);
+
+    if (failedIds.length > 0) {
+      return NextResponse.json(
+        { success: false, error: `Publish verify failed: ${failedIds.join(', ')}`, failedIds },
+        { status: 500 }
+      );
+    }
+
+    const results = refs.map(({ id }) => ({ questionId: id, success: true }));
     return NextResponse.json({ success: true, data: results });
   } catch (error: any) {
     console.error('Factory Publish Error:', error);

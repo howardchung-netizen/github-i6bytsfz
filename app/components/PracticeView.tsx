@@ -931,13 +931,13 @@ export default function PracticeView({
               </div>
               
               <div className="text-center">
-                {currentQuestion.image && (
+                {(currentQuestion.imageUrl || currentQuestion.image) && (
                   <div className="mb-6">
                     <div className={`relative mx-auto overflow-hidden rounded-xl border border-slate-200 bg-white ${
                       imageExpanded ? 'max-h-none' : 'max-h-80'
                     }`}>
                       <img
-                        src={currentQuestion.image}
+                        src={currentQuestion.imageUrl || currentQuestion.image}
                         alt="題目圖像"
                         className="w-full object-contain"
                       />

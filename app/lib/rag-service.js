@@ -4,6 +4,8 @@ import { APP_ID } from './constants';
 import { DB_SERVICE } from './db-service';
 
 export const RAG_SERVICE = {
+    normalizeKey: (value) => String(value || '').trim().toLowerCase(),
+    normalizeText: (value) => String(value || '').trim(),
     fetchCachedGeneratedQuestion: async (level, selectedTopics) => {
         try {
             const q = query(
@@ -21,8 +23,17 @@ export const RAG_SERVICE = {
             return null;
         } catch (e) { return null; }
     },
-    fetchSeedQuestion: async (level, selectedTopics, allTopicsList, user = null, selectedSubTopics = {}) => {
+    fetchSeedQuestion: async (
+        level,
+        selectedTopics,
+        allTopicsList,
+        user = null,
+        selectedSubTopics = {},
+        options = {}
+    ) => {
         try {
+            const strictSubTopicLock = Boolean(options?.strictSubTopicLock);
+            const requestedSubject = options?.subject || null;
             const targetTopicObjs = allTopicsList.filter(t => selectedTopics.includes(t.id));
             const targetTopicId = selectedTopics && selectedTopics.length > 0 ? selectedTopics[0] : null;
             const allowedSubTopics = targetTopicId && Array.isArray(selectedSubTopics?.[targetTopicId])
@@ -32,7 +43,7 @@ export const RAG_SERVICE = {
             
             // 1. 查詢主資料庫（開發者上傳的種子題目）
             const mainQuery = query(
-                collection(db, "artifacts", APP_ID, "public", "data", "past_papers"), 
+                collection(db, "artifacts", APP_ID, "public", "data", "seed_questions"),
                 where("grade", "==", level),
                 limit(50)
             );
@@ -41,6 +52,7 @@ export const RAG_SERVICE = {
                 const data = d.data() || {};
                 const status = data.status || 'PUBLISHED';
                 if (status !== 'PUBLISHED') return;
+                if (requestedSubject && data.subject && data.subject !== requestedSubject) return;
                 papers.push({ id: d.id, source: 'main_db', ...data, status });
             });
             
@@ -71,7 +83,9 @@ export const RAG_SERVICE = {
             const seeds = papers.filter(p => {
                 if (p.source && p.source.startsWith('ai_')) return false; 
                 return targetTopicObjs.some(t => {
-                    return (p.topic && t.name.includes(p.topic)) || (p.question && p.question.includes(t.name.split(' ')[0]));
+                    const topicIdMatch = p.topic_id && t.id && RAG_SERVICE.normalizeKey(p.topic_id) === RAG_SERVICE.normalizeKey(t.id);
+                    const topicNameMatch = p.topic && t.name && RAG_SERVICE.normalizeKey(p.topic) === RAG_SERVICE.normalizeKey(t.name);
+                    return topicIdMatch || topicNameMatch;
                 });
             });
 
@@ -81,6 +95,7 @@ export const RAG_SERVICE = {
                     return st && allowedSubTopics.includes(st);
                 });
                 if (subTopicSeeds.length > 0) return subTopicSeeds[Math.floor(Math.random() * subTopicSeeds.length)];
+                if (strictSubTopicLock) return null;
             }
             
             if (seeds.length === 0) {
@@ -93,8 +108,10 @@ export const RAG_SERVICE = {
                     });
                     if (subTopicAutoSeeds.length > 0) return subTopicAutoSeeds[Math.floor(Math.random() * subTopicAutoSeeds.length)];
                  }
+                 if (strictSubTopicLock) return null;
                  if(relevantAutoSeeds.length > 0) return relevantAutoSeeds[Math.floor(Math.random() * relevantAutoSeeds.length)];
             }
+            if (strictSubTopicLock && allowedSubTopics.length > 0) return null;
             if (seeds.length > 0) return seeds[Math.floor(Math.random() * seeds.length)];
             return null;
         } catch (e) { return null; }

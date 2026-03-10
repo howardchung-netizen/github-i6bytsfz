@@ -13,7 +13,6 @@ export async function POST(request: Request) {
     }
 
     // 使用統一的 Vision 模型配置（從 constants.js 導入）
-    // 當前使用：gemini-2.0-flash（支持 Vision API，2.0 Flash 免費版）
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${CURRENT_VISION_MODEL_NAME}:generateContent?key=${apiKey}`;
 
     // 移除 Base64 前綴（如果有的話）
@@ -22,29 +21,27 @@ export async function POST(request: Request) {
     // 檢測圖像格式
     const mimeType = imageBase64.match(/data:image\/(\w+);base64/)?.[1] || 'png';
 
-    const defaultPrompt = `請分析這張數學題目的圖像，提取以下信息並以 JSON 格式返回：
+    const defaultPrompt = `你是一位專業的題目數位化助手。
+請閱讀這張題目圖片，僅萃取文字與邏輯，回傳純 JSON（不得包含 markdown）。
 
-1. 圖形類型（如果有的話）：rectangle, square, triangle, circle, trapezoid, parallelogram, irregular, composite, map_grid
-2. 圖形參數（如果有的話）：如長度、寬度、半徑等，格式為對象
-3. 題目文字內容：完整的題目描述
-4. 答案：題目的正確答案
-5. 解釋（可選）：簡短解釋
+任務：
+1) 提取題幹 question（若涉及圖形，題幹可補「如附圖所示」）。
+2) 提取 options（若非選擇題可為空陣列）。
+3) 提取 answer。
+4) explanation 為可選；若圖中沒有解析可省略。
 
-請嚴格按照以下 JSON 格式返回：
+嚴格禁令：
+- 不要描述圖形外觀比例。
+- 不要生成 SVG/Canvas/座標代碼。
+- 不要輸出 shape/params/mapData 等幾何欄位。
+
+輸出 JSON schema：
 {
-  "shape": "圖形類型或null",
-  "params": {參數對象或null},
-  "question": "題目文字",
-  "answer": "答案",
-  "explanation": "解釋（可選）",
-  "type": "geometry或word_problem"
-}
-
-注意：
-- 如果題目沒有圖形，shape 和 params 設為 null
-- 如果題目有圖形，必須準確提取圖形類型和參數
-- 題目文字必須完整，包括所有數字和單位
-- 使用 LaTeX 格式表示分數：$\\frac{3}{8}$`;
+  "question": "string",
+  "options": ["string"],
+  "answer": "string",
+  "explanation": "string (optional)"
+}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -66,7 +63,11 @@ export async function POST(request: Request) {
               }
             ]
           }
-        ]
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json"
+        }
       })
     });
 

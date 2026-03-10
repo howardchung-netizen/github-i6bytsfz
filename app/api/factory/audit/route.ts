@@ -164,9 +164,10 @@ export async function POST(request: Request) {
           const origin = (question as any)?.origin;
           const subject = normalizeSubject((question as any)?.subject);
           const grade = normalizeText((question as any)?.grade || (question as any)?.gradeLevel || (question as any)?.level);
+          const shouldValidateClassification = origin !== 'AI_GEN';
           const bucket = getSyllabusBucket(syllabusIndex, subject, grade);
-          const allowedTopics = bucket ? Array.from(bucket.topics) : [];
-          const allowedSubTopics = bucket
+          const allowedTopics = shouldValidateClassification && bucket ? Array.from(bucket.topics) : [];
+          const allowedSubTopics = shouldValidateClassification && bucket
             ? Array.from(bucket.subTopicsByTopic.get(normalizeText((question as any)?.topic)) || bucket.subTopicsAll)
             : [];
           const auditResult = await auditQuestion(question, logicSupplement, { origin, allowedTopics, allowedSubTopics });
@@ -176,15 +177,17 @@ export async function POST(request: Request) {
           const correctedAnswer = normalized.correctedAnswer;
           const suggestedTopic = normalized.suggestedTopic;
           const suggestedSubTopic = normalized.suggestedSubTopic;
-          const validatedSuggestion = validateSuggestedClassification(
-            bucket,
-            suggestedTopic,
-            suggestedSubTopic,
-            normalizeText((question as any)?.topic)
-          );
+          const validatedSuggestion = shouldValidateClassification
+            ? validateSuggestedClassification(
+              bucket,
+              suggestedTopic,
+              suggestedSubTopic,
+              normalizeText((question as any)?.topic)
+            )
+            : { topic: '', subTopic: '', warning: '' };
           const validSuggestedTopic = validatedSuggestion.topic;
           const validSuggestedSubTopic = validatedSuggestion.subTopic;
-          const hasSuggestedClassification = Boolean(validSuggestedTopic || validSuggestedSubTopic);
+          const hasSuggestedClassification = shouldValidateClassification && Boolean(validSuggestedTopic || validSuggestedSubTopic);
           const shouldAutoFixAnswer = Boolean(correctedAnswer);
           const autoFixed = Boolean(hasSuggestedClassification || shouldAutoFixAnswer);
 
@@ -235,11 +238,11 @@ export async function POST(request: Request) {
             };
           }
 
-          if (validatedSuggestion.warning) {
+          if (shouldValidateClassification && validatedSuggestion.warning) {
             updatePayload.auditMeta.classificationWarning = validatedSuggestion.warning;
           }
 
-          if (hasSuggestedClassification) {
+          if (shouldValidateClassification && hasSuggestedClassification) {
             updatePayload.topic = validSuggestedTopic || (question as any)?.topic || '未分類';
             updatePayload.subTopic = validSuggestedSubTopic || (question as any)?.subTopic || null;
           }

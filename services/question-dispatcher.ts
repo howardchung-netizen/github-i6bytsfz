@@ -24,6 +24,8 @@ export interface DispatchResult {
   dispatchPath: 'POOL_UNUSED' | 'GENERATED' | 'RECYCLED' | 'POOL_EMPTY';
   poolType?: PoolType;
   isRecycle?: boolean;
+  requestedSubTopic?: string | null;
+  actualSubTopic?: string | null;
 }
 
 const normalizePoolType = (value: unknown): PoolType | null => {
@@ -51,6 +53,11 @@ const pickRandom = <T>(list: T[]): T | null => {
   const idx = Math.floor(Math.random() * list.length);
   return list[idx];
 };
+
+const normalizeText = (value: unknown) => String(value ?? '').trim();
+const normalizeKey = (value: unknown) => normalizeText(value).toLowerCase();
+
+const isMathSubject = (subject?: string | null) => normalizeKey(subject) === 'math';
 
 const fetchUserUsedQuestionIds = async (userId: string) => {
   const usedIds = new Set<string>();
@@ -97,6 +104,116 @@ const fetchPoolQuestions = async ({
   return items;
 };
 
+const hasPoolAvailability = async ({
+  grade,
+  subject,
+  topicId,
+  subTopic,
+  poolTypes
+}: {
+  grade: string;
+  subject?: string | null;
+  topicId?: string | null;
+  subTopic: string;
+  poolTypes: PoolType[];
+}) => {
+  const candidates = await fetchPoolQuestions({
+    grade,
+    subject,
+    topicId,
+    subTopic,
+    batchSize: 8
+  });
+  const published = candidates
+    .map(withDefaultStatus)
+    .filter((q) => q.status === 'PUBLISHED');
+  const typed = filterByPoolTypes(published, poolTypes);
+  return typed.length > 0;
+};
+
+const hasSeedAvailability = async ({
+  grade,
+  subject,
+  topicId,
+  topicName,
+  subTopic
+}: {
+  grade: string;
+  subject?: string | null;
+  topicId?: string | null;
+  topicName?: string | null;
+  subTopic: string;
+}) => {
+  const conditions: any[] = [where('grade', '==', grade), where('status', '==', 'PUBLISHED')];
+  if (subject) conditions.push(where('subject', '==', subject));
+  conditions.push(where('subTopic', '==', subTopic));
+
+  const snap = await getDocs(
+    query(
+      collection(db, 'artifacts', APP_ID, 'public', 'data', 'seed_questions'),
+      ...conditions,
+      limit(8)
+    )
+  );
+  if (snap.empty) return false;
+
+  const topicIdKey = normalizeKey(topicId);
+  const topicNameKey = normalizeKey(topicName);
+  return snap.docs.some((docSnap) => {
+    const data = docSnap.data() || {};
+    const matchesTopic =
+      (topicIdKey && normalizeKey(data.topic_id || data.topicId) === topicIdKey) ||
+      (topicNameKey && normalizeKey(data.topic) === topicNameKey);
+    return matchesTopic && normalizeText(data.question).length > 0;
+  });
+};
+
+const resolveAvailableSubTopics = async ({
+  grade,
+  subject,
+  topicId,
+  mode,
+  poolTypes,
+  topicsList
+}: {
+  grade: string;
+  subject?: string | null;
+  topicId: string;
+  mode: DispatchMode;
+  poolTypes: PoolType[];
+  topicsList: Array<Record<string, any>>;
+}) => {
+  const topic = topicsList.find((t) => t.id === topicId);
+  const topicName = topic?.name || null;
+  const subTopics = Array.isArray(topic?.subTopics) ? topic.subTopics.filter(Boolean) : [];
+  if (subTopics.length === 0) return [];
+
+  const checks = await Promise.all(
+    subTopics.map(async (st) => {
+      const poolAvailable = await hasPoolAvailability({
+        grade,
+        subject,
+        topicId,
+        subTopic: st,
+        poolTypes
+      });
+
+      if (mode === 'IMAGE') return poolAvailable ? st : null;
+
+      const seedAvailable = await hasSeedAvailability({
+        grade,
+        subject,
+        topicId,
+        topicName,
+        subTopic: st
+      });
+      return poolAvailable || seedAvailable ? st : null;
+    })
+  );
+
+  return checks.filter(Boolean) as string[];
+};
+
 const filterByPoolTypes = (questions: Record<string, any>[], poolTypes: PoolType[]) => {
   const targetSet = new Set(poolTypes);
   return questions.filter((q) => targetSet.has(inferPoolType(q)));
@@ -114,14 +231,33 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
         : ['IMAGE_STATIC', 'IMAGE_CANVAS'];
 
   const topicsList = topics && topics.length > 0 ? topics : await DB_SERVICE.fetchTopics();
+  const topicRecord = topicId ? topicsList.find((t) => t.id === topicId) : null;
+  const resolvedSubject = subject || topicRecord?.subject || null;
   let resolvedSubTopic = subTopic;
   if (!resolvedSubTopic && topicId && topicsList.length > 0) {
-    const topic = topicsList.find((t) => t.id === topicId);
-    const subTopics = Array.isArray(topic?.subTopics) ? topic.subTopics.filter(Boolean) : [];
-    resolvedSubTopic = pickRandom(subTopics);
+    const availableSubTopics = await resolveAvailableSubTopics({
+      grade,
+      subject: resolvedSubject,
+      topicId,
+      mode,
+      poolTypes: desiredPoolTypes,
+      topicsList
+    });
+    resolvedSubTopic = pickRandom(availableSubTopics);
   }
 
-  const poolCandidates = await fetchPoolQuestions({ grade, subject, topicId, subTopic: resolvedSubTopic });
+  const hasSubTopics = Array.isArray(topicRecord?.subTopics) && topicRecord.subTopics.filter(Boolean).length > 0;
+  if (topicId && hasSubTopics && !resolvedSubTopic) {
+    return {
+      question: null,
+      dispatchPath: 'POOL_EMPTY',
+      isRecycle: false,
+      requestedSubTopic: null,
+      actualSubTopic: null
+    };
+  }
+
+  const poolCandidates = await fetchPoolQuestions({ grade, subject: resolvedSubject, topicId, subTopic: resolvedSubTopic });
   const normalizedCandidates = poolCandidates.map(withDefaultStatus);
   const typedCandidates = filterByPoolTypes(normalizedCandidates, desiredPoolTypes);
   const publishedCandidates = typedCandidates.filter((q) => q.status === 'PUBLISHED');
@@ -133,7 +269,9 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
       question: picked,
       dispatchPath: 'POOL_UNUSED',
       poolType: picked ? inferPoolType(picked) : undefined,
-      isRecycle: false
+      isRecycle: false,
+      requestedSubTopic: resolvedSubTopic || null,
+      actualSubTopic: picked?.subTopic || resolvedSubTopic || null
     };
   }
 
@@ -144,22 +282,28 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
       'normal',
       topicId ? [topicId] : [],
       topicsList,
-      subject || null,
+      resolvedSubject,
       userContext || null,
       null,
-      subTopicFocus
+      subTopicFocus,
+      {
+        strictMathSeedLock: isMathSubject(resolvedSubject),
+        requestedSubTopic: resolvedSubTopic || null
+      }
     );
 
     return {
       question: generated,
       dispatchPath: generated ? 'GENERATED' : 'POOL_EMPTY',
       poolType: generated ? 'TEXT' : undefined,
-      isRecycle: false
+      isRecycle: false,
+      requestedSubTopic: resolvedSubTopic || null,
+      actualSubTopic: generated?.subTopic || resolvedSubTopic || null
     };
   }
 
   if (publishedCandidates.length === 0) {
-    const broaderCandidates = await fetchPoolQuestions({ grade, subject, topicId: null, batchSize: 200 });
+    const broaderCandidates = await fetchPoolQuestions({ grade, subject: resolvedSubject, topicId: null, batchSize: 200 });
     const broaderTyped = filterByPoolTypes(broaderCandidates.map(withDefaultStatus), desiredPoolTypes);
     const broaderPublished = broaderTyped.filter((q) => q.status === 'PUBLISHED');
     const recycled = pickRandom(broaderPublished);
@@ -167,7 +311,9 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
       question: recycled,
       dispatchPath: recycled ? 'RECYCLED' : 'POOL_EMPTY',
       poolType: recycled ? inferPoolType(recycled) : undefined,
-      isRecycle: Boolean(recycled)
+      isRecycle: Boolean(recycled),
+      requestedSubTopic: resolvedSubTopic || null,
+      actualSubTopic: recycled?.subTopic || null
     };
   }
 
@@ -176,6 +322,8 @@ export const dispatchQuestion = async (request: DispatchRequest): Promise<Dispat
     question: recycled,
     dispatchPath: recycled ? 'RECYCLED' : 'POOL_EMPTY',
     poolType: recycled ? inferPoolType(recycled) : undefined,
-    isRecycle: Boolean(recycled)
+    isRecycle: Boolean(recycled),
+    requestedSubTopic: resolvedSubTopic || null,
+    actualSubTopic: recycled?.subTopic || null
   };
 };

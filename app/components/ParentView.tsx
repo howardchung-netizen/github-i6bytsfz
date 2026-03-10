@@ -171,14 +171,15 @@ export default function ParentView({ setView, user }) {
     try {
       const report = await DB_SERVICE.generateProgressReport(selectedChild.uid, 14);
       if (report) {
-        alert('報告生成成功！');
+        alert('報告生成成功！（AI 老師 + AI 醫生）');
         await loadReports(selectedChild.uid);
       } else {
         alert('報告生成失敗');
       }
     } catch (e) {
       console.error("Generate report error:", e);
-      alert('報告生成失敗，請稍後再試');
+      const message = e?.message ? `\n\n錯誤：${e.message}` : '';
+      alert(`報告生成失敗，請稍後再試${message}`);
     } finally {
       setLoading(false);
     }
@@ -332,7 +333,7 @@ export default function ParentView({ setView, user }) {
               disabled={isGeneratingMock}
               className="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isGeneratingMock ? '生成中...' : '🎲 創建模擬學生（含30天數據）'}
+              {isGeneratingMock ? '生成中...' : '🎲 創建模擬學生（含14天數據）'}
             </button>
           </div>
         </div>
@@ -681,7 +682,7 @@ export default function ParentView({ setView, user }) {
                 disabled={loading}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition disabled:opacity-50 flex items-center gap-2"
               >
-                <Sparkles size={18} /> 生成新報告
+                <Sparkles size={18} /> 生成 AI 報告（老師+醫生）
               </button>
             </div>
 
@@ -689,13 +690,13 @@ export default function ParentView({ setView, user }) {
               <div className="text-center py-12 bg-slate-50 rounded-lg">
                 <Calendar size={48} className="mx-auto mb-3 text-slate-400" />
                 <p className="text-slate-600 font-bold">尚未生成報告</p>
-                <p className="text-sm text-slate-500 mt-1">點擊「生成新報告」來獲取 AI 分析</p>
+                <p className="text-sm text-slate-500 mt-1">點擊「生成 AI 報告（老師+醫生）」來獲取 AI 分析</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {reports
                   .filter((report) => {
-                    const text = `${report.summary || ''} ${report.recommendations?.join(' ') || ''}`;
+                    const text = `${report.summary || ''} ${report.recommendations?.join(' ') || ''} ${report.nextPhasePlan || ''} ${report.medicalRecord || ''}`;
                     return text.toLowerCase().includes(reportSearch.toLowerCase());
                   })
                   .sort((a, b) => {
@@ -717,6 +718,11 @@ export default function ParentView({ setView, user }) {
                         <p className="text-sm text-indigo-700">
                           {new Date(report.generatedAt).toLocaleDateString('zh-HK')}
                         </p>
+                        {report.mode && (
+                          <span className="inline-flex mt-2 px-2 py-1 text-xs font-bold rounded-full bg-indigo-200 text-indigo-800">
+                            {report.mode === 'OBSERVER' ? 'AI 醫生' : 'AI 老師'}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -728,7 +734,7 @@ export default function ParentView({ setView, user }) {
                       <div>
                         <h5 className="font-bold text-green-700 mb-2">強項：</h5>
                         <ul className="list-disc list-inside text-sm text-slate-700">
-                          {report.strengths.map((s, i) => (
+                          {(report.strengths || []).map((s, i) => (
                             <li key={i}>{s}</li>
                           ))}
                         </ul>
@@ -736,7 +742,7 @@ export default function ParentView({ setView, user }) {
                       <div>
                         <h5 className="font-bold text-red-700 mb-2">弱項：</h5>
                         <ul className="list-disc list-inside text-sm text-slate-700">
-                          {report.weaknesses.map((w, i) => (
+                          {(report.weaknesses || []).map((w, i) => (
                             <li key={i}>{w}</li>
                           ))}
                         </ul>
@@ -746,15 +752,24 @@ export default function ParentView({ setView, user }) {
                     <div className="mb-4">
                       <h5 className="font-bold text-indigo-700 mb-2">建議：</h5>
                       <ul className="list-disc list-inside text-sm text-slate-700">
-                        {report.recommendations.map((r, i) => (
+                        {(report.recommendations || []).map((r, i) => (
                           <li key={i}>{r}</li>
                         ))}
                       </ul>
                     </div>
 
+                    {report.mode === 'OBSERVER' && report.medicalRecord && (
+                      <div className="bg-white p-4 rounded-lg border border-indigo-200 mb-4">
+                        <h5 className="font-bold text-indigo-900 mb-2">醫生參考紀錄：</h5>
+                        <p className="text-sm text-slate-700 whitespace-pre-line">{report.medicalRecord}</p>
+                      </div>
+                    )}
+
                     <div className="bg-white p-4 rounded-lg border border-indigo-200">
-                      <h5 className="font-bold text-indigo-900 mb-2">下一階段計劃：</h5>
-                      <p className="text-sm text-slate-700">{report.nextPhasePlan}</p>
+                      <h5 className="font-bold text-indigo-900 mb-2">
+                        {report.mode === 'OBSERVER' ? '後續建議 / 轉介方向：' : '下 2 週課程安排：'}
+                      </h5>
+                      <p className="text-sm text-slate-700 whitespace-pre-line">{report.nextPhasePlan}</p>
                     </div>
                   </div>
                 ))}

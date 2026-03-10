@@ -1,17 +1,17 @@
 # 專案功能架構與待辦整合總覽
 
 > **用途**：提供完整的「已完成功能架構 + To-Do + 後續建議」，可直接交給另一個 AI 進行技術分析。  
-> **更新日期**：2026年1月24日  
+> **更新日期**：2026年2月24日  
 > **專案路徑**：`C:\ai totur\github-i6bytsfz`
 
 ---
 
-## 最新更新紀錄（2026-01-24）
+## 最新更新紀錄（2026-02-24）
 
 - **模型配置**：生題 `gemini-2.5-flash`；審核/Vision/報告 `gemini-3-flash-preview`
 - **JSON 模式**：生題(temperature=0.7)、審核(0.0)、Vision(0.1) 全面加 `responseMimeType: "application/json"`
-- **審核原因欄位**：審核 prompt 強制輸出 `error_report`/`report`，UI 直接可讀
-- **Vision 重構**：只萃取文字 JSON；`explanation` 改為可選；移除 `shape/params` 依賴
+- **審核原因欄位**：審核 prompt 輸出 `error_report`（FAIL）/`report`（PASS/FIXED），UI 可直接讀取
+- **Vision 重構**：只萃取文字 JSON（`question/options/answer`，`explanation` 可選）；移除 `shape/params` 依賴
 - **imageUrl 流程**：上傳先存 Storage 拿 `imageUrl`，DB 只存 `imageUrl + JSON`；前端顯示優先 `imageUrl`，fallback 舊 `image`
 - **相容性**：舊庫存仍可讀 `image`（base64），不影響既有題目
 - **題庫清理頁**：新增「2.5 題庫清理」分頁（獨立管理介面）
@@ -20,6 +20,22 @@
   - 支援批量勾選刪除
   - 支援「只顯示格式不全」與一鍵選取不完整
 - **兩段式抽題（topic-only）**：先等距抽子單元，再抽題/生題，避免種子分佈失衡
+- **兩段式抽題升級（Availability-aware）**：
+  - topic-only 先過濾「有可用 pool/seed」的子單元，再等機率抽取，避免空槽 fallback 造成分佈失衡
+  - 效能保護：可用性探測採小查詢（`limit(1~8)`），避免全量撈取文件
+- **數學 strict seed lock（dispatch 路徑）**：
+  - `math` 在指定/抽中 subTopic 時，seed 只允許命中同 subTopic；找不到即回空並重抽可用子單元
+  - 禁止跨子單元借 seed，防止「1:98」題型偏斜
+- **批次抽題無狀態分散**：batch 3 題不再固定單一 subTopic，改為每請求獨立子單元抽樣（stateless）
+- **輕量監控欄位**：`question_usage/question_attempts` 新增 `requestedSubTopic` / `actualSubTopic` / `dispatchPath` / `mode`
+- **生題邏輯澄清**：
+  - 用戶文字題：缺貨即時生題，種子優先取 `past_papers` 已發布題（非 `seed_questions`）
+  - 用戶圖形題：缺貨不生題，回收模式抽舊題
+  - 批量文字題：只取 `seed_questions` 作為 seed；產出進 `DRAFT`，需人工確認入庫
+  - 批量文字題：需避免與 `past_papers` 既有題目重複，審核不再檢查單元/子單元名稱
+  - 批量文字題（學科分流）：
+    - `math`：**題型鎖定**，需跟隨 seed 形態（純算式 seed 不可擴寫成應用題；應用題 seed 不可退化成純算式）
+    - `chi` / `eng`：保留語境與措辭擴展，允許在同單元下做多樣化改寫
 
 ---
 
@@ -31,18 +47,24 @@
 - **文字題（TEXT）**：追求無限不重複；允許即時生成補庫存。
 - **圖片題（IMAGE）**：追求絕對穩定；前台嚴禁即時生成，只能讀取已發布庫存。
 
+**調度優先級（Dispatcher Priority）**
+1. **Cache Hit**：優先回傳快取中的可用題目（低延遲）。
+2. **Factory Stock**：快取未命中時，從 `status=PUBLISHED` 庫存抽題。
+3. **JIT Generation**：文字題在前兩層未命中時觸發即時生成；圖片題仍禁止即時生成並走回收模式。
+
 **調度路徑**
 - **路徑 A：文字題（TEXT）**
-  1. 查 `QuestionPool` 中 `TEXT` 且 `NOT IN UserHistory`
+  1. 查 `QuestionPool` 中 `TEXT` 且 `NOT IN UserHistory`（每位用家不重複）
   2. 命中 → 直接回傳
   3. 未命中 → 即時生成（Flash），回傳給用戶並寫入 Pool
+     - 生題基礎：優先使用 `past_papers` 已發布題作 seed
 - **路徑 B：圖片題（IMAGE_STATIC / IMAGE_CANVAS）**
   1. 查 `QuestionPool` 中 `IMAGE_*` 且 `NOT IN UserHistory`
   2. 命中 → 直接回傳
   3. 未命中 → **禁止即時生成**，啟動回收模式（Recycle）
 
 **生產線分工**
-- **前台/API**：文字題可即時生成；圖片題唯讀、僅讀 `status=PUBLISHED`
+- **前台/API**：文字題可即時生成（種子取自 `past_papers` 已發布題）；圖片題唯讀、僅讀 `status=PUBLISHED`
 - **後台 Job**：負責圖片題生產與嚴格審核（Generate → Audit → Publish）
 
 ### 1.1 前端 UI 架構（Views / Components）
@@ -66,6 +88,8 @@
   - 單元格式修正：數學/中文/英文科皆可一鍵補齊舊資料欄位（createdAt/updatedAt/type/lang/subTopics）
   - 後台輸入欄採深色底反白字（含 select/textarea/file input）
   - 工廠模式（Factory）：生產控制台 + 審核隊列（DRAFT→AUDITED/PUBLISHED）
+  - 批量文字題：只取 `seed_questions` 作為 seed；產出進 `DRAFT`，需人工確認入庫
+  - 批量文字題：需避免與 `past_papers` 既有題目重複；審核不檢查單元/子單元名稱
   - 數據熟成度監控：行為樣本累積進度條（達標提示）
   - 種子進貨檢驗：上傳種子寫入 `seed_questions` 並標記 origin=SEED，審核通過後複製到 `past_papers`
   - 統一上傳補齊 status/origin/poolType/source/auditMeta，避免「幽靈資料」無法進待審核
@@ -90,14 +114,17 @@
 
 - `/api/chat`：AI 題目生成（gemini-2.5-flash）
 - `/api/factory/generate`：工廠生產線（批量產生 DRAFT 題目）
+  - 批量文字題只取 `seed_questions` 作 seed；產出需人工確認入庫
+  - 批量文字題（`math`）依 seed 自動判定 `seedStyle`（`NUMERIC` / `WORD_PROBLEM`）並鎖定同形態生成
 - `/api/factory/audit`：工廠審核線（gemini-3-flash-preview）
   - 改用 Admin SDK 讀寫 `past_papers` / `audit_reports`，避免權限阻擋造成審核找不到 DRAFT
   - 審核並發：每批 5 題 Promise.all，加速審核
   - 審核分類限制：AI 建議的 Topic/SubTopic 只允許 syllabus 內既有範圍
 - `/api/factory/publish`：工廠發布（DRAFT/AUDITED → PUBLISHED）
 - `/api/dispatch`：混合調度（TEXT 即時生題 / IMAGE 回收）
-  - 支援 `subTopic`，topic-only 時先抽子單元
-- `/api/vision`：圖像題識別與結構化輸出（Vision API）
+  - 支援 `subTopic`，topic-only 時先做 Availability-aware 子單元過濾再抽取
+  - `math` 啟用 strict seed lock：禁止跨子單元借 seed
+- `/api/vision`：圖像題識別與結構化輸出（Vision API，`temperature=0.1` + JSON mode）
 - `/api/payment`、`/api/webhooks/stripe`：Stripe 支付與 Webhook
 - `/api/check-env`、`/api/check-quota`、`/api/test-google-api`：環境檢測、配額檢測
 - `/api/audit/single`：審計手動觸發（單題審計，含 `maxDuration` / `dynamic`）
@@ -109,6 +136,10 @@
   - `fetchQuestionBatch`：前端批次調度（3 題並行呼叫 `/api/dispatch`）
 - `services/question-dispatcher.ts`：混合調度策略（TEXT 即時生題 / IMAGE 回收）
   - 兩段式抽題：topic-only 先抽 subTopic，再抽題/生題
+  - Availability-aware：只從「有 pool/seed」子單元中抽樣
+  - 回傳 requested/actual 子單元與 dispatchPath，供 usage 追蹤
+- `rag-service.js`：
+  - `fetchSeedQuestion` 支援 strictSubTopicLock（math）；命中不到同 subTopic 不再 topic 級 fallback
 - `services/report-generator.ts`：雙週學習報告生成核心（Educator/Observer）
   - 報告模型改用 `gemini-3-flash-preview`（JSON 模式）
   - AI 報告改為 JSON 結構輸出並具解析容錯
@@ -134,8 +165,10 @@
   - `uploadPastPaperBatch` 寬容寫入：保留擴充欄位並補齊 status/origin/poolType/auditMeta/source
   - 種子入庫拆分：`seed_questions`（上傳/審核）→ `publishSeedToPool` 複製入 `past_papers`
   - 新增 `fetchSeedQueue` / `updateSeedQuestionStatus` / `deleteSeedQuestion` 支援種子審核流程
+  - `recordQuestionUsage` 新增分佈追蹤欄位：`requestedTopicId` / `requestedSubTopic` / `actualTopicId` / `actualSubTopic` / `dispatchPath` / `mode`
 - `auditor-service.js`：審計員核心（prompt、JSON 解析、審計更新）
-  - 審核 JSON 模式：Prompt 加入 `analysis` 驗算流程，`generationConfig`（temperature=0.0、maxOutputTokens=1000）
+  - 審核 JSON 模式：Prompt 加入 `analysis` 驗算流程，`generationConfig`（temperature=0.0、maxOutputTokens=1000、`responseMimeType=application/json`）
+  - 審核輸出欄位對齊 UI：`error_report`（FAIL）/`report`（PASS/FIXED）
   - `parseAuditResult`：analysis 併入 reason，解析失敗回傳原始片段供除錯
 - `ability-scoring.js`：能力評分計算（完成試卷後更新）
 - `ability-mapping.js`：單元/子單元 → 能力維度映射
@@ -144,19 +177,12 @@
 - `adhd-utils.js`：ADHD 模式關鍵字/數字高亮
 - `sentry.*.config.ts`：Sentry 前端/後端錯誤監控初始化（含 API routes）
 
-### 1.6 自動化維運閉環（CI/CD + 監控）
-
-- **Observer（Sentry）**：捕捉 Next.js 前後端錯誤（已配置 DSN）
-- **Broker（GitHub Issues）**：Sentry 觸發 → 自動建立 Issue
-- **Fixer（Ellipsis）**：自動修復與 PR（目前暫停）
-- **Deployer（Vercel）**：GitHub main 更新 → 自動部署
-- **協作規範**：每次新 Session/Commit/Push 前先 `git pull` 同步
-
 ### 1.4 主要業務流程
 
 **A. 題目生成流程**
 1. 使用者選單元 → 觸發 `startPracticeSession`
 2. `ai-service` 組裝 prompt（含種子題/回饋）
+   - 種子優先取 `past_papers` 已發布題
 3. `/api/chat` 生成題目 JSON（gemini-2.5-flash）
 4. UI 顯示並進入練習流程
 
@@ -211,6 +237,10 @@
   - `logic_supplement`：開發者注入邏輯  
 - **seed_questions**：種子題庫（上傳/審核用，核准後複製到 `past_papers`）
   - 與 `past_papers` 同欄位結構，保留 `origin=SEED`
+  - `origin/source` 追蹤規範：
+    - 建議標準：`origin='UPLOAD' | 'AI_GEN'`
+    - 歷史兼容：既有資料可見 `origin='SEED'`（視同上傳種子來源）
+    - `source`：上傳檔名（UPLOAD/SEED）或 seedId（AI_GEN）
 - **developer_feedback**：開發者回饋（可影響生成或審計）
 - **teacher_feedback**：教學者回饋（待審核/已批准）
 - **teacher_seed_questions/{institutionName}/questions**：機構題庫
@@ -228,6 +258,14 @@
   - `institutionRole` / `institutionStatus`
   - `lastPromotionYear` / `lastPromotedAt`
 
+### 1.6 自動化維運閉環（CI/CD + 監控）
+
+- **Observer（Sentry）**：捕捉 Next.js 前後端錯誤（已配置 DSN）
+- **Broker（GitHub Issues）**：Sentry 觸發 → 自動建立 Issue
+- **Fixer（Ellipsis）**：自動修復與 PR（目前暫停）
+- **Deployer（Vercel）**：GitHub main 更新 → 自動部署
+- **協作規範**：每次新 Session/Commit/Push 前先 `git pull` 同步
+
 ---
 
 ### 1.7 系統規格補充（整合其他 Docs）
@@ -244,7 +282,7 @@ app/
 
 #### 1.7.2 題目生成入口與流程（補充）
 - 入口：`TopicSelectionView`（`CommonViews.tsx`）、`DashboardView`、`DailyTaskView`
-- 流程：`startPracticeSession()` → `ai-service.js` 組裝 prompt → `/api/chat` 生成 → 解析後寫入 `past_papers`
+- 流程：`startPracticeSession()` → `ai-service.js` 組裝 prompt（種子取自 `past_papers` 已發布題） → `/api/chat` 生成 → 解析後寫入 `past_papers`
 
 #### 1.7.3 Prompt 組成與輸出欄位（補充）
 - 組成要素：
@@ -390,6 +428,7 @@ app/
 - 後續待做：背景批次審核、Cron、審計監控面板
 
 #### 1.7.9 技術實作路徑與風險評估（摘要）
+- 完整版文檔：`docs/TECHNICAL_RISK_ASSESSMENT.md`（主文檔此處保留摘要，避免重複）
 - **Auto-Classification**：PDF 轉圖 → Vision Layout Analysis → 題目區塊切割 → A/B/C 分類
   - 風險：題目與圖片排版緊密 → 需信心閾值與人工裁切後備
 - **生題者成本優化**：Few-shot + Rationale Summary + 圖像引用機制
@@ -486,6 +525,7 @@ app/
 - **語言 / 語音選擇**：依學科分開 →（已完成）
 - **翻譯輔助**：中英互譯 →（已完成）
 - **數學圖形題後台排版**：可向下伸展 →（已完成）
+- **主介面語言選擇**
 
 **P4（商業化 / 規模）**
 - **收費 / 訂價**
@@ -552,7 +592,7 @@ app/
     - 失敗率/錯誤碼統計
     - 審計通過率/標記率
     - 成本估算（每日/每科）
-- **老師/家長/學生資料檢視格式**：增添學習數據、時間紀錄、作答時間
+- **老師/家長/學生資料檢視格式**：增添學習數據、時間紀錄、作答時間（已完成）
 
 ### 2.2.1 後台報表拆解（設計稿 / 資料結構 / 實作任務）
 

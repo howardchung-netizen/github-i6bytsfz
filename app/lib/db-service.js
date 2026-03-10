@@ -1246,7 +1246,15 @@ export const DB_SERVICE = {
      * @param {number} timeSpentMs - Time spent in milliseconds (optional, defaults to 0)
      * @returns {Promise<boolean>} - Returns true if successful, false otherwise
      */
-    recordQuestionUsage: async (userId, questionId, isCorrect, timeSpentMs = 0, hintUsedCount = 0, retryCount = 0) => {
+    recordQuestionUsage: async (
+        userId,
+        questionId,
+        isCorrect,
+        timeSpentMs = 0,
+        hintUsedCount = 0,
+        retryCount = 0,
+        meta = {}
+    ) => {
         try {
             if (!userId || !questionId) {
                 console.warn("⚠️ recordQuestionUsage: Missing userId or questionId");
@@ -1278,6 +1286,12 @@ export const DB_SERVICE = {
                 hint_used_count: hintUsedCount || 0,
                 retryCount: retryCount || 0,
                 attemptIndex: attemptIndex,
+                requestedTopicId: meta?.requestedTopicId || null,
+                requestedSubTopic: meta?.requestedSubTopic || null,
+                actualTopicId: meta?.actualTopicId || null,
+                actualSubTopic: meta?.actualSubTopic || null,
+                dispatchPath: meta?.dispatchPath || null,
+                mode: meta?.mode || null,
                 createdAt: new Date().toISOString() // Client-side timestamp as fallback
             }, { merge: true }); // merge: true allows updating existing records without overwriting other fields
 
@@ -1294,6 +1308,12 @@ export const DB_SERVICE = {
                     hintUsedCount: hintUsedCount || 0,
                     hint_used_count: hintUsedCount || 0,
                     retryCount: retryCount || 0,
+                    requestedTopicId: meta?.requestedTopicId || null,
+                    requestedSubTopic: meta?.requestedSubTopic || null,
+                    actualTopicId: meta?.actualTopicId || null,
+                    actualSubTopic: meta?.actualSubTopic || null,
+                    dispatchPath: meta?.dispatchPath || null,
+                    mode: meta?.mode || null,
                     usedAt: serverTimestamp(),
                     createdAt: new Date().toISOString()
                 }
@@ -1662,8 +1682,9 @@ export const DB_SERVICE = {
                     counts[topicKey] = { total: 0, seed: 0, ai: 0, subTopics: {} };
                 }
                 counts[topicKey].total += 1;
-                const origin = data.origin || 'AI_GEN';
-                if (origin === 'SEED') counts[topicKey].seed += 1;
+                const originRaw = String(data.origin || '').toUpperCase();
+                const isSeedOrigin = originRaw === 'SEED' || originRaw === 'UPLOAD';
+                if (isSeedOrigin) counts[topicKey].seed += 1;
                 else counts[topicKey].ai += 1;
                 const subTopic = data.subTopic || data.sub_topic || data.subtopic || null;
                 if (subTopic) {
@@ -1671,7 +1692,7 @@ export const DB_SERVICE = {
                         counts[topicKey].subTopics[subTopic] = { total: 0, seed: 0, ai: 0 };
                     }
                     counts[topicKey].subTopics[subTopic].total += 1;
-                    if (origin === 'SEED') counts[topicKey].subTopics[subTopic].seed += 1;
+                    if (isSeedOrigin) counts[topicKey].subTopics[subTopic].seed += 1;
                     else counts[topicKey].subTopics[subTopic].ai += 1;
                 }
             };

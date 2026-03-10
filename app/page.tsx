@@ -750,7 +750,15 @@ export default function App() {
               isCorrect,
               timeSpent,
               hintUsedCount,
-              retryCount
+              retryCount,
+              {
+                  requestedTopicId: sessionTopics?.[0] || null,
+                  requestedSubTopic: currentQuestion?.requestedSubTopic || null,
+                  actualTopicId: currentQuestion?.topic_id || sessionTopics?.[0] || null,
+                  actualSubTopic: currentQuestion?.actualSubTopic || currentQuestion?.subTopic || null,
+                  dispatchPath: currentQuestion?.dispatchPath || null,
+                  mode: currentQuestion?.poolType && currentQuestion.poolType !== 'TEXT' ? 'IMAGE' : 'TEXT'
+              }
           ).then(success => {
               if (success) {
                   console.log(`✅ Usage recorded for Question ID: ${questionId}, isCorrect: ${isCorrect}`);

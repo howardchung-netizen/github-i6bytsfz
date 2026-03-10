@@ -222,12 +222,19 @@ export default function FactoryDashboard({
       results.forEach((map) => {
         Object.entries(map || {}).forEach(([topicKey, val]) => {
           if (!merged[topicKey]) {
-            merged[topicKey] = { total: 0, subTopics: {} };
+            merged[topicKey] = { total: 0, seed: 0, ai: 0, subTopics: {} };
           }
           merged[topicKey].total += val.total || 0;
+          merged[topicKey].seed += val.seed || 0;
+          merged[topicKey].ai += val.ai || 0;
           if (val.subTopics) {
-            Object.entries(val.subTopics).forEach(([st, count]) => {
-              merged[topicKey].subTopics[st] = (merged[topicKey].subTopics[st] || 0) + count;
+            Object.entries(val.subTopics).forEach(([st, subVal]) => {
+              if (!merged[topicKey].subTopics[st]) {
+                merged[topicKey].subTopics[st] = { total: 0, seed: 0, ai: 0 };
+              }
+              merged[topicKey].subTopics[st].total += subVal?.total || 0;
+              merged[topicKey].subTopics[st].seed += subVal?.seed || 0;
+              merged[topicKey].subTopics[st].ai += subVal?.ai || 0;
             });
           }
         });
@@ -359,10 +366,15 @@ export default function FactoryDashboard({
     setFactoryPublishLoading(prev => ({ ...prev, [item.id]: true }));
     try {
       if (item.__collection === 'seed_questions') {
-        const publishId = await DB_SERVICE.publishSeedToPool(item, { status: 'PUBLISHED', origin: 'SEED' });
-        if (!publishId) throw new Error('Publish failed');
-        const seedOk = await DB_SERVICE.updateSeedQuestionStatus(item.id, { status: 'PUBLISHED' });
-        if (!seedOk) throw new Error('Seed status update failed');
+        const response = await fetch('/api/factory/publish-seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ seedId: item.id })
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Publish seed failed');
+        }
       } else {
         const response = await fetch('/api/factory/publish', {
           method: 'POST',
@@ -385,6 +397,7 @@ export default function FactoryDashboard({
         return next;
       });
       await loadFactoryStock();
+      await loadFactoryQueue();
     } catch (e) {
       console.error("Factory Publish Error:", e);
       alert(`發布失敗：${e.message || '未知錯誤'}`);
@@ -458,19 +471,51 @@ export default function FactoryDashboard({
       if (publish) {
         updates.status = 'PUBLISHED';
       }
-      if (isSeed) {
-        const ok = await DB_SERVICE.updateSeedQuestionStatus(inspectionItem.id, updates);
-        if (!ok) throw new Error('Save failed');
-        if (publish) {
-          const publishId = await DB_SERVICE.publishSeedToPool(
-            { ...inspectionItem, ...updates },
-            { status: 'PUBLISHED', origin: 'SEED' }
-          );
-          if (!publishId) throw new Error('Publish failed');
+      if (publish) {
+        if (isSeed) {
+          const response = await fetch('/api/factory/publish-seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seedId: inspectionItem.id, updates })
+          });
+          const data = await response.json();
+          if (!response.ok || !data?.success) {
+            throw new Error(data?.error || 'Publish failed');
+          }
+        } else {
+          const updateResponse = await fetch('/api/factory/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questionId: inspectionItem.id, updates, collection: 'past_papers' })
+          });
+          const updateData = await updateResponse.json();
+          if (!updateResponse.ok || !updateData?.success) {
+            throw new Error(updateData?.error || 'Save failed');
+          }
+          const publishResponse = await fetch('/api/factory/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questionIds: [inspectionItem.id] })
+          });
+          const publishData = await publishResponse.json();
+          if (!publishResponse.ok || !publishData?.success) {
+            throw new Error(publishData?.error || 'Publish failed');
+          }
         }
       } else {
-        const ok = await DB_SERVICE.updateQuestionFactoryStatus(inspectionItem.id, updates);
-        if (!ok) throw new Error('Save failed');
+        const response = await fetch('/api/factory/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            questionId: inspectionItem.id,
+            updates,
+            collection: isSeed ? 'seed_questions' : 'past_papers'
+          })
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || 'Save failed');
+        }
       }
       await loadFactoryQueue();
       if (publish) {
@@ -1170,7 +1215,8 @@ export default function FactoryDashboard({
                           {subjectTopics.map((topic) => {
                             const stockEntry = factoryStockMap[topic.id] || factoryStockMap[topic.name] || { total: 0, seed: 0, ai: 0, subTopics: {} };
                             const stock = stockEntry.total || 0;
-                            const stockColor = stock < 10 ? 'text-red-600' : stock > 50 ? 'text-emerald-600' : 'text-slate-600';
+                            const aiStock = stockEntry.ai || 0;
+                            const stockColor = aiStock < 10 ? 'text-red-600' : aiStock > 50 ? 'text-emerald-600' : 'text-slate-600';
                             const topicKey = `topic-${topic.id}`;
                             const topicSelected = factorySelections[topicKey]?.selected;
                             return (
@@ -1224,7 +1270,8 @@ export default function FactoryDashboard({
                                         ?? factoryStockMap[topic.name]?.subTopics?.[st]
                                         ?? { total: 0, seed: 0, ai: 0 };
                                       const subCount = subEntry.total || 0;
-                                      const subColor = subCount < 10 ? 'text-red-600' : subCount > 50 ? 'text-emerald-600' : 'text-slate-500';
+                                      const subAiCount = subEntry.ai || 0;
+                                      const subColor = subAiCount < 10 ? 'text-red-600' : subAiCount > 50 ? 'text-emerald-600' : 'text-slate-500';
                                       const subSelected = factorySelections[subKey]?.selected;
                                       return (
                                         <div key={subKey} className="flex items-center justify-between gap-2 pl-6">

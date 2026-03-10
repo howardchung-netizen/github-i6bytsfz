@@ -5,67 +5,81 @@ import { AUDITOR_MODEL_NAME } from './constants';
  * 
  * 重要：Pro 模型不是 Thinking 模型，需要明確的推理指令
  */
-export function buildAuditorPrompt(question, logicSupplement) {
+export function buildAuditorPrompt(question, logicSupplement, options = {}) {
+    const allowedTopics = Array.isArray(options.allowedTopics) && options.allowedTopics.length > 0
+        ? `Allowed Topics: ${JSON.stringify(options.allowedTopics)}\n`
+        : '';
+    const allowedSubTopics = Array.isArray(options.allowedSubTopics) && options.allowedSubTopics.length > 0
+        ? `Allowed SubTopics: ${JSON.stringify(options.allowedSubTopics)}\n`
+        : '';
     return `
-Role: Strict Math Validator (JSON Mode).
-Target: Audit Math Questions.
-
-Question JSON:
-${JSON.stringify(question, null, 2)}
+Role: Math Logic Validator.
+Input: ${JSON.stringify(question, null, 2)}
 
 Logic Supplement:
 ${logicSupplement || '（無邏輯補充要求）'}
 
+${allowedTopics}${allowedSubTopics}
 Task:
-1. Verify logic & answer correctness.
-2. Check for typos/OCR errors.
-3. Classify 'topic'/'subTopic'.
+1. Analysis: Briefly solve the problem step-by-step (Max 100 chars).
+2. Verification: Compare your result with provided_answer.
+3. Classification: If needed, suggest Topic/SubTopic from allowed list ONLY. If none fits, return empty string.
+4. Output: JSON only.
 
-Output Rules:
-- JSON ONLY. NO Markdown. NO Explanations.
-- Field "reason":
-  - PASS -> "" (Empty string)
-  - FAIL -> Max 15 chars (Traditional Chinese).
+Unit handling:
+- If the question/answer involves measurement units (e.g., cm, m, mm, kg, g, L, mL, cm², m²), compare values with unit normalization.
+- Do NOT fail solely because the answer includes a unit or uses an equivalent unit.
+- If provided_answer is correct but missing the proper unit or uses a different but equivalent unit, set status="FIXED" and return correctedAnswer with the expected unit.
+- If options mix units, ensure only one option is actually correct after unit conversion.
 
-JSON Structure:
+Output JSON Structure:
 {
+  "analysis": "string",
   "status": "PASS" | "FAIL" | "FIXED",
   "confidence": 0.95,
-  "correctedAnswer": "...",
-  "suggestedTopic": "...",
-  "suggestedSubTopic": "...",
-  "reason": "..."
+  "correctedAnswer": "string",
+  "suggestedTopic": "string",
+  "suggestedSubTopic": "string",
+  "error_report": "string (MANDATORY if FAIL, Traditional Chinese)",
+  "report": "string (optional summary when PASS/FIXED)"
 }
 `.trim();
 }
 
-export function buildUploadAuditorPrompt(question) {
+export function buildUploadAuditorPrompt(question, options = {}) {
+    const allowedTopics = Array.isArray(options.allowedTopics) && options.allowedTopics.length > 0
+        ? `Allowed Topics: ${JSON.stringify(options.allowedTopics)}\n`
+        : '';
+    const allowedSubTopics = Array.isArray(options.allowedSubTopics) && options.allowedSubTopics.length > 0
+        ? `Allowed SubTopics: ${JSON.stringify(options.allowedSubTopics)}\n`
+        : '';
     return `
-Role: Strict Math Validator (JSON Mode).
-Target: Audit Math Questions.
+Role: Math Logic Validator.
+Input: ${JSON.stringify(question, null, 2)}
 
-Question JSON:
-${JSON.stringify(question, null, 2)}
-
+${allowedTopics}${allowedSubTopics}
 Task:
-1. Verify logic & answer correctness.
-2. Check for typos/OCR errors.
-3. Classify 'topic'/'subTopic'.
+1. Analysis: Briefly solve the problem step-by-step (Max 100 chars).
+2. Verification: Compare your result with provided_answer.
+3. Classification: If needed, suggest Topic/SubTopic from allowed list ONLY. If none fits, return empty string.
+4. Output: JSON only.
 
-Output Rules:
-- JSON ONLY. NO Markdown. NO Explanations.
-- Field "reason":
-  - PASS -> "" (Empty string)
-  - FAIL -> Max 15 chars (Traditional Chinese).
+Unit handling:
+- If the question/answer involves measurement units (e.g., cm, m, mm, kg, g, L, mL, cm², m²), compare values with unit normalization.
+- Do NOT fail solely because the answer includes a unit or uses a different but equivalent unit.
+- If provided_answer is correct but missing the proper unit or uses a different but equivalent unit, set status="FIXED" and return correctedAnswer with the expected unit.
+- If options mix units, ensure only one option is actually correct after unit conversion.
 
-JSON Structure:
+Output JSON Structure:
 {
+  "analysis": "string",
   "status": "PASS" | "FAIL" | "FIXED",
   "confidence": 0.95,
-  "correctedAnswer": "...",
-  "suggestedTopic": "...",
-  "suggestedSubTopic": "...",
-  "reason": "..."
+  "correctedAnswer": "string",
+  "suggestedTopic": "string",
+  "suggestedSubTopic": "string",
+  "error_report": "string (MANDATORY if FAIL, Traditional Chinese)",
+  "report": "string (optional summary when PASS/FIXED)"
 }
 `.trim();
 }
@@ -103,11 +117,27 @@ export function parseAuditResult(text) {
             cleanJson = jsonMatch[0];
         }
         
-        return JSON.parse(cleanJson);
+        const result = JSON.parse(cleanJson);
+        const baseReason = result?.error_report || result?.reason || result?.report || "";
+        let finalReason = baseReason;
+        if (result?.analysis) {
+            finalReason = `【AI 驗算】${result.analysis}\n\n${finalReason}`;
+        }
+
+        return {
+            ...result,
+            error_report: result?.error_report || '',
+            report: result?.report || '',
+            reason: String(finalReason).trim() || "OK (無詳細報告)"
+        };
     } catch (error) {
-        console.error("❌ Parse Audit Result Error:", error);
-        console.error("原始響應前 500 字符:", text.substring(0, 500));
-        return buildFallbackAudit('解析錯誤');
+        console.error("❌ JSON Parse Failed:", error);
+        console.log("Raw Text:", text);
+        return {
+            status: 'FAIL',
+            confidence: 0,
+            reason: `系統解析錯誤: 無法讀取 AI 回覆。\n原始回覆片段: ${text.substring(0, 100)}...`
+        };
     }
 }
 
@@ -127,8 +157,8 @@ export async function auditQuestion(question, logicSupplement, options = {}) {
 
     const origin = options.origin || question?.origin || null;
     const prompt = origin === 'SEED'
-        ? buildUploadAuditorPrompt(question)
-        : buildAuditorPrompt(question, logicSupplement || null);
+        ? buildUploadAuditorPrompt(question, options)
+        : buildAuditorPrompt(question, logicSupplement || null, options);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${AUDITOR_MODEL_NAME}:generateContent?key=${apiKey}`;
 
     const callGemini = async (generationConfig) => {
@@ -157,7 +187,7 @@ export async function auditQuestion(question, logicSupplement, options = {}) {
         // 優先使用 JSON mode（速度快、格式穩定）
         let text = await callGemini({
             temperature: 0.0,
-            maxOutputTokens: 200,
+            maxOutputTokens: 1000,
             responseMimeType: "application/json"
         });
 
@@ -165,7 +195,8 @@ export async function auditQuestion(question, logicSupplement, options = {}) {
             // fallback：移除 responseMimeType，增加輸出空間
             text = await callGemini({
                 temperature: 0.0,
-                maxOutputTokens: 400
+                maxOutputTokens: 1000,
+                responseMimeType: "application/json"
             });
         }
 
@@ -178,7 +209,8 @@ export async function auditQuestion(question, logicSupplement, options = {}) {
             // JSON 解析失敗，嘗試 fallback 版本
             const retryText = await callGemini({
                 temperature: 0.0,
-                maxOutputTokens: 400
+                maxOutputTokens: 1000,
+                responseMimeType: "application/json"
             });
             if (retryText) {
                 auditResult = parseAuditResult(retryText);
