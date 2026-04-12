@@ -10,4 +10,5 @@ export interface QuestionUsage {
   hint_used_count?: number;
   retryCount: number;
   attemptIndex?: number;
+  adhdMode?: boolean;
 }

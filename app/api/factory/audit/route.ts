@@ -206,11 +206,11 @@ export async function POST(request: Request) {
             .doc('data')
             .collection('audit_reports')
             .add({
-            questionId,
-            auditResult: auditReport,
-            model: AUDITOR_MODEL_NAME,
-            createdAt: new Date().toISOString()
-          })
+              questionId,
+              auditResult: auditReport,
+              model: AUDITOR_MODEL_NAME,
+              createdAt: new Date().toISOString()
+            })
             .then(ref => ref.id);
 
           const nextStatus = mappedStatus === 'FAIL' ? 'REJECTED' : 'AUDITED';
@@ -265,8 +265,36 @@ export async function POST(request: Request) {
             nextStatus,
             reportRef
           };
-        } catch (error) {
+        } catch (error: any) {
           console.error('Factory Audit Item Error:', questionId, error);
+
+          // CRITICAL FIX: Ensure the item is marked as REJECTED in the DB to avoid infinite loops
+          try {
+            await adminDb
+              .collection('artifacts')
+              .doc(APP_ID)
+              .collection('public')
+              .doc('data')
+              .collection(collectionName)
+              .doc(questionId)
+              .update({
+                status: 'REJECTED',
+                auditMeta: {
+                  status: 'FAIL',
+                  confidence: 0,
+                  reportRef: null,
+                  autoFixed: false,
+                },
+                audit_status: 'FAIL',
+                audit_report: JSON.stringify({ status: 'FAIL', reason: error?.message || 'Unknown execution error' }),
+                auditor_model_used: AUDITOR_MODEL_NAME,
+                audit_timestamp: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              });
+          } catch (dbError) {
+            console.error('Factory Audit Item DB Update Error:', questionId, dbError);
+          }
+
           return {
             questionId,
             auditStatus: 'FAIL',

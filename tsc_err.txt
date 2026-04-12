@@ -1,0 +1,10 @@
+﻿app/api/factory/generate/route.ts(95,63): error TS2339: Property 'name' does not exist on type '{ id: string; }'.
+app/api/factory/generate/route.ts(96,41): error TS2339: Property 'grade' does not exist on type '{ id: string; }'.
+app/api/factory/generate/route.ts(97,43): error TS2339: Property 'subject' does not exist on type '{ id: string; }'.
+app/api/factory/generate/route.ts(99,37): error TS2339: Property 'name' does not exist on type '{ id: string; }'.
+app/api/factory/generate/route.ts(254,25): error TS2339: Property 'createdAt' does not exist on type '{ grade: any; subject: any; topic_id: string; topic: any; subTopic: any; source: string; seedId: string; seedSource: string; seedStyle: MathSeedStyle; origin: string; poolType: any; ... 15 more ...; __raw?: unknown; } | { ...; } | { ...; }'.
+  Property 'createdAt' does not exist on type '{ grade: any; subject: any; topic_id: string; topic: any; subTopic: any; source: string; seedId: string; seedSource: string; seedStyle: MathSeedStyle; origin: string; poolType: any; ... 15 more ...; __raw?: unknown; }'.
+app/components/admin/FactoryDashboard.tsx(235,63): error TS2339: Property 'total' does not exist on type 'unknown'.
+app/components/admin/FactoryDashboard.tsx(236,62): error TS2339: Property 'seed' does not exist on type 'unknown'.
+app/components/admin/FactoryDashboard.tsx(237,60): error TS2339: Property 'ai' does not exist on type 'unknown'.
+app/components/admin/FactoryDashboard.tsx(552,67): error TS2339: Property 'subject' does not exist on type '{ question: string; answer: string; topic: string; grade: string; subTopic: string; optionsText: string; }'.

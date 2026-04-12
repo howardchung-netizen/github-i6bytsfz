@@ -218,7 +218,7 @@ export default function FactoryDashboard({
       }, {});
       const entries = Object.values(combos);
       const results = await Promise.all(entries.map(item => DB_SERVICE.getPublishedQuestionCounts(item)));
-      const merged = {};
+      const merged: Record<string, any> = {};
       results.forEach((map) => {
         Object.entries(map || {}).forEach(([topicKey, val]) => {
           if (!merged[topicKey]) {
@@ -232,9 +232,9 @@ export default function FactoryDashboard({
               if (!merged[topicKey].subTopics[st]) {
                 merged[topicKey].subTopics[st] = { total: 0, seed: 0, ai: 0 };
               }
-              merged[topicKey].subTopics[st].total += subVal?.total || 0;
-              merged[topicKey].subTopics[st].seed += subVal?.seed || 0;
-              merged[topicKey].subTopics[st].ai += subVal?.ai || 0;
+              merged[topicKey].subTopics[st].total += (subVal as any)?.total || 0;
+              merged[topicKey].subTopics[st].seed += (subVal as any)?.seed || 0;
+              merged[topicKey].subTopics[st].ai += (subVal as any)?.ai || 0;
             });
           }
         });
@@ -548,8 +548,8 @@ export default function FactoryDashboard({
   };
 
   const validateSuggestedClassification = (item: any, suggestedTopic?: string, suggestedSubTopic?: string) => {
-    const grade = normalizeText(item?.grade || inspectionForm.grade);
-    const subject = normalizeText(item?.subject || inspectionForm.subject || 'math');
+    const grade = normalizeText(item?.grade || (inspectionForm as any).grade);
+    const subject = normalizeText(item?.subject || (inspectionForm as any).subject || 'math');
     const cleanedTopic = normalizeText(suggestedTopic);
     const cleanedSubTopic = normalizeText(suggestedSubTopic);
 
@@ -1651,80 +1651,80 @@ export default function FactoryDashboard({
                     ⚠️ 答案存疑：AI 算出 {inspectionItem.auditMeta?.answerCheck?.aiAnswer}，原紀錄 {inspectionItem.auditMeta?.answerCheck?.provided}
                   </div>
                 )}
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-xs font-bold text-slate-500">Question</label>
-                        <textarea
-                          value={inspectionForm.question}
-                          onChange={(e) => setInspectionForm(prev => ({ ...prev, question: e.target.value }))}
-                          className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                          rows={4}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold text-slate-500">Answer</label>
-                        <input
-                          value={inspectionForm.answer}
-                          onChange={(e) => setInspectionForm(prev => ({ ...prev, answer: e.target.value }))}
-                          className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-500">Grade</label>
-                          <select
-                            value={inspectionForm.grade}
-                            onChange={(e) => setInspectionForm(prev => ({ ...prev, grade: e.target.value }))}
-                            className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                          >
-                            {['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map(g => <option key={g} value={g}>{g}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-500">Topic</label>
-                          <select
-                            value={inspectionForm.topic}
-                            onChange={(e) => setInspectionForm(prev => ({ ...prev, topic: e.target.value, subTopic: '' }))}
-                            className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                          >
-                            <option value="">未分類</option>
-                            {modalTopicOptions.map(t => (
-                              <option key={t.id} value={t.name}>{t.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold text-slate-500">Sub-topic</label>
-                        {modalSubTopicOptions.length > 0 ? (
-                          <select
-                            value={inspectionForm.subTopic}
-                            onChange={(e) => setInspectionForm(prev => ({ ...prev, subTopic: e.target.value }))}
-                            className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                          >
-                            <option value="">未分類</option>
-                            {modalSubTopicOptions.map((st) => (
-                              <option key={st} value={st}>{st}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            value={inspectionForm.subTopic}
-                            onChange={(e) => setInspectionForm(prev => ({ ...prev, subTopic: e.target.value }))}
-                            className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                            placeholder="無子單元可選，可手動輸入"
-                          />
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold text-slate-500">Options (每行一個)</label>
-                        <textarea
-                          value={inspectionForm.optionsText}
-                          onChange={(e) => setInspectionForm(prev => ({ ...prev, optionsText: e.target.value }))}
-                          className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
-                          rows={4}
-                        />
-                      </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Question</label>
+                    <textarea
+                      value={inspectionForm.question}
+                      onChange={(e) => setInspectionForm(prev => ({ ...prev, question: e.target.value }))}
+                      className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                      rows={4}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Answer</label>
+                    <input
+                      value={inspectionForm.answer}
+                      onChange={(e) => setInspectionForm(prev => ({ ...prev, answer: e.target.value }))}
+                      className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500">Grade</label>
+                      <select
+                        value={inspectionForm.grade}
+                        onChange={(e) => setInspectionForm(prev => ({ ...prev, grade: e.target.value }))}
+                        className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                      >
+                        {['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500">Topic</label>
+                      <select
+                        value={inspectionForm.topic}
+                        onChange={(e) => setInspectionForm(prev => ({ ...prev, topic: e.target.value, subTopic: '' }))}
+                        className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                      >
+                        <option value="">未分類</option>
+                        {modalTopicOptions.map(t => (
+                          <option key={t.id} value={t.name}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Sub-topic</label>
+                    {modalSubTopicOptions.length > 0 ? (
+                      <select
+                        value={inspectionForm.subTopic}
+                        onChange={(e) => setInspectionForm(prev => ({ ...prev, subTopic: e.target.value }))}
+                        className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                      >
+                        <option value="">未分類</option>
+                        {modalSubTopicOptions.map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={inspectionForm.subTopic}
+                        onChange={(e) => setInspectionForm(prev => ({ ...prev, subTopic: e.target.value }))}
+                        className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                        placeholder="無子單元可選，可手動輸入"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Options (每行一個)</label>
+                    <textarea
+                      value={inspectionForm.optionsText}
+                      onChange={(e) => setInspectionForm(prev => ({ ...prev, optionsText: e.target.value }))}
+                      className="w-full border p-2 rounded text-sm bg-slate-800 text-white border-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400"
+                      rows={4}
+                    />
+                  </div>
                   <div className="flex flex-wrap gap-2 justify-end pt-2">
                     <button
                       onClick={() => saveInspection(false)}

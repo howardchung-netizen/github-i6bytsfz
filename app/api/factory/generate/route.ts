@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       .doc('data')
       .collection('syllabus')
       .get();
-    const topics = topicsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+    const topics = topicsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) } as Record<string, any>));
     const matchedTopic = topics.find(t => t.id === topic || t.name === topic);
     const resolvedGrade = matchedTopic?.grade || grade;
     const resolvedSubject = matchedTopic?.subject || subject || 'math';
@@ -251,7 +251,7 @@ export async function POST(request: Request) {
         .doc();
       batch.set(docRef, {
         ...item,
-        createdAt: item.createdAt || nowIso,
+        createdAt: (item as any).createdAt || nowIso,
         updatedAt: nowIso
       });
       createdIds.push(docRef.id);

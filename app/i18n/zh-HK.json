@@ -1,0 +1,35 @@
+{
+    "common": {
+        "loading": "載入中...",
+        "error": "錯誤",
+        "save": "儲存",
+        "cancel": "取消",
+        "confirm": "確認",
+        "back": "返回"
+    },
+    "dashboard": {
+        "title": "家長控制台",
+        "welcome": "歡迎回來，{{name}}！",
+        "student_mode": "進入學生練習模式",
+        "take_exam": "開始全科測驗",
+        "developer_panel": "Developer",
+        "teacher_panel": "教學者後台",
+        "parent_panel": "家長控制台",
+        "mistakes_book": "錯題本",
+        "upgrade_now": "立即升級",
+        "adhd_mode": "學習輔助模式",
+        "adhd_mode_desc": "啟用後將放大文字、隱藏干擾元素並提供語音輔助",
+        "radar_chart": "能力雷達圖",
+        "view_report": "查看詳細報告",
+        "weakness_radar": "雷達圖顯示弱項與強項分佈",
+        "daily_tasks": "每日學習任務清單",
+        "task_limit": "20題每日極限挑戰",
+        "math": "數學 (Math)",
+        "chinese": "中文 (Chi)",
+        "english": "英文 (Eng)",
+        "completed": "完成 {{used}}/{{limit}}",
+        "go_to_practice": "前往練習",
+        "logout": "登出",
+        "profile": "個人資料"
+    }
+}

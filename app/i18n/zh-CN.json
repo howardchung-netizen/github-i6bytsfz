@@ -1,0 +1,35 @@
+{
+    "common": {
+        "loading": "加载中...",
+        "error": "错误",
+        "save": "保存",
+        "cancel": "取消",
+        "confirm": "确认",
+        "back": "返回"
+    },
+    "dashboard": {
+        "title": "家长控制台",
+        "welcome": "欢迎回来，{{name}}！",
+        "student_mode": "进入学生练习模式",
+        "take_exam": "开始全科测验",
+        "developer_panel": "Developer",
+        "teacher_panel": "教学者后台",
+        "parent_panel": "家长控制台",
+        "mistakes_book": "错题本",
+        "upgrade_now": "立即升级",
+        "adhd_mode": "学习辅助模式",
+        "adhd_mode_desc": "启用后将放大文字、隐藏干扰元素并提供语音辅助",
+        "radar_chart": "能力雷达图",
+        "view_report": "查看详细报告",
+        "weakness_radar": "雷达图显示弱项与强项分布",
+        "daily_tasks": "每日学习任务清单",
+        "task_limit": "20题每日极限挑战",
+        "math": "数学 (Math)",
+        "chinese": "中文 (Chi)",
+        "english": "英文 (Eng)",
+        "completed": "完成 {{used}}/{{limit}}",
+        "go_to_practice": "前往练习",
+        "logout": "登出",
+        "profile": "个人资料"
+    }
+}

@@ -1,14 +1,14 @@
-import { db, auth } from './firebase'; 
+import { db, auth } from './firebase';
 
 // 👇 1. 這裡只引入資料庫相關的函數
-import { 
-    collection, 
-    getDocs, 
-    addDoc, 
-    query, 
-    where, 
-    deleteDoc, 
-    doc, 
+import {
+    collection,
+    getDocs,
+    addDoc,
+    query,
+    where,
+    deleteDoc,
+    doc,
     writeBatch,
     getDoc,
     orderBy,
@@ -20,11 +20,11 @@ import {
 } from "firebase/firestore";
 
 // 👇 2. 這裡是修正重點：Auth 相關函數必須從 'firebase/auth' 引入
-import { 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signInAnonymously, 
-    deleteUser 
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signInAnonymously,
+    deleteUser
 } from "firebase/auth";
 
 import { APP_ID, SAMPLE_PAST_PAPERS } from './constants';
@@ -69,30 +69,30 @@ export const DB_SERVICE = {
             return null;
         }
     },
-    addTopic: async (topicData) => { 
+    addTopic: async (topicData) => {
         try {
             lastError = null;
             const docRef = await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"), topicData);
-            return docRef.id; 
+            return docRef.id;
         } catch (e) {
             lastError = e;
             console.error("Add Topic Error:", e);
             return null;
         }
     },
-    fetchTopics: async () => { 
+    fetchTopics: async () => {
         try {
             lastError = null;
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "public", "data", "syllabus"));
-            const res = []; snap.forEach(d => res.push({id: d.id, ...d.data()})); 
-            return res; 
+            const res = []; snap.forEach(d => res.push({ id: d.id, ...d.data() }));
+            return res;
         } catch (e) {
             lastError = e;
             console.error("Fetch Topic Error:", e);
             return [];
         }
     },
-    deleteTopic: async (id) => { 
+    deleteTopic: async (id) => {
         try {
             lastError = null;
             await deleteDoc(doc(db, "artifacts", APP_ID, "public", "data", "syllabus", id));
@@ -156,148 +156,148 @@ export const DB_SERVICE = {
             return { updated: 0, skipped: 0, error: e };
         }
     },
-    checkEmailExists: async (email) => { 
+    checkEmailExists: async (email) => {
         if (!auth.currentUser) return false;
         try {
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("email", "==", email));
-            const snap = await getDocs(q); 
-            return !snap.empty; 
+            const snap = await getDocs(q);
+            return !snap.empty;
         } catch (e) { console.error("Check Email Error:", e); return false; }
     },
-    getUserProfile: async (email) => { 
+    getUserProfile: async (email) => {
         try {
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("email", "==", email));
-            const snap = await getDocs(q); 
-            if (snap.empty) return null; 
-            const doc = snap.docs[0]; 
+            const snap = await getDocs(q);
+            if (snap.empty) return null;
+            const doc = snap.docs[0];
             const data = doc.data() || {};
             return { id: doc.id, report_mode: data.report_mode || 'EDUCATOR', ...data };
         } catch (e) { console.error("Get Profile Error:", e); return null; }
     },
-    registerUser: async (userData, password) => { 
-        try { 
+    registerUser: async (userData, password) => {
+        try {
             const userCredential = await createUserWithEmailAndPassword(auth, userData.email, password);
-            const user = userCredential.user; 
+            const user = userCredential.user;
             await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, report_mode: userData.report_mode || 'EDUCATOR', uid: user.uid, createdAt: new Date().toISOString() });
-            return user.uid; 
-        } catch (e) { 
-            if (e.code === 'auth/operation-not-allowed') { 
+            return user.uid;
+        } catch (e) {
+            if (e.code === 'auth/operation-not-allowed') {
                 const mockUid = "mock_" + Date.now();
-                await signInAnonymously(auth); 
-                await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, report_mode: userData.report_mode || 'EDUCATOR', uid: mockUid, createdAt: new Date().toISOString(), isAnonymousFallback: true });
-                return mockUid; 
-            } 
-            return null;
-        } 
-    },
-    loginUser: async (email, password) => { 
-        try { 
-            await signInWithEmailAndPassword(auth, email, password);
-            return await DB_SERVICE.getUserProfile(email); 
-        } catch (e) { 
-            if (e.code === 'auth/operation-not-allowed') { 
                 await signInAnonymously(auth);
-                const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("email", "==", email)); 
-                const snap = await getDocs(q);
-                if (!snap.empty) { const doc = snap.docs[0]; const data = doc.data() || {}; return { id: doc.id, report_mode: data.report_mode || 'EDUCATOR', ...data }; } 
-            } 
-            throw e;
-        } 
+                await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "users"), { ...userData, report_mode: userData.report_mode || 'EDUCATOR', uid: mockUid, createdAt: new Date().toISOString(), isAnonymousFallback: true });
+                return mockUid;
+            }
+            return null;
+        }
     },
-    deleteUserAccount: async (user) => { 
+    loginUser: async (email, password) => {
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            return await DB_SERVICE.getUserProfile(email);
+        } catch (e) {
+            if (e.code === 'auth/operation-not-allowed') {
+                await signInAnonymously(auth);
+                const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("email", "==", email));
+                const snap = await getDocs(q);
+                if (!snap.empty) { const doc = snap.docs[0]; const data = doc.data() || {}; return { id: doc.id, report_mode: data.report_mode || 'EDUCATOR', ...data }; }
+            }
+            throw e;
+        }
+    },
+    deleteUserAccount: async (user) => {
         try {
             const uid = user.uid || user.id;
             if (!uid) {
                 console.error("Delete User Error: No UID provided");
                 return false;
             }
-            
+
             // 1. 刪除 Firestore 中的所有用戶資料
             const batch = writeBatch(db);
-            
+
             // 刪除用戶個人資料
             const userDocRef = doc(db, "artifacts", APP_ID, "public", "data", "users", uid);
             const userDoc = await getDoc(userDocRef);
             if (userDoc.exists()) {
                 batch.delete(userDocRef);
             }
-            
+
             // 刪除學習歷程
             const logsQuery = query(collection(db, "artifacts", APP_ID, "users", uid, "logs"));
             const logsSnap = await getDocs(logsQuery);
             logsSnap.forEach((doc) => {
                 batch.delete(doc.ref);
             });
-            
+
             // 刪除錯題記錄
             const mistakesQuery = query(collection(db, "artifacts", APP_ID, "users", uid, "mistakes"));
             const mistakesSnap = await getDocs(mistakesQuery);
             mistakesSnap.forEach((doc) => {
                 batch.delete(doc.ref);
             });
-            
+
             // 刪除學習統計（如果有的話）
             const statsDocRef = doc(db, "artifacts", APP_ID, "users", uid, "stats", "summary");
             const statsDoc = await getDoc(statsDocRef);
             if (statsDoc.exists()) {
                 batch.delete(statsDocRef);
             }
-            
+
             // 執行批量刪除
             await batch.commit();
-            
+
             // 2. 刪除 Firebase Authentication 帳號
             if (auth.currentUser && auth.currentUser.uid === uid) {
                 await deleteUser(auth.currentUser);
             }
-            
+
             console.log(`✅ User account and all data deleted: ${uid}`);
             return true;
-        } catch (e) { 
-            console.error("Delete User Error:", e); 
-            return false; 
-        } 
+        } catch (e) {
+            console.error("Delete User Error:", e);
+            return false;
+        }
     },
-    saveMistake: async (uid, q, ans) => { 
+    saveMistake: async (uid, q, ans) => {
         try {
-            await addDoc(collection(db, "artifacts", APP_ID, "users", uid, "mistakes"), { 
-                questionId: q.id, 
-                question: q.question, 
-                answer: q.answer, 
-                userWrongAnswer: ans, 
+            await addDoc(collection(db, "artifacts", APP_ID, "users", uid, "mistakes"), {
+                questionId: q.id,
+                question: q.question,
+                answer: q.answer,
+                userWrongAnswer: ans,
                 hint: q.hint || '請重讀題目關鍵字',
                 explanation: q.explanation || '參考相關課本章節',
                 category: q.category || '一般',
-                createdAt: new Date().toISOString() 
-            }); 
-        } catch(e) { console.error("Save Mistake Error", e); } 
+                createdAt: new Date().toISOString()
+            });
+        } catch (e) { console.error("Save Mistake Error", e); }
     },
-    fetchMistakes: async (uid) => { 
+    fetchMistakes: async (uid) => {
         try {
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "users", uid, "mistakes"));
-            const res = []; snap.forEach(d => res.push({id: d.id, ...d.data()})); 
-            return res; 
-        } catch(e) { console.error("Fetch Mistakes Error:", e); return []; } 
+            const res = []; snap.forEach(d => res.push({ id: d.id, ...d.data() }));
+            return res;
+        } catch (e) { console.error("Fetch Mistakes Error:", e); return []; }
     },
-    deleteMistake: async (id, uid) => { 
-        try { await deleteDoc(doc(db, "artifacts", APP_ID, "users", uid, "mistakes", id)); } 
-        catch (e) { console.error("Delete Mistake Error:", e); } 
+    deleteMistake: async (id, uid) => {
+        try { await deleteDoc(doc(db, "artifacts", APP_ID, "users", uid, "mistakes", id)); }
+        catch (e) { console.error("Delete Mistake Error:", e); }
     },
-    uploadPastPaperBatch: async (papers, user = null) => { 
+    uploadPastPaperBatch: async (papers, user = null) => {
         try {
             lastError = null;
             const batch = writeBatch(db);
-            
+
             // 種子一律寫入 seed_questions，審核通過後再入 past_papers
             const collectionRef = collection(db, "artifacts", APP_ID, "public", "data", "seed_questions");
-            
-            papers.forEach(paper => { 
-                const docRef = doc(collectionRef); 
+
+            papers.forEach(paper => {
+                const docRef = doc(collectionRef);
                 const derivedPoolType = paper.poolType
                     || (paper.imageUrl || paper.image || paper.originalImage ? 'IMAGE_STATIC' : 'TEXT');
                 const derivedSource = paper.source || paper.imageFileName || paper.fileName || 'seed_upload';
-                batch.set(docRef, { 
-                    ...paper, 
+                batch.set(docRef, {
+                    ...paper,
                     status: paper.status ?? 'DRAFT',
                     origin: paper.origin ?? 'SEED',
                     poolType: paper.poolType ?? derivedPoolType,
@@ -306,10 +306,10 @@ export const DB_SERVICE = {
                     createdAt: paper.createdAt ?? new Date().toISOString(),
                     uploadedBy: user?.email || 'system',
                     institutionName: user?.institutionName || null
-                }); 
+                });
             });
-            await batch.commit(); 
-            return true; 
+            await batch.commit();
+            return true;
         } catch (e) {
             lastError = e;
             console.error("Batch Upload Error:", e);
@@ -322,9 +322,9 @@ export const DB_SERVICE = {
             return snap.size;
         } catch (e) { console.error("Count Error:", e); return 0; }
     },
-    
+
     // ========== 教學者種子題目庫管理 ==========
-    
+
     // 獲取教學者機構的種子題目庫
     getTeacherSeedQuestions: async (institutionName) => {
         try {
@@ -341,7 +341,7 @@ export const DB_SERVICE = {
             return [];
         }
     },
-    
+
     // 獲取所有教學者上傳的試題（開發者用）
     getAllTeacherSeedQuestions: async () => {
         try {
@@ -350,7 +350,7 @@ export const DB_SERVICE = {
             const institutionsSnap = await getDocs(
                 collection(db, "artifacts", APP_ID, "public", "data", "teacher_seed_questions")
             );
-            
+
             for (const institutionDoc of institutionsSnap.docs) {
                 const institutionName = institutionDoc.id;
                 const questionsSnap = await getDocs(
@@ -370,7 +370,7 @@ export const DB_SERVICE = {
             return [];
         }
     },
-    
+
     // 將教學者試題加入主資料庫（開發者用）
     addTeacherQuestionToMainDB: async (questionData) => {
         try {
@@ -409,8 +409,8 @@ export const DB_SERVICE = {
                 ...logData,
                 createdAt: new Date().toISOString()
             });
-        } catch(e) { 
-            console.error("Save Learning Log Error:", e); 
+        } catch (e) {
+            console.error("Save Learning Log Error:", e);
         }
     },
     getDailyQuestionCount: async (uid) => {
@@ -418,7 +418,7 @@ export const DB_SERVICE = {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const todayStart = today.toISOString();
-            
+
             const q = query(
                 collection(db, "artifacts", APP_ID, "users", uid, "logs"),
                 where("action", "in", ["start_practice", "generate_question"]),
@@ -426,9 +426,9 @@ export const DB_SERVICE = {
             );
             const snap = await getDocs(q);
             return snap.size;
-        } catch(e) { 
-            console.error("Get Daily Question Count Error:", e); 
-            return 0; 
+        } catch (e) {
+            console.error("Get Daily Question Count Error:", e);
+            return 0;
         }
     },
     getDailyTasks: async (uid) => {
@@ -436,7 +436,7 @@ export const DB_SERVICE = {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const todayStart = today.toISOString();
-            
+
             // ?��?今日??��??��??��?記�?
             const q = query(
                 collection(db, "artifacts", APP_ID, "users", uid, "logs"),
@@ -444,7 +444,7 @@ export const DB_SERVICE = {
                 where("timestamp", ">=", todayStart)
             );
             const snap = await getDocs(q);
-            
+
             // 統?????使用??
             const tasks = { math: 0, chi: 0, eng: 0 };
             snap.forEach(doc => {
@@ -461,14 +461,14 @@ export const DB_SERVICE = {
                     tasks.math++;
                 }
             });
-            
+
             return {
                 math: { used: tasks.math, limit: 20 },
                 chi: { used: tasks.chi, limit: 20 },
                 eng: { used: tasks.eng, limit: 20 }
             };
-        } catch(e) { 
-            console.error("Get Daily Tasks Error:", e); 
+        } catch (e) {
+            console.error("Get Daily Tasks Error:", e);
             return {
                 math: { used: 0, limit: 20 },
                 chi: { used: 0, limit: 20 },
@@ -481,23 +481,23 @@ export const DB_SERVICE = {
             // ?新?戶資?中?訂閱???
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("uid", "==", uid));
             const snap = await getDocs(q);
-            
+
             if (!snap.empty) {
                 const userDoc = snap.docs[0];
                 const updateData = {
                     isPremium: isPremium,
                     subscriptionUpdatedAt: new Date().toISOString()
                 };
-                
+
                 if (subscriptionId) {
                     updateData.stripeSubscriptionId = subscriptionId;
                 }
-                
+
                 await updateDoc(doc(db, "artifacts", APP_ID, "public", "data", "users", userDoc.id), updateData);
                 return true;
             }
             return false;
-        } catch(e) {
+        } catch (e) {
             console.error("Update User Subscription Error:", e);
             return false;
         }
@@ -545,18 +545,18 @@ export const DB_SERVICE = {
             return { updated: false, profile };
         }
     },
-    
+
     // === 家長?能 ===
     linkParentToStudent: async (parentUid, studentEmail) => {
         try {
             // ?找學?帳?
             const studentProfile = await DB_SERVICE.getUserProfile(studentEmail);
             if (!studentProfile) return false;
-            
+
             // ?新學?資?，添?家??ID
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("uid", "==", studentProfile.uid));
             const snap = await getDocs(q);
-            
+
             if (!snap.empty) {
                 const studentDoc = snap.docs[0];
                 await updateDoc(doc(db, "artifacts", APP_ID, "public", "data", "users", studentDoc.id), {
@@ -566,12 +566,12 @@ export const DB_SERVICE = {
                 return true;
             }
             return false;
-        } catch(e) {
+        } catch (e) {
             console.error("Link Parent to Student Error:", e);
             return false;
         }
     },
-    
+
     getStudentChildren: async (parentUid) => {
         try {
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "users"), where("parentId", "==", parentUid));
@@ -579,25 +579,25 @@ export const DB_SERVICE = {
             const children = [];
             snap.forEach(d => children.push({ id: d.id, ...d.data() }));
             return children;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Student Children Error:", e);
             return [];
         }
     },
-    
+
     getStudentLearningStats: async (studentUid, days = 30) => {
         try {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - days);
             const startDateStr = startDate.toISOString();
-            
+
             // ??學???
             const q = query(
                 collection(db, "artifacts", APP_ID, "users", studentUid, "logs"),
                 where("timestamp", ">=", startDateStr)
             );
             const snap = await getDocs(q);
-            
+
             const stats = {
                 totalQuestions: 0,
                 correctAnswers: 0,
@@ -607,7 +607,7 @@ export const DB_SERVICE = {
                 dailyActivity: {},
                 mistakes: []
             };
-            
+
             snap.forEach(doc => {
                 const data = doc.data();
                 if (data.action === 'generate_question' || data.action === 'start_practice') {
@@ -625,7 +625,7 @@ export const DB_SERVICE = {
                     stats.wrongAnswers++;
                     if (data.timeSpent) stats.totalTimeSpent += data.timeSpent;
                 }
-                
+
                 // ?日?統?
                 if (data.timestamp) {
                     const date = data.timestamp.split('T')[0];
@@ -638,13 +638,13 @@ export const DB_SERVICE = {
                     if (data.timeSpent) stats.dailyActivity[date].timeSpent += data.timeSpent;
                 }
             });
-            
+
             // ????
             const mistakesSnap = await getDocs(collection(db, "artifacts", APP_ID, "users", studentUid, "mistakes"));
             mistakesSnap.forEach(d => stats.mistakes.push({ id: d.id, ...d.data() }));
-            
+
             return stats;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Student Learning Stats Error:", e);
             return null;
         }
@@ -668,7 +668,7 @@ export const DB_SERVICE = {
             return [];
         }
     },
-    
+
     // === ?師?能 ===
     createClass: async (teacherUid, className, grade) => {
         try {
@@ -681,20 +681,20 @@ export const DB_SERVICE = {
             };
             const docRef = await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "classes"), classData);
             return docRef.id;
-        } catch(e) {
+        } catch (e) {
             console.error("Create Class Error:", e);
             return null;
         }
     },
-    
+
     addStudentToClass: async (classId, studentEmail) => {
         try {
             const studentProfile = await DB_SERVICE.getUserProfile(studentEmail);
             if (!studentProfile) return false;
-            
+
             const classDoc = await getDoc(doc(db, "artifacts", APP_ID, "public", "data", "classes", classId));
             if (!classDoc.exists()) return false;
-            
+
             const classData = classDoc.data();
             if (!classData.students.find(s => s.email === studentEmail)) {
                 classData.students.push({
@@ -708,12 +708,12 @@ export const DB_SERVICE = {
                 });
             }
             return true;
-        } catch(e) {
+        } catch (e) {
             console.error("Add Student to Class Error:", e);
             return false;
         }
     },
-    
+
     getTeacherClasses: async (teacherUid) => {
         try {
             const q = query(collection(db, "artifacts", APP_ID, "public", "data", "classes"), where("teacherId", "==", teacherUid));
@@ -721,12 +721,12 @@ export const DB_SERVICE = {
             const classes = [];
             snap.forEach(d => classes.push({ id: d.id, ...d.data() }));
             return classes;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Teacher Classes Error:", e);
             return [];
         }
     },
-    
+
     getInstitutionClasses: async (institutionName) => {
         try {
             if (!institutionName) return [];
@@ -743,7 +743,7 @@ export const DB_SERVICE = {
             return [];
         }
     },
-    
+
     createAssignment: async (classId, assignmentData) => {
         try {
             const assignment = {
@@ -754,12 +754,12 @@ export const DB_SERVICE = {
             };
             const docRef = await addDoc(collection(db, "artifacts", APP_ID, "public", "data", "assignments"), assignment);
             return docRef.id;
-        } catch(e) {
+        } catch (e) {
             console.error("Create Assignment Error:", e);
             return null;
         }
     },
-    
+
     getAssignments: async (classId) => {
         try {
             const q = query(
@@ -771,7 +771,7 @@ export const DB_SERVICE = {
             const assignments = [];
             snap.forEach(d => assignments.push({ id: d.id, ...d.data() }));
             return assignments;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Assignments Error:", e);
             return [];
         }
@@ -809,20 +809,20 @@ export const DB_SERVICE = {
             return [];
         }
     },
-    
+
     createAssignmentNotifications: async (classId, assignmentId, assignmentTitle) => {
         try {
             // ????信息
             const classDoc = await getDoc(doc(db, "artifacts", APP_ID, "public", "data", "classes", classId));
             if (!classDoc.exists()) return false;
-            
+
             const classData = classDoc.data();
             const students = classData.students || [];
-            
+
             // ???學?創建通知
             const batch = writeBatch(db);
             const notificationsRef = collection(db, "artifacts", APP_ID, "public", "data", "notifications");
-            
+
             students.forEach(student => {
                 const notificationRef = doc(notificationsRef);
                 batch.set(notificationRef, {
@@ -835,15 +835,15 @@ export const DB_SERVICE = {
                     createdAt: new Date().toISOString()
                 });
             });
-            
+
             await batch.commit();
             return true;
-        } catch(e) {
+        } catch (e) {
             console.error("Create Assignment Notifications Error:", e);
             return false;
         }
     },
-    
+
     getStudentNotifications: async (studentUid) => {
         try {
             const q = query(
@@ -855,12 +855,12 @@ export const DB_SERVICE = {
             const notifications = [];
             snap.forEach(d => notifications.push({ id: d.id, ...d.data() }));
             return notifications;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Student Notifications Error:", e);
             return [];
         }
     },
-    
+
     markNotificationAsRead: async (notificationId) => {
         try {
             await updateDoc(
@@ -868,12 +868,12 @@ export const DB_SERVICE = {
                 { read: true, readAt: new Date().toISOString() }
             );
             return true;
-        } catch(e) {
+        } catch (e) {
             console.error("Mark Notification Read Error:", e);
             return false;
         }
     },
-    
+
     updateAssignmentStatus: async (assignmentId, status) => {
         try {
             await updateDoc(
@@ -881,23 +881,23 @@ export const DB_SERVICE = {
                 { status: status }
             );
             return true;
-        } catch(e) {
+        } catch (e) {
             console.error("Update Assignment Status Error:", e);
             return false;
         }
     },
-    
+
     getClassStats: async (classId, days = 14) => {
         try {
             const classDoc = await getDoc(doc(db, "artifacts", APP_ID, "public", "data", "classes", classId));
             if (!classDoc.exists()) return null;
-            
+
             const classData = classDoc.data();
             const stats = {
                 totalStudents: classData.students.length,
                 students: []
             };
-            
+
             // ??每個學??統???
             for (const student of classData.students) {
                 const studentStats = await DB_SERVICE.getStudentLearningStats(student.uid, days);
@@ -906,14 +906,14 @@ export const DB_SERVICE = {
                     stats: studentStats
                 });
             }
-            
+
             return stats;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Class Stats Error:", e);
             return null;
         }
     },
-    
+
     // === AI ?��??�能 ===
     generateProgressReport: async (studentUid, periodDays = 14) => {
         try {
@@ -925,7 +925,8 @@ export const DB_SERVICE = {
                     timeSpentMs: log.timeSpent || 0,
                     hintUsedCount: log.hintUsedCount || log.hint_used_count || 0,
                     retryCount: log.retryCount || 0,
-                    topic: log.topic || log.subject || ''
+                    topic: log.topic || log.subject || '',
+                    adhdMode: log.adhdMode || false
                 }));
 
             const generatedAt = new Date().toISOString();
@@ -946,26 +947,26 @@ export const DB_SERVICE = {
             }
 
             return reportDocs;
-        } catch(e) {
+        } catch (e) {
             console.error("Generate Progress Report Error:", e);
             throw e;
         }
     },
-    
+
     getStudentReports: async (studentUid) => {
         try {
             const snap = await getDocs(collection(db, "artifacts", APP_ID, "users", studentUid, "reports"));
             const reports = [];
             snap.forEach(d => reports.push({ id: d.id, ...d.data() }));
             return reports.sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
-        } catch(e) {
+        } catch (e) {
             console.error("Get Student Reports Error:", e);
             return [];
         }
     },
 
     // ========== 回饋管理系統 ==========
-    
+
     // 保存開發者回饋（只有 admin@test.com 可以）
     saveDeveloperFeedback: async (feedbackData) => {
         try {
@@ -981,11 +982,11 @@ export const DB_SERVICE = {
                 updatedAt: new Date().toISOString()
             };
             const docRef = await addDoc(
-                collection(db, "artifacts", APP_ID, "public", "data", "developer_feedback"), 
+                collection(db, "artifacts", APP_ID, "public", "data", "developer_feedback"),
                 feedbackDoc
             );
             return docRef.id;
-        } catch(e) {
+        } catch (e) {
             console.error("Save Developer Feedback Error:", e);
             return null;
         }
@@ -1005,11 +1006,11 @@ export const DB_SERVICE = {
                 createdAt: new Date().toISOString()
             };
             const docRef = await addDoc(
-                collection(db, "artifacts", APP_ID, "public", "data", "teacher_feedback"), 
+                collection(db, "artifacts", APP_ID, "public", "data", "teacher_feedback"),
                 feedbackDoc
             );
             return docRef.id;
-        } catch(e) {
+        } catch (e) {
             console.error("Save Teacher Feedback Error:", e);
             return null;
         }
@@ -1019,7 +1020,7 @@ export const DB_SERVICE = {
     getActiveFeedback: async (questionType = [], subject = null, category = null) => {
         try {
             const feedbacks = [];
-            
+
             // 1. 查詢開發者回饋（active）
             const devQuery = query(
                 collection(db, "artifacts", APP_ID, "public", "data", "developer_feedback"),
@@ -1050,19 +1051,19 @@ export const DB_SERVICE = {
             return feedbacks.filter(fb => {
                 // 科目匹配
                 if (subject && fb.subject !== subject) return false;
-                
+
                 // 分類匹配
                 if (category && fb.category !== category) return false;
-                
+
                 // 題型匹配（多標籤匹配：如果回饋的題型與目標題型有交集）
                 if (questionType.length > 0 && fb.questionType && Array.isArray(fb.questionType)) {
                     const hasMatch = questionType.some(type => fb.questionType.includes(type));
                     if (!hasMatch) return false;
                 }
-                
+
                 return true;
             });
-        } catch(e) {
+        } catch (e) {
             console.error("Get Active Feedback Error:", e);
             return [];
         }
@@ -1082,7 +1083,7 @@ export const DB_SERVICE = {
                 feedbacks.push({ id: d.id, ...d.data() });
             });
             return feedbacks;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Pending Teacher Feedback Error:", e);
             return [];
         }
@@ -1094,14 +1095,14 @@ export const DB_SERVICE = {
             // 1. 獲取原始回饋
             const feedbackRef = doc(db, "artifacts", APP_ID, "public", "data", "teacher_feedback", feedbackId);
             const feedbackSnap = await getDoc(feedbackRef);
-            
+
             if (!feedbackSnap.exists()) {
                 console.error("Feedback not found");
                 return false;
             }
 
             const feedbackData = feedbackSnap.data();
-            
+
             // 2. 轉移到 approved_feedback 集合
             await addDoc(
                 collection(db, "artifacts", APP_ID, "public", "data", "approved_feedback"),
@@ -1123,7 +1124,7 @@ export const DB_SERVICE = {
             });
 
             return true;
-        } catch(e) {
+        } catch (e) {
             console.error("Approve Teacher Feedback Error:", e);
             return false;
         }
@@ -1139,7 +1140,7 @@ export const DB_SERVICE = {
                 rejectedAt: new Date().toISOString()
             });
             return true;
-        } catch(e) {
+        } catch (e) {
             console.error("Reject Teacher Feedback Error:", e);
             return false;
         }
@@ -1158,14 +1159,14 @@ export const DB_SERVICE = {
                 feedbacks.push({ id: d.id, ...d.data() });
             });
             return feedbacks;
-        } catch(e) {
+        } catch (e) {
             console.error("Get All Developer Feedback Error:", e);
             return [];
         }
     },
 
     // ========== 試卷管理系統 ==========
-    
+
     // 保存已發送的試卷
     saveSentPaper: async (paperData, teacherUid, institutionName) => {
         try {
@@ -1186,7 +1187,7 @@ export const DB_SERVICE = {
                 paperDoc
             );
             return docRef.id;
-        } catch(e) {
+        } catch (e) {
             console.error("Save Sent Paper Error:", e);
             return null;
         }
@@ -1216,7 +1217,7 @@ export const DB_SERVICE = {
                 papers.push({ id: d.id, ...d.data() });
             });
             return papers;
-        } catch(e) {
+        } catch (e) {
             console.error("Get Sent Papers Error:", e);
             return [];
         }
@@ -1229,12 +1230,12 @@ export const DB_SERVICE = {
             const paperSnap = await getDoc(paperRef);
             if (!paperSnap.exists()) return null;
             return { id: paperSnap.id, ...paperSnap.data() };
-        } catch(e) {
+        } catch (e) {
             console.error("Get Paper By ID Error:", e);
             return null;
         }
     },
-    
+
     /**
      * Records that a user has attempted a specific question.
      * Uses a subcollection strategy to avoid Firestore 1MB document limit.
@@ -1260,18 +1261,18 @@ export const DB_SERVICE = {
                 console.warn("⚠️ recordQuestionUsage: Missing userId or questionId");
                 return false;
             }
-            
+
             // Reference the subcollection: artifacts/{APP_ID}/users/{userId}/question_usage
             const usageRef = doc(
-                db, 
-                "artifacts", 
-                APP_ID, 
-                "users", 
-                userId, 
-                "question_usage", 
+                db,
+                "artifacts",
+                APP_ID,
+                "users",
+                userId,
+                "question_usage",
                 questionId
             );
-            
+
             const attemptIndex = Number.isFinite(retryCount) ? retryCount + 1 : 1;
 
             // Summary doc (latest attempt)
@@ -1292,6 +1293,7 @@ export const DB_SERVICE = {
                 actualSubTopic: meta?.actualSubTopic || null,
                 dispatchPath: meta?.dispatchPath || null,
                 mode: meta?.mode || null,
+                adhdMode: meta?.adhdMode || false,
                 createdAt: new Date().toISOString() // Client-side timestamp as fallback
             }, { merge: true }); // merge: true allows updating existing records without overwriting other fields
 
@@ -1314,6 +1316,7 @@ export const DB_SERVICE = {
                     actualSubTopic: meta?.actualSubTopic || null,
                     dispatchPath: meta?.dispatchPath || null,
                     mode: meta?.mode || null,
+                    adhdMode: meta?.adhdMode || false,
                     usedAt: serverTimestamp(),
                     createdAt: new Date().toISOString()
                 }
@@ -1330,7 +1333,7 @@ export const DB_SERVICE = {
                 updatedAt: serverTimestamp(),
                 createdAt: serverTimestamp()
             }, { merge: true });
-            
+
             console.log(`✅ Recorded question usage: userId=${userId}, questionId=${questionId}, isCorrect=${isCorrect}`);
             return true;
         } catch (e) {
@@ -1381,7 +1384,7 @@ export const DB_SERVICE = {
             return false;
         }
     },
-    
+
     /**
      * 保存能力分數
      * @param {string} userId - 用戶 ID
@@ -1394,7 +1397,7 @@ export const DB_SERVICE = {
                 console.warn("⚠️ Missing parameters for saveAbilityScores");
                 return false;
             }
-            
+
             const scoresRef = doc(db, "artifacts", APP_ID, "users", userId, "ability_scores", subject);
             await setDoc(scoresRef, {
                 subject: subject,
@@ -1402,7 +1405,7 @@ export const DB_SERVICE = {
                 updatedAt: serverTimestamp(),
                 createdAt: serverTimestamp()
             }, { merge: true });
-            
+
             console.log(`✅ Saved ability scores: userId=${userId}, subject=${subject}`, scores);
             return true;
         } catch (e) {
@@ -1410,7 +1413,7 @@ export const DB_SERVICE = {
             return false;
         }
     },
-    
+
     /**
      * 載入能力分數
      * @param {string} userId - 用戶 ID
@@ -1422,15 +1425,15 @@ export const DB_SERVICE = {
             if (!userId || !subject) {
                 return null;
             }
-            
+
             const scoresRef = doc(db, "artifacts", APP_ID, "users", userId, "ability_scores", subject);
             const scoresSnap = await getDoc(scoresRef);
-            
+
             if (scoresSnap.exists()) {
                 const data = scoresSnap.data();
                 return data.scores || null;
             }
-            
+
             return null;
         } catch (e) {
             console.error("❌ Load Ability Scores Error:", e);
@@ -1450,14 +1453,14 @@ export const DB_SERVICE = {
             if (!questionId) {
                 return null;
             }
-            
+
             const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", questionId);
             const questionSnap = await getDoc(questionRef);
-            
+
             if (questionSnap.exists()) {
                 return normalizeQuestionRecord({ id: questionSnap.id, ...questionSnap.data() });
             }
-            
+
             return null;
         } catch (e) {
             console.error("❌ Fetch Question By ID Error:", e);
@@ -1478,7 +1481,7 @@ export const DB_SERVICE = {
                 console.error("❌ Update Audit Status: Missing parameters");
                 return false;
             }
-            
+
             const questionRef = doc(db, "artifacts", APP_ID, "public", "data", "past_papers", questionId);
             await updateDoc(questionRef, {
                 audit_status: auditResult.status || 'flagged',
@@ -1488,7 +1491,7 @@ export const DB_SERVICE = {
                 audit_issues: auditResult.issues || [],
                 audit_score: auditResult.score || null
             });
-            
+
             console.log(`✅ 已更新題目 ${questionId} 的審計狀態：${auditResult.status} (${auditResult.score}分)`);
             return true;
         } catch (e) {

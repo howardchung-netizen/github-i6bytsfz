@@ -1,6 +1,10 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCog, Clock, BookOpen, TrendingUp, Award, AlertCircle, Users, Plus, Search, BarChart3, Calendar, Sparkles, PieChart as PieIcon } from 'lucide-react';
+import {
+  Users, UserPlus, BookOpen, Clock, TrendingUp,
+  AlertCircle, CheckCircle2, Award, ArrowRight, Activity, X, Plus, LogOut, ChevronRight, BarChart3, Calendar, Search, Star, MessageSquare, Sparkles, PieChart as PieIcon,
+  ShieldCheck, AlertTriangle
+} from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
 import { createMockStudent } from '../lib/mock-data-generator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
@@ -190,29 +194,29 @@ export default function ParentView({ setView, user }) {
       alert('請先登入');
       return;
     }
-    
+
     // 檢查是否為 admin 帳號
     const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
     if (!isAdmin) {
       alert('此功能僅供 admin 帳號測試使用');
       return;
     }
-    
+
     setIsGeneratingMock(true);
     setLoading(true);
-    
+
     try {
       let progressMessage = '';
       const mockStudent = await createMockStudent(user.id, Date.now(), (msg) => {
         progressMessage = msg;
         console.log(msg);
       });
-      
+
       // 連結學生
       await DB_SERVICE.linkParentToStudent(user.id, mockStudent.email);
-      
+
       alert(`✅ 模擬學生創建成功！\n\n姓名：${mockStudent.name}\n電郵：${mockStudent.email}\n年級：${mockStudent.level}\n\n已生成14天學習數據和10道錯題`);
-      
+
       // 重新載入學生列表
       await loadChildren();
       if (mockStudent.id) {
@@ -240,24 +244,24 @@ export default function ParentView({ setView, user }) {
   // 準備圖表數據
   const chartData = dailyStatsRange.length > 0
     ? dailyStatsRange.map((item: any) => ({
-        dateString: item.date,
-        date: new Date(item.date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
-        questions: item.totalQuestions || 0,
-        correct: item.correctAnswers || 0,
-        wrong: item.wrongAnswers || 0,
-        timeMinutes: Math.round((item.timeSpentMs || 0) / 60000)
-      }))
+      dateString: item.date,
+      date: new Date(item.date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
+      questions: item.totalQuestions || 0,
+      correct: item.correctAnswers || 0,
+      wrong: item.wrongAnswers || 0,
+      timeMinutes: Math.round((item.timeSpentMs || 0) / 60000)
+    }))
     : (childStats?.dailyActivity ? Object.entries(childStats.dailyActivity)
-        .map(([date, data]: [string, any]) => ({
-          dateString: date, // 保留原始日期字符串用於排序
-          date: new Date(date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
-          questions: data?.questions || 0,
-          correct: data?.correct || 0,
-          wrong: data?.wrong || 0,
-          timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
-        }))
-        .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime())
-        .slice(-trendRangeDays) : []);
+      .map(([date, data]: [string, any]) => ({
+        dateString: date, // 保留原始日期字符串用於排序
+        date: new Date(date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' }),
+        questions: data?.questions || 0,
+        correct: data?.correct || 0,
+        wrong: data?.wrong || 0,
+        timeMinutes: Math.round((data?.timeSpent || 0) / 60000)
+      }))
+      .sort((a, b) => new Date(a.dateString).getTime() - new Date(b.dateString).getTime())
+      .slice(-trendRangeDays) : []);
 
   const accuracyRate = childStats && childStats.totalQuestions > 0
     ? Math.round((childStats.correctAnswers / childStats.totalQuestions) * 100)
@@ -305,10 +309,10 @@ export default function ParentView({ setView, user }) {
     <div className="max-w-6xl mx-auto p-4 md:p-6 animate-in fade-in duration-500 font-sans">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-black flex items-center gap-2 text-slate-800">
-          <UserCog className="text-indigo-600" size={32} /> 家長監控台
+          <Users className="text-indigo-600" size={32} /> 家長監控台
         </h2>
-        <button 
-          onClick={() => setView('dashboard')} 
+        <button
+          onClick={() => setView('dashboard')}
           className="text-slate-500 hover:text-slate-800 font-bold transition"
         >
           返回
@@ -398,11 +402,10 @@ export default function ParentView({ setView, user }) {
                 <button
                   key={child.id}
                   onClick={() => setSelectedChild(child)}
-                  className={`flex items-center gap-3 p-3 rounded-xl border transition text-left ${
-                    selectedChild?.id === child.id
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'
-                  }`}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition text-left ${selectedChild?.id === child.id
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50'
+                    }`}
                 >
                   <img
                     src={child.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${child.name}`}
@@ -443,9 +446,8 @@ export default function ParentView({ setView, user }) {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {childrenSummary.map((child) => (
-                  <div key={child.id} className={`border rounded-xl p-4 ${
-                    selectedChild?.id === child.id ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200'
-                  }`}>
+                  <div key={child.id} className={`border rounded-xl p-4 ${selectedChild?.id === child.id ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200'
+                    }`}>
                     <div className="flex items-center gap-3 mb-3">
                       <img
                         src={child.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${child.name}`}
@@ -709,70 +711,92 @@ export default function ParentView({ setView, user }) {
                     return 0;
                   })
                   .map((report) => (
-                  <div key={report.id} className="border-2 border-indigo-100 bg-indigo-50 rounded-xl p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="text-lg font-bold text-indigo-900 mb-1">
-                          {report.periodDays} 天學習報告
-                        </h4>
-                        <p className="text-sm text-indigo-700">
-                          {new Date(report.generatedAt).toLocaleDateString('zh-HK')}
-                        </p>
-                        {report.mode && (
-                          <span className="inline-flex mt-2 px-2 py-1 text-xs font-bold rounded-full bg-indigo-200 text-indigo-800">
-                            {report.mode === 'OBSERVER' ? 'AI 醫生' : 'AI 老師'}
-                          </span>
-                        )}
+                    <div key={report.id} className="border-2 border-indigo-100 bg-indigo-50 rounded-xl p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h4 className="text-lg font-bold text-indigo-900 mb-1">
+                            {report.periodDays} 天學習報告
+                          </h4>
+                          <p className="text-sm text-indigo-700">
+                            {new Date(report.generatedAt).toLocaleDateString('zh-HK')}
+                          </p>
+                          {report.mode && (
+                            <span className="inline-flex mt-2 px-2 py-1 text-xs font-bold rounded-full bg-indigo-200 text-indigo-800">
+                              {report.mode === 'OBSERVER' ? 'AI 醫生' : 'AI 老師'}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="mb-4">
-                      <p className="text-slate-700 font-medium mb-3">{report.summary}</p>
-                    </div>
+                      <div className="mb-4">
+                        <p className="text-slate-700 font-medium mb-3">{report.summary}</p>
+                      </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <h5 className="font-bold text-green-700 mb-2">強項：</h5>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <h5 className="font-bold text-green-700 mb-2">強項：</h5>
+                          <ul className="list-disc list-inside text-sm text-slate-700">
+                            {(report.strengths || []).map((s, i) => (
+                              <li key={i}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <h5 className="font-bold text-red-700 mb-2">弱項：</h5>
+                          <ul className="list-disc list-inside text-sm text-slate-700">
+                            {(report.weaknesses || []).map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="mb-4">
+                        <h5 className="font-bold text-indigo-700 mb-2">建議：</h5>
                         <ul className="list-disc list-inside text-sm text-slate-700">
-                          {(report.strengths || []).map((s, i) => (
-                            <li key={i}>{s}</li>
+                          {(report.recommendations || []).map((r, i) => (
+                            <li key={i}>{r}</li>
                           ))}
                         </ul>
                       </div>
-                      <div>
-                        <h5 className="font-bold text-red-700 mb-2">弱項：</h5>
-                        <ul className="list-disc list-inside text-sm text-slate-700">
-                          {(report.weaknesses || []).map((w, i) => (
-                            <li key={i}>{w}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
 
-                    <div className="mb-4">
-                      <h5 className="font-bold text-indigo-700 mb-2">建議：</h5>
-                      <ul className="list-disc list-inside text-sm text-slate-700">
-                        {(report.recommendations || []).map((r, i) => (
-                          <li key={i}>{r}</li>
-                        ))}
-                      </ul>
-                    </div>
+                      {report.mode === 'OBSERVER' && report.medicalRecord && (
+                        <div className="bg-white p-4 rounded-lg border border-indigo-200 mb-4">
+                          <h5 className="font-bold text-indigo-900 mb-2">醫生參考紀錄：</h5>
+                          <p className="text-sm text-slate-700 whitespace-pre-line">{report.medicalRecord}</p>
+                        </div>
+                      )}
 
-                    {report.mode === 'OBSERVER' && report.medicalRecord && (
+                      {report.clinicalAssessment && (
+                        <div className="bg-rose-50 p-4 rounded-lg border border-rose-200 mb-4 shadow-sm">
+                          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-rose-100">
+                            <Activity size={18} className="text-rose-600" />
+                            <h5 className="font-bold text-rose-900">AI 醫生臨床學習觀察：</h5>
+                          </div>
+                          <p className="text-sm text-slate-800 whitespace-pre-line leading-relaxed">{report.clinicalAssessment}</p>
+                        </div>
+                      )}
+
                       <div className="bg-white p-4 rounded-lg border border-indigo-200 mb-4">
-                        <h5 className="font-bold text-indigo-900 mb-2">醫生參考紀錄：</h5>
-                        <p className="text-sm text-slate-700 whitespace-pre-line">{report.medicalRecord}</p>
+                        <h5 className="font-bold text-indigo-900 mb-2">
+                          {report.mode === 'OBSERVER' ? '後續建議 / 轉介方向：' : '下一階段學習重點：'}
+                        </h5>
+                        <p className="text-sm text-slate-700 whitespace-pre-line">{report.nextPhasePlan}</p>
                       </div>
-                    )}
 
-                    <div className="bg-white p-4 rounded-lg border border-indigo-200">
-                      <h5 className="font-bold text-indigo-900 mb-2">
-                        {report.mode === 'OBSERVER' ? '後續建議 / 轉介方向：' : '下 2 週課程安排：'}
-                      </h5>
-                      <p className="text-sm text-slate-700 whitespace-pre-line">{report.nextPhasePlan}</p>
+                      {report.mode === 'EDUCATOR' && report.customCurriculum && (
+                        <div className="bg-white p-4 rounded-lg border border-indigo-200">
+                          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-indigo-100">
+                            <BookOpen size={18} className="text-indigo-600" />
+                            <h5 className="font-bold text-indigo-900">7 天專屬訂製進度表 (Premium)：</h5>
+                          </div>
+                          <div className="text-sm text-slate-700 whitespace-pre-line bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 shadow-sm leading-relaxed">
+                            {report.customCurriculum}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>

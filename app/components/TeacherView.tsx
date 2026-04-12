@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Users, Plus, Search, BarChart3, FileText, Send, Settings, Home, BookOpen, Award, TrendingUp, Upload, Save, RefreshCw, Sparkles } from 'lucide-react';
 import { DB_SERVICE } from '../lib/db-service';
-import { createMockClassWithStudents } from '../lib/mock-data-generator';
+// mock-data-generator is now handled server-side via /api/mock-class
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -20,7 +20,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [rankingSubject, setRankingSubject] = useState('all');
   const [rankingDays, setRankingDays] = useState(14);
   const [rankingSort, setRankingSort] = useState('accuracy_desc');
-  
+
   // 班級管理狀態
   const [showCreateClass, setShowCreateClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -31,7 +31,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [classSort, setClassSort] = useState('students_desc');
   const [classQuickSelect, setClassQuickSelect] = useState('all');
   const [isGeneratingMock, setIsGeneratingMock] = useState(false);
-  
+
   // 派卷狀態
   const [showCreateAssignment, setShowCreateAssignment] = useState(false);
   const [assignmentData, setAssignmentData] = useState({
@@ -43,13 +43,13 @@ export default function TeacherView({ setView, user, topics }) {
     seedQuestionIds: [], // 新增：選擇的種子題目 ID
     grade: 'P4' // 新增：年級，默認值為 P4
   });
-  
+
   // 作業種子題目選擇頁面狀態
   const [assignmentSeedQuestions, setAssignmentSeedQuestions] = useState([]); // 用於選擇的種子題目列表
   const [selectedAssignmentSeeds, setSelectedAssignmentSeeds] = useState([]); // 已選擇的種子題目
   const [showTopicSelector, setShowTopicSelector] = useState(null); // 當前顯示單元選擇器的題目索引
   const [selectedTopicForQuestion, setSelectedTopicForQuestion] = useState(null); // 為某題選擇的單元
-  
+
   // 種子題目上傳狀態
   const [showSeedUpload, setShowSeedUpload] = useState(false);
   const [paperJson, setPaperJson] = useState('');
@@ -62,7 +62,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [imageProcessingProgress, setImageProcessingProgress] = useState({ current: 0, total: 0 });
   const [seedQuestions, setSeedQuestions] = useState([]); // 種子題目列表
   const [paperCount, setPaperCount] = useState(0);
-  
+
   // 試卷制訂相關狀態
   const [paperCreation, setPaperCreation] = useState({
     questionCount: 10,
@@ -75,7 +75,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [paperGenerationProgress, setPaperGenerationProgress] = useState({ current: 0, total: 0 });
   const [showPaperPreview, setShowPaperPreview] = useState(false); // 顯示試卷預覽頁面
   const [selectedPaperForReuse, setSelectedPaperForReuse] = useState(null); // 選擇要重用的試卷
-  
+
   // 已發送試卷列表
   const [sentPapers, setSentPapers] = useState([]);
   const [assignmentSearch, setAssignmentSearch] = useState('');
@@ -83,7 +83,7 @@ export default function TeacherView({ setView, user, topics }) {
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState('all');
   const [isLoadingSentPapers, setIsLoadingSentPapers] = useState(false);
   const [selectedSentPaper, setSelectedSentPaper] = useState(null); // 選中的試卷詳情
-  
+
   // 教學者回饋相關狀態
   const [showFeedbackInput, setShowFeedbackInput] = useState(null); // 當前顯示回饋輸入的題目 ID
   const [teacherFeedbackText, setTeacherFeedbackText] = useState('');
@@ -91,16 +91,16 @@ export default function TeacherView({ setView, user, topics }) {
   const [teacherCategory, setTeacherCategory] = useState('');
   const [isSavingTeacherFeedback, setIsSavingTeacherFeedback] = useState(false);
   const isTeacherPending = user?.role === 'teacher' && user?.institutionRole === 'member' && user?.institutionStatus !== 'active';
-  
+
   // 題型選項（與開發者相同）
   const questionTypeOptions = [
-    '應用題', '計算題', '幾何題', '選擇題', '文字題', 
+    '應用題', '計算題', '幾何題', '選擇題', '文字題',
     '圖形題', '邏輯題', '數據題', '混合題'
   ];
-  
+
   // 分類選項
   const categoryOptions = [
-    '加法', '減法', '乘法', '除法', '分數', '小數', 
+    '加法', '減法', '乘法', '除法', '分數', '小數',
     '百分數', '周界', '面積', '體積', '時間', '金錢', '其他'
   ];
 
@@ -221,9 +221,26 @@ export default function TeacherView({ setView, user, topics }) {
         return;
       }
       console.log('Loading classes for teacher:', teacherUid, user);
-      const classesList = user.institutionName
-        ? await DB_SERVICE.getInstitutionClasses(user.institutionName)
-        : await DB_SERVICE.getTeacherClasses(teacherUid);
+
+      let classesList;
+      const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
+
+      if (isAdmin) {
+        // Admin用戶透過後端API讀取（繞過Firestore安全規則）
+        const res = await fetch(`/api/mock-class?teacherUid=${encodeURIComponent(teacherUid)}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+          classesList = data.classes || [];
+        } else {
+          console.error('API load classes error:', data.error);
+          classesList = [];
+        }
+      } else {
+        classesList = user.institutionName
+          ? await DB_SERVICE.getInstitutionClasses(user.institutionName)
+          : await DB_SERVICE.getTeacherClasses(teacherUid);
+      }
+
       console.log('Loaded classes:', classesList);
       setClasses(classesList);
       if (classesList.length > 0 && !selectedClass) {
@@ -235,6 +252,7 @@ export default function TeacherView({ setView, user, topics }) {
       setLoading(false);
     }
   };
+
 
   const loadClassStats = async (classId, days = rankingDays) => {
     setLoading(true);
@@ -321,10 +339,10 @@ export default function TeacherView({ setView, user, topics }) {
       const { db } = await import('../lib/firebase');
       const { collection, getDocs, query, where, limit } = await import('firebase/firestore');
       const { APP_ID } = await import('../lib/constants');
-      
+
       const questions = [];
       const grade = selectedClass?.grade || paperMeta.grade || 'P4';
-      
+
       // 1. 查詢主資料庫（開發者上傳的）
       const mainQuery = query(
         collection(db, "artifacts", APP_ID, "public", "data", "past_papers"),
@@ -338,7 +356,7 @@ export default function TeacherView({ setView, user, topics }) {
           questions.push({ id: d.id, source: 'main_db', ...data });
         }
       });
-      
+
       // 2. 如果是教學者，同時查詢機構專用庫
       if (user.role === 'teacher' && user.institutionName) {
         try {
@@ -357,7 +375,7 @@ export default function TeacherView({ setView, user, topics }) {
           // 如果機構庫不存在，繼續使用主庫
         }
       }
-      
+
       setSeedQuestions(questions);
     } catch (e) {
       console.error("Load seed questions error:", e);
@@ -447,7 +465,7 @@ export default function TeacherView({ setView, user, topics }) {
   // 檢查是否為圖像 Base64
   const isImageBase64 = (str: string): boolean => {
     return typeof str === 'string' && (
-      str.startsWith('data:image/') || 
+      str.startsWith('data:image/') ||
       /^[A-Za-z0-9+/=]+$/.test(str) && str.length > 100
     );
   };
@@ -458,7 +476,7 @@ export default function TeacherView({ setView, user, topics }) {
       const response = await fetch('/api/vision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           imageBase64: imageBase64,
           fileName: fileName,
           grade: paperMeta.grade || selectedClass?.grade || 'P4',
@@ -471,11 +489,11 @@ export default function TeacherView({ setView, user, topics }) {
       }
 
       const data = await response.json();
-      
+
       if (data.error) {
         throw new Error(data.error);
       }
-      
+
       return {
         ...data,
         imageFileName: fileName,
@@ -534,10 +552,10 @@ export default function TeacherView({ setView, user, topics }) {
               originalImage: base64
             });
           } catch (e) {
-            errors.push({ 
-              source: 'image_file', 
-              name: file.name, 
-              error: e instanceof Error ? e.message : '處理失敗' 
+            errors.push({
+              source: 'image_file',
+              name: file.name,
+              error: e instanceof Error ? e.message : '處理失敗'
             });
           }
         }
@@ -548,16 +566,16 @@ export default function TeacherView({ setView, user, topics }) {
         try {
           const rawData = JSON.parse(paperJson);
           const jsonQuestions = Array.isArray(rawData) ? rawData : [rawData];
-          
+
           for (const q of jsonQuestions) {
             // 檢查是否包含圖像
             if (q.image && isImageBase64(q.image)) {
               // 包含圖像，需要調用 Vision API
-              setImageProcessingProgress(prev => ({ 
-                current: prev.current + 1, 
-                total: prev.total + 1 
+              setImageProcessingProgress(prev => ({
+                current: prev.current + 1,
+                total: prev.total + 1
               }));
-              
+
               try {
                 const result = await processSingleImage(q.image, q.imageFileName || 'json_image');
                 allQuestions.push({
@@ -567,10 +585,10 @@ export default function TeacherView({ setView, user, topics }) {
                   originalImage: q.image
                 });
               } catch (e) {
-                errors.push({ 
-                  source: 'json_image', 
-                  name: q.question || '未知題目', 
-                  error: e instanceof Error ? e.message : '處理失敗' 
+                errors.push({
+                  source: 'json_image',
+                  name: q.question || '未知題目',
+                  error: e instanceof Error ? e.message : '處理失敗'
                 });
               }
             } else {
@@ -582,10 +600,10 @@ export default function TeacherView({ setView, user, topics }) {
             }
           }
         } catch (e) {
-          errors.push({ 
-            source: 'json_parse', 
-            name: 'JSON 解析', 
-            error: e instanceof Error ? e.message : 'JSON 格式錯誤' 
+          errors.push({
+            source: 'json_parse',
+            name: 'JSON 解析',
+            error: e instanceof Error ? e.message : 'JSON 格式錯誤'
           });
         }
       }
@@ -627,26 +645,26 @@ export default function TeacherView({ setView, user, topics }) {
 
         // 傳入 user 參數，系統會根據角色自動選擇存儲位置
         await DB_SERVICE.uploadPastPaperBatch(enrichedPapers, user);
-        
+
         // 統計信息
         const textCount = enrichedPapers.filter(q => q.source === 'manual_json').length;
         const imageCount = enrichedPapers.filter(q => q.source === 'vision_api').length;
-        
-        const storageLocation = user.role === 'teacher' && user.institutionName 
-          ? `機構庫（${user.institutionName}）` 
+
+        const storageLocation = user.role === 'teacher' && user.institutionName
+          ? `機構庫（${user.institutionName}）`
           : '主資料庫';
-        
+
         let message = `✅ 成功上傳 ${enrichedPapers.length} 道種子題目！\n\n`;
         message += `📝 文字題目：${textCount} 道（免費）\n`;
         message += `📷 圖像題目：${imageCount} 道（已自動識別）\n`;
         message += `💾 存儲位置：${storageLocation}`;
-        
+
         if (errors.length > 0) {
           message += `\n\n⚠️ ${errors.length} 項處理失敗`;
         }
-        
+
         alert(message);
-        
+
         // 清空表單並重新載入
         setPaperJson('');
         setImageFiles([]);
@@ -678,13 +696,13 @@ export default function TeacherView({ setView, user, topics }) {
         dueDate: assignmentData.dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         seedQuestionIds: assignmentData.seedQuestionIds || []
       });
-      
+
       if (assignmentId) {
         // 為班級中的每個學生創建通知
         if (selectedClass.students && selectedClass.students.length > 0) {
           await DB_SERVICE.createAssignmentNotifications(selectedClass.id, assignmentId, assignmentData.title);
         }
-        
+
         alert(`作業創建成功！已發送通知給 ${selectedClass.students?.length || 0} 名學生`);
         setShowCreateAssignment(false);
         setAssignmentData({
@@ -711,71 +729,58 @@ export default function TeacherView({ setView, user, topics }) {
   const handleGenerateMockClass = async () => {
     // 使用 user.uid 或 user.id（優先使用 uid）
     const teacherUid = user.uid || user.id;
-    
+
     if (!teacherUid) {
       alert('請先登入');
       return;
     }
-    
+
     // 檢查是否為 admin 帳號
     const isAdmin = user.role === 'admin' || user.email === 'admin@test.com';
     if (!isAdmin) {
       alert('此功能僅供 admin 帳號測試使用');
       return;
     }
-    
+
     if (!confirm('確定要創建模擬班級嗎？\n這將創建20個學生並生成學習數據，可能需要1-2分鐘。')) {
       return;
     }
-    
+
     setIsGeneratingMock(true);
     setLoading(true);
-    
+
     try {
-      console.log('開始創建模擬班級...', { teacherUid, user });
-      let progressMessage = '';
-      const result = await createMockClassWithStudents(
-        teacherUid, 
-        '測試班級', 
-        'P4', 
-        20,
-        (msg) => {
-          progressMessage = msg;
-          console.log('進度:', msg);
-        }
-      );
-      
+      console.log('開始創建模擬班級（透過 API）...', { teacherUid });
+      const res = await fetch('/api/mock-class', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teacherUid, className: '測試班級', grade: 'P4', studentCount: 20 }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || '伺服器錯誤');
+      }
+
       console.log('模擬班級創建完成:', result);
-      
+
       alert(`✅ 模擬班級創建成功！\n\n班級名稱：${result.className}\n學生人數：${result.students.length}人\n年級：P4\n\n已為每個學生生成5-14天的學習數據`);
-      
+
       // 重新載入班級列表
       await loadClasses();
-      
+
       // 等待一下讓數據同步
       setTimeout(async () => {
         await loadClasses();
-        // 選擇新創建的班級
         const updatedClasses = await DB_SERVICE.getTeacherClasses(teacherUid);
         const newClass = updatedClasses.find(c => c.id === result.classId);
         if (newClass) {
           setSelectedClass(newClass);
-          console.log('已選擇班級:', newClass);
-        } else {
-          console.warn('找不到新創建的班級，classId:', result.classId, '所有班級:', updatedClasses);
-          // 如果還是找不到，選擇第一個班級
-          if (updatedClasses.length > 0) {
-            setSelectedClass(updatedClasses[0]);
-          }
+        } else if (updatedClasses.length > 0) {
+          setSelectedClass(updatedClasses[0]);
         }
       }, 2000);
     } catch (e) {
       console.error("Generate mock class error:", e);
-      console.error("Error details:", {
-        message: e.message,
-        stack: e.stack,
-        name: e.name
-      });
       alert('創建模擬班級失敗：' + (e.message || '未知錯誤') + '\n\n請查看控制台了解詳細錯誤信息');
     } finally {
       setIsGeneratingMock(false);
@@ -883,8 +888,8 @@ export default function TeacherView({ setView, user, topics }) {
         <h2 className="text-3xl font-black flex items-center gap-2 text-slate-800">
           <Users className="text-indigo-600" size={32} /> 教學者控制台
         </h2>
-        <button 
-          onClick={() => setView('dashboard')} 
+        <button
+          onClick={() => setView('dashboard')}
           className="text-slate-500 hover:text-slate-800 font-bold transition flex items-center gap-2"
         >
           <Home size={18} /> 返回
@@ -895,31 +900,28 @@ export default function TeacherView({ setView, user, topics }) {
       <div className="flex gap-2 mb-6 border-b border-slate-200">
         <button
           onClick={() => setActiveTab('classes')}
-          className={`px-6 py-3 font-bold transition ${
-            activeTab === 'classes'
+          className={`px-6 py-3 font-bold transition ${activeTab === 'classes'
               ? 'border-b-2 border-indigo-600 text-indigo-600'
               : 'text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           <Users size={18} className="inline mr-2" /> 班級管理
         </button>
         <button
           onClick={() => setActiveTab('assignments')}
-          className={`px-6 py-3 font-bold transition ${
-            activeTab === 'assignments'
+          className={`px-6 py-3 font-bold transition ${activeTab === 'assignments'
               ? 'border-b-2 border-indigo-600 text-indigo-600'
               : 'text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           <FileText size={18} className="inline mr-2" /> 派卷功能
         </button>
         <button
           onClick={() => setActiveTab('analytics')}
-          className={`px-6 py-3 font-bold transition ${
-            activeTab === 'analytics'
+          className={`px-6 py-3 font-bold transition ${activeTab === 'analytics'
               ? 'border-b-2 border-indigo-600 text-indigo-600'
               : 'text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           <BarChart3 size={18} className="inline mr-2" /> 數據中控台
         </button>
@@ -929,11 +931,10 @@ export default function TeacherView({ setView, user, topics }) {
             loadSeedQuestions();
             loadPaperCount();
           }}
-          className={`px-6 py-3 font-bold transition ${
-            activeTab === 'seeds'
+          className={`px-6 py-3 font-bold transition ${activeTab === 'seeds'
               ? 'border-b-2 border-green-600 text-green-600'
               : 'text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           <Upload size={18} className="inline mr-2" /> 種子題目庫
         </button>
@@ -988,18 +989,17 @@ export default function TeacherView({ setView, user, topics }) {
                 return 0;
               })
               .map((cls) => (
-              <button
-                key={cls.id}
-                onClick={() => setSelectedClass(cls)}
-                className={`px-4 py-2 rounded-lg font-bold transition ${
-                  selectedClass?.id === cls.id
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {cls.className} ({cls.grade}) - {cls.students?.length || 0} 人
-              </button>
-            ))}
+                <button
+                  key={cls.id}
+                  onClick={() => setSelectedClass(cls)}
+                  className={`px-4 py-2 rounded-lg font-bold transition ${selectedClass?.id === cls.id
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                >
+                  {cls.className} ({cls.grade}) - {cls.students?.length || 0} 人
+                </button>
+              ))}
             <div className="ml-auto flex gap-2">
               {(user.role === 'admin' || user.email === 'admin@test.com') && (
                 <button
@@ -1120,34 +1120,23 @@ export default function TeacherView({ setView, user, topics }) {
                         setIsGeneratingMock(true);
                         setLoading(true);
                         try {
-                          console.log('開始為班級生成模擬學生...', { classId: selectedClass.id, teacherUid });
-                          // 為現有班級添加模擬學生
-                          const result = await createMockClassWithStudents(
-                            teacherUid,
-                            selectedClass.className,
-                            selectedClass.grade || 'P4',
-                            20,
-                            (msg) => console.log('進度:', msg)
-                          );
-                          // 將新學生添加到現有班級
-                          const updatedStudents = [...(selectedClass.students || []), ...result.students.map(s => ({
-                            email: s.email,
-                            uid: s.uid,
-                            name: s.name,
-                            level: s.level,
-                            addedAt: new Date().toISOString()
-                          }))];
-                          // 更新班級
-                          const { db } = await import('../lib/firebase');
-                          const { doc, setDoc } = await import('firebase/firestore');
-                          const { APP_ID } = await import('../lib/constants');
-                          await setDoc(
-                            doc(db, "artifacts", APP_ID, "public", "data", "classes", selectedClass.id),
-                            { ...selectedClass, students: updatedStudents }
-                          );
+                          console.log('開始為班級生成模擬學生（透過 API）...', { classId: selectedClass.id, teacherUid });
+                          const res = await fetch('/api/mock-class', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              teacherUid,
+                              className: selectedClass.className,
+                              grade: selectedClass.grade || 'P4',
+                              studentCount: 20,
+                            }),
+                          });
+                          const result = await res.json();
+                          if (!res.ok || !result.success) {
+                            throw new Error(result.error || '伺服器錯誤');
+                          }
                           alert(`✅ 已為「${selectedClass.className}」生成20個模擬學生！\n\n已為每個學生生成5-14天的學習數據`);
                           await loadClasses();
-                          // 重新選擇班級以刷新數據
                           setTimeout(async () => {
                             await loadClasses();
                             const updatedClass = classes.find(c => c.id === selectedClass.id);
@@ -1311,7 +1300,7 @@ export default function TeacherView({ setView, user, topics }) {
                         <p className="text-xs text-slate-500 mt-1">💡 不選擇單元將從所有單元中生成</p>
                       )}
                     </div>
-                    
+
                     {/* 檢閱曾經儲存的試卷（Email風格） */}
                     <div>
                       <label className="block text-sm font-bold text-slate-700 mb-2">
@@ -1377,7 +1366,7 @@ export default function TeacherView({ setView, user, topics }) {
                         )}
                       </div>
                     </div>
-                    
+
                     {/* 發送作業按鈕（當有選擇種子題目時顯示） */}
                     {assignmentData.seedQuestionIds && assignmentData.seedQuestionIds.length > 0 && (
                       <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -1390,7 +1379,7 @@ export default function TeacherView({ setView, user, topics }) {
                               alert('請填寫所有必填欄位');
                               return;
                             }
-                            
+
                             setLoading(true);
                             try {
                               const assignmentId = await DB_SERVICE.createAssignment(
@@ -1401,15 +1390,15 @@ export default function TeacherView({ setView, user, topics }) {
                                   seedQuestionIds: assignmentData.seedQuestionIds || []
                                 }
                               );
-                              
+
                               if (assignmentId) {
                                 // 為班級中的每個學生創建通知
                                 if (selectedClass.students && selectedClass.students.length > 0) {
                                   await DB_SERVICE.createAssignmentNotifications(selectedClass.id, assignmentId, assignmentData.title);
                                 }
-                                
+
                                 alert(`作業創建成功！已發送通知給 ${selectedClass.students?.length || 0} 名學生`);
-                                
+
                                 // 重置
                                 setAssignmentData({
                                   title: '',
@@ -1439,7 +1428,7 @@ export default function TeacherView({ setView, user, topics }) {
                         </button>
                       </div>
                     )}
-                    
+
                     <div className="flex gap-3 mt-4">
                       <button
                         onClick={async () => {
@@ -1554,13 +1543,13 @@ export default function TeacherView({ setView, user, topics }) {
                     <span className="text-3xl font-black">
                       {classStats.students.length > 0
                         ? Math.round(
-                            classStats.students.reduce((sum, s) => {
-                              const accuracy = s.stats && s.stats.totalQuestions > 0
-                                ? (s.stats.correctAnswers / s.stats.totalQuestions) * 100
-                                : 0;
-                              return sum + accuracy;
-                            }, 0) / classStats.students.length
-                          )
+                          classStats.students.reduce((sum, s) => {
+                            const accuracy = s.stats && s.stats.totalQuestions > 0
+                              ? (s.stats.correctAnswers / s.stats.totalQuestions) * 100
+                              : 0;
+                            return sum + accuracy;
+                          }, 0) / classStats.students.length
+                        )
                         : 0}%
                     </span>
                   </div>
@@ -1680,13 +1669,12 @@ export default function TeacherView({ setView, user, topics }) {
                             <td className="py-2 pr-4 text-emerald-600 font-bold">{item.completionRate}%</td>
                             <td className="py-2 pr-4">
                               <span
-                                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                  item.completionRate >= 80
+                                className={`px-2 py-0.5 rounded-full text-xs font-bold ${item.completionRate >= 80
                                     ? 'bg-emerald-100 text-emerald-700'
                                     : item.completionRate >= 50
                                       ? 'bg-amber-100 text-amber-700'
                                       : 'bg-red-100 text-red-600'
-                                }`}
+                                  }`}
                               >
                                 {item.completionRate >= 80 ? '高' : item.completionRate >= 50 ? '中' : '低'}
                               </span>
@@ -1834,7 +1822,7 @@ export default function TeacherView({ setView, user, topics }) {
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <FileText size={20} className="text-purple-600"/> 試卷制訂
+              <FileText size={20} className="text-purple-600" /> 試卷制訂
             </h3>
             <p className="text-sm text-slate-600 mb-4">
               根據設定的參數生成試卷，生成後可測試、編輯每道題目，滿意後再派發給學生。
@@ -1849,7 +1837,7 @@ export default function TeacherView({ setView, user, topics }) {
                   min="1"
                   max="50"
                   value={paperCreation.questionCount}
-                  onChange={e => setPaperCreation({...paperCreation, questionCount: parseInt(e.target.value) || 10})}
+                  onChange={e => setPaperCreation({ ...paperCreation, questionCount: parseInt(e.target.value) || 10 })}
                   className="w-full border-2 border-slate-200 rounded-lg p-3"
                 />
               </div>
@@ -1857,10 +1845,10 @@ export default function TeacherView({ setView, user, topics }) {
                 <label className="block text-sm font-bold text-slate-700 mb-2">年級</label>
                 <select
                   value={paperCreation.grade}
-                  onChange={e => setPaperCreation({...paperCreation, grade: e.target.value})}
+                  onChange={e => setPaperCreation({ ...paperCreation, grade: e.target.value })}
                   className="w-full border-2 border-slate-200 rounded-lg p-3"
                 >
-                  {['P1','P2','P3','P4','P5','P6'].map(g => (
+                  {['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map(g => (
                     <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
@@ -1907,27 +1895,30 @@ export default function TeacherView({ setView, user, topics }) {
                   alert('題目數量必須在 1-50 之間');
                   return;
                 }
-                
+
                 setIsGeneratingPaper(true);
                 setPaperGenerationProgress({ current: 0, total: paperCreation.questionCount });
                 setGeneratedPaper([]);
-                
+
                 try {
                   const questions = [];
                   const { AI_SERVICE } = await import('../lib/ai-service');
-                  
+
                   for (let i = 0; i < paperCreation.questionCount; i++) {
                     setPaperGenerationProgress({ current: i + 1, total: paperCreation.questionCount });
-                    
+
                     const question = await AI_SERVICE.generateQuestion(
                       paperCreation.grade,
                       'normal',
                       paperCreation.selectedTopicIds.length > 0 ? paperCreation.selectedTopicIds : [],
                       topics,
                       'math',
-                      user
+                      user,
+                      null, // Language preference
+                      {}, // Subtopics
+                      false // adhdMode
                     );
-                    
+
                     if (question) {
                       questions.push({
                         ...question,
@@ -1936,13 +1927,13 @@ export default function TeacherView({ setView, user, topics }) {
                         isRegenerating: false
                       });
                     }
-                    
+
                     // 避免 API 配額超限，每題間隔 3.5 秒
                     if (i < paperCreation.questionCount - 1) {
                       await new Promise(resolve => setTimeout(resolve, 3500));
                     }
                   }
-                  
+
                   setGeneratedPaper(questions);
                   setActiveTab('paper-preview'); // 切換到試卷預覽頁面
                   alert(`✅ 成功生成 ${questions.length} 道題目！`);
@@ -1975,35 +1966,35 @@ export default function TeacherView({ setView, user, topics }) {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <FileText size={20} className="text-indigo-600"/> 已發送試卷
+                <FileText size={20} className="text-indigo-600" /> 已發送試卷
               </h4>
-            <input
-              type="text"
-              value={assignmentSearch}
-              onChange={(e) => setAssignmentSearch(e.target.value)}
-              placeholder="搜尋試卷標題"
-              className="border rounded-lg px-3 py-1.5 text-sm"
-            />
-            <select
-              value={assignmentSort}
-              onChange={(e) => setAssignmentSort(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm"
-            >
-              <option value="sent_desc">日期新 → 舊</option>
-              <option value="sent_asc">日期舊 → 新</option>
-              <option value="count_desc">題數多 → 少</option>
-              <option value="count_asc">題數少 → 多</option>
-            </select>
-            <select
-              value={assignmentStatusFilter}
-              onChange={(e) => setAssignmentStatusFilter(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm"
-            >
-              <option value="all">全部狀態</option>
-              <option value="overdue">逾期</option>
-              <option value="dueSoon">即將到期</option>
-              <option value="active">正常</option>
-            </select>
+              <input
+                type="text"
+                value={assignmentSearch}
+                onChange={(e) => setAssignmentSearch(e.target.value)}
+                placeholder="搜尋試卷標題"
+                className="border rounded-lg px-3 py-1.5 text-sm"
+              />
+              <select
+                value={assignmentSort}
+                onChange={(e) => setAssignmentSort(e.target.value)}
+                className="border rounded-lg px-2 py-1.5 text-sm"
+              >
+                <option value="sent_desc">日期新 → 舊</option>
+                <option value="sent_asc">日期舊 → 新</option>
+                <option value="count_desc">題數多 → 少</option>
+                <option value="count_asc">題數少 → 多</option>
+              </select>
+              <select
+                value={assignmentStatusFilter}
+                onChange={(e) => setAssignmentStatusFilter(e.target.value)}
+                className="border rounded-lg px-2 py-1.5 text-sm"
+              >
+                <option value="all">全部狀態</option>
+                <option value="overdue">逾期</option>
+                <option value="dueSoon">即將到期</option>
+                <option value="active">正常</option>
+              </select>
               <button
                 onClick={async () => {
                   setIsLoadingSentPapers(true);
@@ -2063,72 +2054,71 @@ export default function TeacherView({ setView, user, topics }) {
                     return 0;
                   })
                   .map((paper) => (
-                  <div
-                    key={paper.id}
-                    onClick={() => setSelectedSentPaper(paper)}
-                    className={`p-4 hover:bg-slate-50 cursor-pointer transition ${
-                      selectedSentPaper?.id === paper.id ? 'bg-indigo-50 border-l-4 border-indigo-600' : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-slate-800">{paper.title || '未命名試卷'}</span>
-                          <span className="text-xs text-slate-500">
-                            {paper.questionCount || 0} 題
-                          </span>
-                          {paper.grade && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                              {paper.grade}
+                    <div
+                      key={paper.id}
+                      onClick={() => setSelectedSentPaper(paper)}
+                      className={`p-4 hover:bg-slate-50 cursor-pointer transition ${selectedSentPaper?.id === paper.id ? 'bg-indigo-50 border-l-4 border-indigo-600' : ''
+                        }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-slate-800">{paper.title || '未命名試卷'}</span>
+                            <span className="text-xs text-slate-500">
+                              {paper.questionCount || 0} 題
                             </span>
-                          )}
-                          {paper.dueDate ? (
-                            (() => {
-                              const diffDays = Math.ceil((new Date(paper.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                              if (diffDays < 0) {
+                            {paper.grade && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                {paper.grade}
+                              </span>
+                            )}
+                            {paper.dueDate ? (
+                              (() => {
+                                const diffDays = Math.ceil((new Date(paper.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                                if (diffDays < 0) {
+                                  return (
+                                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">逾期</span>
+                                  );
+                                }
+                                if (diffDays <= 3) {
+                                  return (
+                                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">即將到期</span>
+                                  );
+                                }
                                 return (
-                                  <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">逾期</span>
+                                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">正常</span>
                                 );
-                              }
-                              if (diffDays <= 3) {
-                                return (
-                                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">即將到期</span>
-                                );
-                              }
-                              return (
-                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">正常</span>
-                              );
-                            })()
-                          ) : (
-                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">已發送</span>
+                              })()
+                            ) : (
+                              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">已發送</span>
+                            )}
+                          </div>
+                          {paper.description && (
+                            <p className="text-sm text-slate-600 mb-1 line-clamp-1">
+                              {paper.description}
+                            </p>
                           )}
+                          <div className="flex items-center gap-3 text-xs text-slate-500">
+                            <span>{new Date(paper.sentAt || paper.createdAt).toLocaleString('zh-HK')}</span>
+                            {paper.institutionName && (
+                              <span>• {paper.institutionName}</span>
+                            )}
+                          </div>
                         </div>
-                        {paper.description && (
-                          <p className="text-sm text-slate-600 mb-1 line-clamp-1">
-                            {paper.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-3 text-xs text-slate-500">
-                          <span>{new Date(paper.sentAt || paper.createdAt).toLocaleString('zh-HK')}</span>
-                          {paper.institutionName && (
-                            <span>• {paper.institutionName}</span>
-                          )}
-                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 重用試卷（不能修改）
+                            setSelectedPaperForReuse(paper);
+                            setActiveTab('paper-preview');
+                          }}
+                          className="ml-4 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
+                        >
+                          重用
+                        </button>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // 重用試卷（不能修改）
-                          setSelectedPaperForReuse(paper);
-                          setActiveTab('paper-preview');
-                        }}
-                        className="ml-4 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition"
-                      >
-                        重用
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
@@ -2138,27 +2128,27 @@ export default function TeacherView({ setView, user, topics }) {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Upload size={20} className="text-green-600"/> 種子題目庫管理
+                <Upload size={20} className="text-green-600" /> 種子題目庫管理
               </h3>
               <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">總數: {paperCount}</span>
             </div>
-            
+
             <div className="flex gap-4 mb-4 items-end">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">年級</label>
-                <select 
-                  value={paperMeta.grade} 
-                  onChange={e => setPaperMeta({...paperMeta, grade: e.target.value})} 
+                <select
+                  value={paperMeta.grade}
+                  onChange={e => setPaperMeta({ ...paperMeta, grade: e.target.value })}
                   className="border p-2 rounded text-sm bg-white"
                 >
-                  {['P1','P2','P3','P4','P5','P6'].map(g => <option key={g} value={g}>{g}</option>)}
+                  {['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div className="flex-1">
                 <label className="block text-xs font-bold text-slate-700 mb-1">指定單元 (選填)</label>
-                <select 
-                  value={paperMeta.topicId} 
-                  onChange={e => setPaperMeta({...paperMeta, topicId: e.target.value, subTopic: ''})} 
+                <select
+                  value={paperMeta.topicId}
+                  onChange={e => setPaperMeta({ ...paperMeta, topicId: e.target.value, subTopic: '' })}
                   className="border border-indigo-200 bg-indigo-50 text-indigo-900 p-2 rounded text-sm w-full font-bold"
                 >
                   <option value="">🤖 自動偵測 / 不指定</option>
@@ -2171,7 +2161,7 @@ export default function TeacherView({ setView, user, topics }) {
                 <label className="block text-xs font-bold text-slate-700 mb-1">指定子單元 (選填)</label>
                 <select
                   value={paperMeta.subTopic}
-                  onChange={e => setPaperMeta({...paperMeta, subTopic: e.target.value})}
+                  onChange={e => setPaperMeta({ ...paperMeta, subTopic: e.target.value })}
                   disabled={!paperMeta.topicId}
                   className="border border-slate-300 bg-white p-2 rounded text-sm w-full font-bold disabled:bg-slate-100 disabled:text-slate-400"
                 >
@@ -2189,10 +2179,10 @@ export default function TeacherView({ setView, user, topics }) {
             {/* 統一上傳介面 */}
             <div className="mb-4 p-4 bg-gradient-to-br from-green-50 to-blue-50 border-2 border-green-200 rounded-lg">
               <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                <Upload size={18} className="text-green-600"/> 
+                <Upload size={18} className="text-green-600" />
                 統一上傳介面（系統自動分類，節省成本）
               </h4>
-              
+
               {/* 方式 1：上傳圖像 */}
               <div className="mb-3">
                 <label className="block text-xs font-bold text-slate-700 mb-2">
@@ -2223,10 +2213,10 @@ export default function TeacherView({ setView, user, topics }) {
                 <label className="block text-xs font-bold text-slate-700 mb-2">
                   📝 方式 2：貼上 JSON（文字題目或包含圖像的 JSON）
                 </label>
-                <textarea 
-                  value={paperJson} 
-                  onChange={e => setPaperJson(e.target.value)} 
-                  className="w-full h-32 border border-slate-300 rounded-lg p-3 font-mono text-xs bg-white focus:ring-2 focus:ring-green-200 outline-none" 
+                <textarea
+                  value={paperJson}
+                  onChange={e => setPaperJson(e.target.value)}
+                  className="w-full h-32 border border-slate-300 rounded-lg p-3 font-mono text-xs bg-white focus:ring-2 focus:ring-green-200 outline-none"
                   placeholder='[ { "question": "...", "answer": "...", "topic": "..." } ]&#10;或包含 "image": "data:image/..." 的 JSON'
                   disabled={isUploading || isProcessingImages}
                 ></textarea>
@@ -2251,21 +2241,21 @@ export default function TeacherView({ setView, user, topics }) {
               </div>
 
               {/* 統一上傳按鈕 */}
-              <button 
-                onClick={handleUnifiedUpload} 
-                disabled={isUploading || isProcessingImages || (imageFiles.length === 0 && pdfPages.length === 0 && !paperJson.trim())} 
+              <button
+                onClick={handleUnifiedUpload}
+                disabled={isUploading || isProcessingImages || (imageFiles.length === 0 && pdfPages.length === 0 && !paperJson.trim())}
                 className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 {isUploading || isProcessingImages ? (
                   <>
-                    <RefreshCw size={18} className="animate-spin"/>
-                    {isProcessingImages 
-                      ? `處理中 ${imageProcessingProgress.current}/${imageProcessingProgress.total || (imageFiles.length + pdfPages.length)}...` 
+                    <RefreshCw size={18} className="animate-spin" />
+                    {isProcessingImages
+                      ? `處理中 ${imageProcessingProgress.current}/${imageProcessingProgress.total || (imageFiles.length + pdfPages.length)}...`
                       : '上傳中...'}
                   </>
                 ) : (
                   <>
-                    <Save size={18}/>
+                    <Save size={18} />
                     一鍵上傳（自動分類處理）
                   </>
                 )}
@@ -2278,14 +2268,14 @@ export default function TeacherView({ setView, user, topics }) {
               <div className="max-h-64 overflow-y-auto space-y-2">
                 {seedQuestions.length === 0 ? (
                   <div className="text-center py-8 text-slate-400">
-                    <BookOpen size={32} className="mx-auto mb-2 opacity-50"/>
+                    <BookOpen size={32} className="mx-auto mb-2 opacity-50" />
                     <p className="text-sm">暫無種子題目</p>
                   </div>
                 ) : (
                   seedQuestions.map((q, idx) => {
                     const questionId = q.id || `temp_${idx}`;
                     const isShowingFeedback = showFeedbackInput === questionId;
-                    
+
                     return (
                       <div key={questionId} className="p-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100">
                         <div className="flex items-start justify-between">
@@ -2315,14 +2305,14 @@ export default function TeacherView({ setView, user, topics }) {
                             {isShowingFeedback ? '取消' : '💬 回饋'}
                           </button>
                         </div>
-                        
+
                         {/* 回饋輸入區域 */}
                         {isShowingFeedback && (
                           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                             <p className="text-xs text-blue-700 mb-2 font-semibold">
                               💡 您的回饋將提交給開發者審核，審核通過後才會應用於 AI 生成
                             </p>
-                            
+
                             {/* 題型選擇 */}
                             <div className="mb-2">
                               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -2340,18 +2330,17 @@ export default function TeacherView({ setView, user, topics }) {
                                         setTeacherSelectedTypes([...teacherSelectedTypes, type]);
                                       }
                                     }}
-                                    className={`px-2 py-1 rounded text-xs transition ${
-                                      teacherSelectedTypes.includes(type)
+                                    className={`px-2 py-1 rounded text-xs transition ${teacherSelectedTypes.includes(type)
                                         ? 'bg-blue-600 text-white'
                                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-blue-100'
-                                    }`}
+                                      }`}
                                   >
                                     {type}
                                   </button>
                                 ))}
                               </div>
                             </div>
-                            
+
                             {/* 分類選擇 */}
                             <div className="mb-2">
                               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -2368,7 +2357,7 @@ export default function TeacherView({ setView, user, topics }) {
                                 ))}
                               </select>
                             </div>
-                            
+
                             {/* 回饋輸入 */}
                             <div className="mb-2">
                               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -2381,7 +2370,7 @@ export default function TeacherView({ setView, user, topics }) {
                                 className="w-full h-20 bg-white border border-slate-300 rounded px-2 py-1 text-xs resize-none"
                               />
                             </div>
-                            
+
                             {/* 提交按鈕 */}
                             <button
                               onClick={async () => {
@@ -2397,7 +2386,7 @@ export default function TeacherView({ setView, user, topics }) {
                                   alert('請選擇分類');
                                   return;
                                 }
-                                
+
                                 setIsSavingTeacherFeedback(true);
                                 try {
                                   const feedbackData = {
@@ -2408,9 +2397,9 @@ export default function TeacherView({ setView, user, topics }) {
                                     feedback: teacherFeedbackText.trim(),
                                     createdBy: user.email
                                   };
-                                  
+
                                   const feedbackId = await DB_SERVICE.saveTeacherFeedback(feedbackData);
-                                  
+
                                   if (feedbackId) {
                                     alert('✅ 回饋已提交！開發者審核通過後，AI 將參考此回饋生成題目。');
                                     setShowFeedbackInput(null);
@@ -2470,7 +2459,7 @@ export default function TeacherView({ setView, user, topics }) {
                   返回
                 </button>
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <FileText size={20} className="text-purple-600"/>
+                  <FileText size={20} className="text-purple-600" />
                   {selectedPaperForReuse ? '試卷預覽（只讀）' : '試卷預覽'}
                   <span className="text-sm font-normal text-slate-500">
                     ({selectedPaperForReuse ? selectedPaperForReuse.questions?.length || 0 : generatedPaper.filter(q => q.isSelected).length}/{selectedPaperForReuse ? selectedPaperForReuse.questions?.length || 0 : generatedPaper.length} 題)
@@ -2484,17 +2473,16 @@ export default function TeacherView({ setView, user, topics }) {
               {(selectedPaperForReuse?.questions || generatedPaper).map((q, idx) => {
                 const question = selectedPaperForReuse ? q : generatedPaper[idx];
                 if (!question) return null;
-                
+
                 return (
                   <div
                     key={idx}
-                    className={`p-4 border-2 rounded-lg ${
-                      selectedPaperForReuse 
-                        ? 'border-slate-200 bg-slate-50' 
-                        : question.isSelected 
-                          ? 'border-green-200 bg-green-50' 
+                    className={`p-4 border-2 rounded-lg ${selectedPaperForReuse
+                        ? 'border-slate-200 bg-slate-50'
+                        : question.isSelected
+                          ? 'border-green-200 bg-green-50'
                           : 'border-red-200 bg-red-50'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2 flex-1">
@@ -2517,7 +2505,7 @@ export default function TeacherView({ setView, user, topics }) {
                             >
                               📚 選擇單元
                             </button>
-                            
+
                             {/* 單元選擇下拉菜單 */}
                             {showTopicSelector === `preview_${idx}` && (
                               <div className="absolute right-0 top-full mt-1 bg-white border-2 border-indigo-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-60 overflow-y-auto">
@@ -2561,7 +2549,7 @@ export default function TeacherView({ setView, user, topics }) {
                               const updatedPaper = [...generatedPaper];
                               updatedPaper[idx].isRegenerating = true;
                               setGeneratedPaper(updatedPaper);
-                              
+
                               try {
                                 const { AI_SERVICE } = await import('../lib/ai-service');
                                 const newQuestion = await AI_SERVICE.generateQuestion(
@@ -2572,7 +2560,7 @@ export default function TeacherView({ setView, user, topics }) {
                                   'math',
                                   user
                                 );
-                                
+
                                 if (newQuestion) {
                                   updatedPaper[idx] = {
                                     ...newQuestion,
@@ -2611,18 +2599,17 @@ export default function TeacherView({ setView, user, topics }) {
                               updatedPaper[idx].isSelected = !updatedPaper[idx].isSelected;
                               setGeneratedPaper(updatedPaper);
                             }}
-                            className={`px-3 py-1.5 text-xs rounded transition ${
-                              question.isSelected
+                            className={`px-3 py-1.5 text-xs rounded transition ${question.isSelected
                                 ? 'bg-red-600 hover:bg-red-700 text-white'
                                 : 'bg-green-600 hover:bg-green-700 text-white'
-                            }`}
+                              }`}
                           >
                             {question.isSelected ? '❌ 移除' : '✅ 保留'}
                           </button>
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="bg-white rounded p-3 mb-2">
                       {question.selectedTopic && (
                         <div className="mb-2">
@@ -2637,9 +2624,8 @@ export default function TeacherView({ setView, user, topics }) {
                           {question.options.map((opt, optIdx) => (
                             <div
                               key={optIdx}
-                              className={`text-xs p-2 rounded ${
-                                opt === question.answer ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'
-                              }`}
+                              className={`text-xs p-2 rounded ${opt === question.answer ? 'bg-green-100 text-green-800 font-bold' : 'bg-slate-50'
+                                }`}
                             >
                               {String.fromCharCode(65 + optIdx)}. {opt}
                             </div>
@@ -2681,7 +2667,7 @@ export default function TeacherView({ setView, user, topics }) {
                       alert('請至少保留一道題目');
                       return;
                     }
-                    
+
                     // 保存試卷
                     try {
                       const paperId = await DB_SERVICE.saveSentPaper(
@@ -2696,7 +2682,7 @@ export default function TeacherView({ setView, user, topics }) {
                         user.uid || user.id,
                         user.institutionName || ''
                       );
-                      
+
                       if (paperId) {
                         alert(`✅ 試卷已保存並派發！共 ${selectedQuestions.length} 道題目。`);
                         setActiveTab('paper-creation');
@@ -2741,7 +2727,7 @@ export default function TeacherView({ setView, user, topics }) {
                   返回
                 </button>
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <FileText size={20} className="text-indigo-600"/>
+                  <FileText size={20} className="text-indigo-600" />
                   選擇種子題目（可選，留空則使用 AI 自動生成）
                 </h3>
               </div>
@@ -2779,13 +2765,12 @@ export default function TeacherView({ setView, user, topics }) {
               ) : (
                 assignmentSeedQuestions.map((q, idx) => {
                   const isSelected = selectedAssignmentSeeds.includes(q.id);
-                  
+
                   return (
                     <div
                       key={q.id || idx}
-                      className={`p-4 border-2 rounded-lg ${
-                        isSelected ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white'
-                      }`}
+                      className={`p-4 border-2 rounded-lg ${isSelected ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white'
+                        }`}
                       onClick={() => {
                         // 點擊題目區域切換選擇狀態
                         if (isSelected) {
@@ -2812,7 +2797,7 @@ export default function TeacherView({ setView, user, topics }) {
                             >
                               📚 選擇單元
                             </button>
-                            
+
                             {/* 單元選擇下拉菜單 */}
                             {showTopicSelector === idx && (
                               <div className="absolute right-0 top-full mt-1 bg-white border-2 border-indigo-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-60 overflow-y-auto">
@@ -2868,7 +2853,7 @@ export default function TeacherView({ setView, user, topics }) {
                                   'math',
                                   user
                                 );
-                                
+
                                 if (newQuestion) {
                                   const updatedQuestions = [...assignmentSeedQuestions];
                                   updatedQuestions[idx] = {
@@ -2890,7 +2875,7 @@ export default function TeacherView({ setView, user, topics }) {
                           </button>
                         </div>
                       </div>
-                      
+
                       <div className="bg-white rounded p-3 mt-2">
                         {q.selectedTopic && (
                           <div className="mb-2">
@@ -2927,7 +2912,7 @@ export default function TeacherView({ setView, user, topics }) {
                   // 儲存試卷（不發送作業）
                   try {
                     const selectedQuestions = assignmentSeedQuestions.filter(q => selectedAssignmentSeeds.includes(q.id));
-                    
+
                     const paperId = await DB_SERVICE.saveSentPaper(
                       {
                         title: assignmentData.title || '未命名試卷',
@@ -2941,20 +2926,20 @@ export default function TeacherView({ setView, user, topics }) {
                       user.uid || user.id,
                       user.institutionName || ''
                     );
-                    
+
                     if (paperId) {
                       alert(`✅ 試卷已儲存！共 ${selectedQuestions.length} 道題目。`);
-                      
+
                       // 更新 assignmentData 的 seedQuestionIds，以便在首頁顯示
                       setAssignmentData({
                         ...assignmentData,
                         seedQuestionIds: selectedAssignmentSeeds
                       });
-                      
+
                       // 返回首頁
                       setActiveTab('assignments');
                       setShowCreateAssignment(true);
-                      
+
                       // 重新載入已儲存試卷列表
                       try {
                         const papers = await DB_SERVICE.getSentPapers(

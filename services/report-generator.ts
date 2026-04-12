@@ -14,6 +14,8 @@ export interface ReportContent {
   weaknesses: string[];
   recommendations: string[];
   nextPhasePlan: string;
+  customCurriculum?: string;
+  clinicalAssessment?: string;
   medicalRecord?: string;
 }
 
@@ -42,6 +44,9 @@ const computeStats = (usages: QuestionUsage[]) => {
     ? times.reduce((sum, t) => sum + Math.pow(t - mean, 2), 0) / times.length
     : 0;
   const timeVariance = Math.round(Math.sqrt(variance) * 10) / 10;
+
+  const adhdUsages = usages.filter(u => u.adhdMode === true).length;
+  const adhdUsageRate = total > 0 ? (adhdUsages / total) * 100 : 0;
 
   const topicStats: Record<string, { total: number; correct: number }> = {};
   usages.forEach((u) => {
@@ -78,7 +83,8 @@ const computeStats = (usages: QuestionUsage[]) => {
     strongTopics: strongTopics.length > 0 ? strongTopics.join(', ') : '（資料不足）',
     weakTopics: weakTopics.length > 0 ? weakTopics.join(', ') : '（資料不足）',
     errorPattern: `錯誤率 ${formatPercent(wrongRate)}%，快速錯誤 ${formatPercent(fastWrongRate)}%`,
-    timeVariance
+    timeVariance,
+    adhdUsageRate: Math.round(adhdUsageRate)
   };
 };
 
@@ -90,18 +96,20 @@ const fillTemplate = (template: string, data: Record<string, string | number>) =
 };
 
 const buildEducatorPrompt = (data: ReturnType<typeof computeStats>) => {
-  const template = REPORT_GENERATION_RULES?.educator?.promptTemplate;
-  const fallback = `
-You are an experienced primary school teacher. This report is for a normal student (no learning difficulties). Evaluate the last 14 days of performance and create a concrete 2-week curriculum plan.
-Use warm, supportive Cantonese-style Traditional Chinese. Avoid technical jargon.
+  const template = (REPORT_GENERATION_RULES as any)?.educator?.promptTemplate;
+  const fallback = `You are a Professional Educational Consultant. This report is for a parent regarding their child's learning performance. You must provide a professional, in-depth evaluation and concrete, actionable solutions. Do not just state problems; provide precise ways to improve.
+Use professional, warm, and supportive Cantonese-style Traditional Chinese. Maintain professional authority.
 
-Return JSON ONLY in Traditional Chinese with this structure:
+Your task is to generate a JSON report. Crucially, you MUST design a '7-Day Custom Curriculum' (7天的每日課程) based on the student's weaknesses and strengths. This curriculum should prescribe daily exercises (e.g., 每天X題) mixing subjects as appropriate.
+
+Return JSON ONLY with this structure:
 {
-  "summary": "string",
+  "summary": "string (Professional Consultant overview)",
   "strengths": ["string", "string"],
   "weaknesses": ["string", "string"],
-  "recommendations": ["string", "string", "string"],
-  "nextPhasePlan": "string (2-week curriculum plan)"
+  "recommendations": ["string (Actionable advice)", "string"],
+  "nextPhasePlan": "string (General direction for the next phase)",
+  "customCurriculum": "string (Detailed 7-day daily practice curriculum, e.g. Day 1: ... Day 2: ...)"
 }
 
 Data Summary:
@@ -111,12 +119,31 @@ Data Summary:
 - Strong Topics: {{strongTopics}}
 - Weak Topics: {{weakTopics}}
 - Error Pattern: {{errorPattern}}
+- Learning Assist Mode Usage: {{adhdUsageRate}}%
 `.trim();
-  return fillTemplate(template || fallback, data as Record<string, string | number>);
+
+  let finalPrompt = fillTemplate(template || fallback, data as Record<string, string | number>);
+
+  if (typeof data.adhdUsageRate === 'number' && data.adhdUsageRate > 30) {
+    const clinicalInstruction = `
+
+[CRITICAL CLINICAL REQUIREMENT]
+The student utilized the 'Learning Assist (ADHD) Mode' for ${data.adhdUsageRate}% of the questions. 
+You MUST adopt the role of an 'Educational Clinician / AI Doctor' for this specific observation.
+Please cross-reference their usage rate with 'Error Pattern' and 'Average Time' to provide a 'clinicalAssessment' (臨床學習觀察). 
+Example: "觀察顯示，當開啟學習輔助模式時，孩子的專注時間更為平穩..."
+
+Ensure your JSON response includes the following new field:
+"clinicalAssessment": "string (AI Doctor's clinical observation based on Assist Mode usage)"
+`;
+    finalPrompt += clinicalInstruction;
+  }
+
+  return finalPrompt;
 };
 
 const buildObserverPrompt = (data: ReturnType<typeof computeStats>) => {
-  const template = REPORT_GENERATION_RULES?.observer?.promptTemplate;
+  const template = (REPORT_GENERATION_RULES as any)?.observer?.promptTemplate;
   const fallback = `
 You are an educational clinician. Assume the student may have learning difficulties or attention deficits. Provide a formal learning record for a real doctor to reference. Be precise, concise, and clinical.
 
@@ -142,7 +169,7 @@ Data Summary:
 };
 
 export const buildPracticePlanPrompt = (data: ReturnType<typeof computeStats>) => {
-  const template = TEACHER_PRACTICE_PLAN_RULES?.promptTemplate;
+  const template = (TEACHER_PRACTICE_PLAN_RULES as any)?.promptTemplate;
   if (!template) return '';
   return fillTemplate(template, data as Record<string, string | number>);
 };
@@ -174,6 +201,8 @@ const parseReportJson = (text: string): ReportContent | null => {
       weaknesses: normalizeList(parsed?.weaknesses, ['（未提供）']),
       recommendations: normalizeList(parsed?.recommendations, ['（未提供）']),
       nextPhasePlan: String(parsed?.nextPhasePlan || '').trim() || '（未提供）',
+      customCurriculum: String(parsed?.customCurriculum || '').trim() || '',
+      clinicalAssessment: String(parsed?.clinicalAssessment || '').trim() || '',
       medicalRecord: String(parsed?.medicalRecord || '').trim() || ''
     };
   } catch (error) {

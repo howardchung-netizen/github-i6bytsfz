@@ -30,7 +30,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
       originalPrice: null,
       features: [
         '每科每日 20 題任務（鼓勵均衡學習）',
-        'ADHD 輔助模式',
+        '學習輔助模式',
         'AI 老師跟進（每 2 週報告）',
         '詳細進度報告',
         '語音讀題功能',
@@ -46,7 +46,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
       originalPrice: 1188, // 99 * 12
       features: [
         '每科每日 20 題任務（鼓勵均衡學習）',
-        'ADHD 輔助模式',
+        '學習輔助模式',
         'AI 老師跟進（每 2 週報告）',
         '詳細進度報告',
         '語音讀題功能',
@@ -65,7 +65,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
     }
 
     setIsProcessing(true);
-    
+
     try {
       // 調用後端 API 創建 Stripe Checkout Session
       const response = await fetch('/api/payment/create-checkout', {
@@ -117,7 +117,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
     try {
       // 更新本地狀態
       setUser(prev => ({ ...prev, isPremium }));
-      
+
       // 這裡應該更新資料庫中的用戶訂閱狀態
       // await DB_SERVICE.updateUserSubscription(user.id, isPremium);
     } catch (error) {
@@ -130,8 +130,8 @@ export default function SubscriptionView({ user, setUser, setView }) {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 animate-in fade-in duration-500">
       {/* 返回按鈕 */}
-      <button 
-        onClick={() => setView('dashboard')} 
+      <button
+        onClick={() => setView('dashboard')}
         className="mb-6 flex items-center gap-2 text-slate-600 hover:text-slate-800 font-bold transition"
       >
         <ArrowLeft size={18} /> 返回首頁
@@ -167,21 +167,19 @@ export default function SubscriptionView({ user, setUser, setView }) {
         <div className="inline-flex bg-slate-100 rounded-lg p-1">
           <button
             onClick={() => setSelectedPlan('monthly')}
-            className={`px-6 py-2 rounded-md font-bold transition ${
-              selectedPlan === 'monthly'
+            className={`px-6 py-2 rounded-md font-bold transition ${selectedPlan === 'monthly'
                 ? 'bg-white text-indigo-600 shadow-sm'
                 : 'text-slate-600 hover:text-slate-800'
-            }`}
+              }`}
           >
             月付
           </button>
           <button
             onClick={() => setSelectedPlan('yearly')}
-            className={`px-6 py-2 rounded-md font-bold transition ${
-              selectedPlan === 'yearly'
+            className={`px-6 py-2 rounded-md font-bold transition ${selectedPlan === 'yearly'
                 ? 'bg-white text-indigo-600 shadow-sm'
                 : 'text-slate-600 hover:text-slate-800'
-            }`}
+              }`}
           >
             年付 <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full ml-1">省 24%</span>
           </button>
@@ -199,7 +197,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
             </div>
             <p className="text-slate-500 text-sm">{plans.free.period}</p>
           </div>
-          
+
           <ul className="space-y-3 mb-6">
             {plans.free.features.map((feature, index) => (
               <li key={index} className="flex items-start gap-2">
@@ -223,7 +221,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
               推薦
             </div>
           )}
-          
+
           <div className="text-center mb-6 text-white">
             <h3 className="text-2xl font-black mb-2">{plans[selectedPlan].name}</h3>
             <div className="flex items-baseline justify-center gap-2 mb-1">
@@ -243,7 +241,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
               </p>
             )}
           </div>
-          
+
           <ul className="space-y-3 mb-6 text-white">
             {plans[selectedPlan].features.map((feature, index) => (
               <li key={index} className="flex items-start gap-2">
@@ -278,7 +276,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
       {/* 功能詳細說明 */}
       <div className="bg-white rounded-2xl p-8 border border-slate-200">
         <h3 className="text-2xl font-black text-slate-800 mb-6 text-center">訂閱版功能詳情</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex gap-4">
             <div className="bg-indigo-100 p-3 rounded-lg flex-shrink-0">
@@ -295,7 +293,7 @@ export default function SubscriptionView({ user, setUser, setView }) {
               <Accessibility size={24} className="text-purple-600" />
             </div>
             <div>
-              <h4 className="font-bold text-slate-800 mb-1">ADHD 輔助模式</h4>
+              <h4 className="font-bold text-slate-800 mb-1">學習輔助模式</h4>
               <p className="text-slate-600 text-sm">優化介面、語音讀題、關鍵字高亮</p>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { CURRENT_MODEL_NAME } from '../../lib/constants';
+import { getAdminDb } from '../../lib/firebase-admin';
 
 export async function POST(request: Request) {
   try {
@@ -9,8 +10,8 @@ export async function POST(request: Request) {
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ 
-        error: 'API Key not configured. Please set GOOGLE_GEMINI_API_KEY in .env.local file.' 
+      return NextResponse.json({
+        error: 'API Key not configured. Please set GOOGLE_GEMINI_API_KEY in .env.local file.'
       }, { status: 500 });
     }
 
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
           if (attempt < maxRetries) {
             const delay = baseDelay * Math.pow(backoffFactor, attempt);
             console.warn(`⚠️ Hit ${response.status} (${response.status === 429 ? 'Too Many Requests' : 'Service Unavailable'}), retrying in ${delay}ms... (Attempt ${attempt + 1}/${maxRetries})`);
-            
+
             // 等待退避時間
             await new Promise(resolve => setTimeout(resolve, delay));
             continue; // 重試
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
 
       } catch (error: any) {
         lastError = error;
-        
+
         // 如果是超時或網路錯誤，且還有重試機會，可以考慮重試
         // 但這裡我們主要關注 429/503，所以只記錄錯誤
         if (attempt < maxRetries && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        
+
         // 其他錯誤或已達最大重試次數，跳出循環
         break;
       }
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
     if (!lastResponse && lastError) {
       throw lastError; // 讓 catch 塊處理
     }
-    
+
     const response = lastResponse!;
     const data = lastData;
 
@@ -107,16 +108,16 @@ export async function POST(request: Request) {
       if (!data && lastError) {
         throw lastError; // 讓 catch 塊處理
       }
-      
+
       console.error("API Error:", data);
-      
+
       // 特別處理配額超限錯誤（429 或 quota exceeded）
       const errorMessage = data.error?.message || 'Unknown error';
-      const isQuotaExceeded = response.status === 429 || 
-                              errorMessage.toLowerCase().includes('quota') ||
-                              errorMessage.toLowerCase().includes('rate limit') ||
-                              errorMessage.toLowerCase().includes('exceeded');
-      
+      const isQuotaExceeded = response.status === 429 ||
+        errorMessage.toLowerCase().includes('quota') ||
+        errorMessage.toLowerCase().includes('rate limit') ||
+        errorMessage.toLowerCase().includes('exceeded');
+
       // 提取重試時間（秒）
       let retryAfter = null;
       if (data.error?.details) {
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
           retryAfter = Math.ceil(parseFloat(retryInfo.retryInfo.retryDelay.replace('s', '')));
         }
       }
-      
+
       // 從錯誤訊息中提取重試時間（如果有的話）
       if (!retryAfter && errorMessage.includes('retry in')) {
         const match = errorMessage.match(/retry in ([\d.]+)s/i);
@@ -133,20 +134,20 @@ export async function POST(request: Request) {
           retryAfter = Math.ceil(parseFloat(match[1]));
         }
       }
-      
+
       // 判斷是每分鐘限制還是每日限制
       // 如果重試時間很長（> 3600秒 = 1小時），可能是每日限制
       // 如果重試時間較短（< 60秒），可能是每分鐘限制
       const isDailyLimit = retryAfter && retryAfter > 3600;
       const isMinuteLimit = retryAfter && retryAfter < 60;
-      
+
       // 檢查是否為配額為 0 的情況（模型沒有免費層配額）
       const quotaDetails = data.error?.details?.find((d: any) => d['@type'] === 'type.googleapis.com/google.rpc.QuotaFailure');
-      const hasZeroQuota = quotaDetails?.violations?.some((v: any) => 
-        errorMessage.includes(`limit: 0`) || 
+      const hasZeroQuota = quotaDetails?.violations?.some((v: any) =>
+        errorMessage.includes(`limit: 0`) ||
         errorMessage.includes('free_tier') && errorMessage.includes('limit: 0')
       );
-      
+
       let quotaTypeMessage = '';
       if (hasZeroQuota) {
         // 配額為 0，表示該模型沒有免費層配額
@@ -159,8 +160,26 @@ export async function POST(request: Request) {
         // 無法確定，提供兩種可能
         quotaTypeMessage = `API 配額已達上限。可能是每分鐘限制（15 個請求）或每日限制（1,500 個請求）。${retryAfter ? `請等待約 ${Math.ceil(retryAfter / 60)} 分鐘後再試。` : '請稍後再試，或檢查 Google Cloud Console 的使用情況。'}`;
       }
-      
-      return NextResponse.json({ 
+
+      // 記錄失敗的 API 呼叫
+      try {
+        const db = getAdminDb();
+        if (db) {
+          await db.collection('api_logs').add({
+            timestamp: new Date(),
+            endpoint: '/api/chat',
+            model: resolvedModel,
+            status: 'error',
+            error: errorMessage,
+            isQuotaExceeded: isQuotaExceeded,
+            appId: 'ai-tutor'
+          });
+        }
+      } catch (logErr) {
+        console.error("Failed to write API error log:", logErr);
+      }
+
+      return NextResponse.json({
         error: `Google API Error: ${errorMessage}`,
         details: data,
         isQuotaExceeded,
@@ -173,15 +192,36 @@ export async function POST(request: Request) {
 
     // 成功！回傳題目
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    // 記錄成功的 API 呼叫與 Tokens 消耗
+    try {
+      const db = getAdminDb();
+      if (db) {
+        const usage = data.usageMetadata || {};
+        await db.collection('api_logs').add({
+          timestamp: new Date(),
+          endpoint: '/api/chat',
+          model: resolvedModel,
+          status: 'success',
+          promptTokens: usage.promptTokenCount || 0,
+          completionTokens: usage.candidatesTokenCount || 0,
+          totalTokens: usage.totalTokenCount || 0,
+          appId: 'ai-tutor'
+        });
+      }
+    } catch (logErr) {
+      console.error("Failed to write API success log:", logErr);
+    }
+
     return NextResponse.json({ response: text });
 
   } catch (error: any) {
     console.error("Server Error:", error);
-    
+
     // 處理網路連線錯誤
     let errorMessage = 'Internal Server Error';
     let userFriendlyMessage = '請檢查 API Key 或網路連線。';
-    
+
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
       errorMessage = 'Request Timeout';
       userFriendlyMessage = '連線超時。請檢查網路連線，或確認是否需要使用 VPN（某些地區可能需要 VPN 才能訪問 Google API）。';
@@ -195,8 +235,26 @@ export async function POST(request: Request) {
         userFriendlyMessage = '網路連線問題。請確認 VPN 已開啟（建議使用台灣地區的 VPN）。';
       }
     }
-    
-    return NextResponse.json({ 
+
+    // 記錄嚴重錯誤（如超時或網路錯誤）
+    try {
+      const db = getAdminDb();
+      if (db) {
+        await db.collection('api_logs').add({
+          timestamp: new Date(),
+          endpoint: '/api/chat',
+          model: 'unknown',
+          status: 'error',
+          error: errorMessage,
+          isSystemError: true,
+          appId: 'ai-tutor'
+        });
+      }
+    } catch (logErr) {
+      console.error("Failed to write API system error log:", logErr);
+    }
+
+    return NextResponse.json({
       error: errorMessage,
       message: userFriendlyMessage,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined

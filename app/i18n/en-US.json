@@ -1,0 +1,35 @@
+{
+    "common": {
+        "loading": "Loading...",
+        "error": "Error",
+        "save": "Save",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "back": "Back"
+    },
+    "dashboard": {
+        "title": "Parent Dashboard",
+        "welcome": "Welcome back, {{name}}!",
+        "student_mode": "Enter Student Practice Mode",
+        "take_exam": "Start Full Exam",
+        "developer_panel": "Developer",
+        "teacher_panel": "Teacher Portal",
+        "parent_panel": "Parent Hub",
+        "mistakes_book": "Mistakes Book",
+        "upgrade_now": "Upgrade Now",
+        "adhd_mode": "Learning Assist Mode",
+        "adhd_mode_desc": "Magnifies text, hides distractions, and enables voice assist.",
+        "radar_chart": "Ability Radar",
+        "view_report": "View Detailed Report",
+        "weakness_radar": "Displays strengths and weaknesses",
+        "daily_tasks": "Daily Learning Tasks",
+        "task_limit": "20 Questions Challenge",
+        "math": "Mathematics",
+        "chinese": "Chinese",
+        "english": "English",
+        "completed": "Done {{used}}/{{limit}}",
+        "go_to_practice": "Practice",
+        "logout": "Logout",
+        "profile": "Profile"
+    }
+}
