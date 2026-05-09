@@ -173,18 +173,17 @@ export default function DashboardView({ user, setUser, stats, mistakes, goToSele
               教學者控制台
             </button>
           )}
-          {isAdmin && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                goToDeveloper();
-              }}
-              className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer"
-            >
-              Developer
-            </button>
-          )}
+          {/* 開發者模式 - Always visible in dummy prototype */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              goToDeveloper();
+            }}
+            className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-full transition backdrop-blur-sm border border-white/10 cursor-pointer flex items-center gap-1"
+          >
+            <Settings size={12} /> 開發者模式
+          </button>
         </div>
 
         {/* 用戶信息區域 */}
